@@ -497,6 +497,42 @@ manifest, environment preflight, frozen-scene live replay
 steps in one persistent session; step 2 expected to corridor-reject at
 ~0.15 m chord clearance and complete via the wide-setup fallback).
 
+June 11 Option A Phase 2 evidence:
+
+- Regression manifest GREEN:
+  `artifacts/session/analysis_optionA_postfix_regression_20260611/fetch_moonshot_regression_manifest/scorecard.md`
+  (8/8 seeded gates, 2/2 boundary rows, 0 issues). Run by the Codex spine;
+  its live-replay attempt then hit a sandbox Docker named-pipe access
+  blocker (environment/access, not robot) — live gates now run from the
+  supervisor's host shell or a Docker-capable Codex sandbox.
+- Frozen-scene live replay rerun1 PASSED behaviorally:
+  `artifacts/session/live_multiball_frozen_seed20260651_s01_replay_rerun1_20260611/fetch_multiball_retrieval_gate/scorecard.md`.
+  Scene `seed20260651_mb_route_diverse_s01_nav2` PASS: step 1 delivered;
+  step 2 (the original bulldozer step) corridor-rejected its Nav2 setup
+  assist at min chord clearance `0.148932` m (< 0.30 floor; predicted
+  ~0.15), never dispatched Nav2, and DELIVERED via the wide-setup
+  fallback; step 3 corridor-rejected at `0.082465` m, fell back, and ended
+  as bounded give-up `measured_setup_handoff_failed_before_contact`
+  (accepted terminal class). Ball motion `0.0` on every leg; `0`
+  environment failures; `frame_yaw_offset_rad` recorded on relative goals
+  (`-0.596` / `-0.612` rad mid-scene — live proof the odom-vs-world
+  rotation is real and now compensated). Gate `pass=false` is solely the
+  route-diversity artifact of a one-scene replay (exit 2 expected).
+  Visual package effective-pass via keyframe recovery (1686 raw frames,
+  240x3 keyframes, telemetry complete); the world-stream component went
+  stale late-session (`world_stream_no_recent_frames`) — flagged as a
+  wedge precursor.
+- Supervisor review caught a coverage gap: corridor `ball_count=1` —
+  `apply_target_layout`'s projection dropped `multiball_scene_id`, so
+  sibling-ball discovery silently degraded to target-only. Fixed
+  (projection now carries the scene id) with a regression test pinned to
+  the committed frozen-scene fixtures: `b5a99a6` (140 + 34 tests green).
+- Verification rerun (`..._rerun2_20260611`) was an ENVIRONMENT failure:
+  fresh session start failed with `Operator view did not become ready`,
+  `environment_state=error` — the flagged wedge precursor materialized.
+  Recorded as a rerun per discipline (no robot evidence); recovery via
+  the restart escalation, then a fresh verification rerun.
+
 ## Codex execution plan (June 9, 2026 — bounded autonomous lane)
 
 Owner: GPT-5.5 Codex thread. Source-of-truth docs: this file,
