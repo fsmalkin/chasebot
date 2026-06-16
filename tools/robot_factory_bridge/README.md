@@ -43,19 +43,35 @@ Basic flow:
 
    A successful refusal returns `http_status: 423` with `error: "expected_refusal"`.
 
-4. Restart with motion enabled for lifted-wheel tests:
+4. Run the camera-gated no-motion behavior runner:
+
+   ```powershell
+   python tools/robot_factory_bridge/chasecar_bridge_behavior_runner.py --pretty --mode no-motion-command --artifact-dir artifacts/session/manual_factory_bridge_no_motion
+   ```
+
+   This runner performs the camera readiness gate and then proves the bridge refuses a Chasecar-style `cmd_vel` while motion is locked.
+
+5. Restart with motion enabled for lifted-wheel tests:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start -EnableMotion
    ```
 
-5. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
+6. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/test_robot_factory_bridge_lifted_wheels.ps1 -RobotHost 192.168.1.11 -ConfirmHeldInAir
    ```
 
-6. Stop the bridge:
+7. Run the bounded camera-gated turn behavior after the operator confirms the setup:
+
+   ```powershell
+   python tools/robot_factory_bridge/chasecar_bridge_behavior_runner.py --pretty --mode tiny-turn --execute-motion --confirm-operator-ready --artifact-dir artifacts/session/manual_factory_bridge_tiny_turn
+   ```
+
+   The runner captures camera evidence, sends the bounded `linear_x` / `angular_z` command plan, sends a final stop, and writes `behavior_summary.json`.
+
+8. Stop the bridge:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/stop_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson
