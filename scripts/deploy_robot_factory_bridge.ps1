@@ -20,6 +20,14 @@ param(
 
     [double]$TurnGain = 0.7,
 
+    [int]$CameraWidth = 320,
+
+    [int]$CameraHeight = 240,
+
+    [double]$CameraFps = 5.0,
+
+    [int]$CameraJpegQuality = 55,
+
     [switch]$Start,
 
     [switch]$EnableMotion,
@@ -63,7 +71,7 @@ if (-not $Start) {
 }
 
 $motionArg = if ($EnableMotion) { "--enable-motion" } else { "" }
-$cameraArg = if ($Camera) { "--camera" } else { "" }
+$cameraArg = if ($Camera) { "--camera --camera-width $CameraWidth --camera-height $CameraHeight --camera-fps $CameraFps --camera-jpeg-quality $CameraJpegQuality" } else { "" }
 $startCommand = @(
     "set -e",
     "cd '$RemoteDir'",

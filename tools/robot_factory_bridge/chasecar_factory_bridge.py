@@ -235,6 +235,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <div class="metric"><div class="label">Left / Right</div><div class="value" id="motors">-</div></div>
           <div class="metric"><div class="label">Last Stop</div><div class="value" id="stopReason">-</div></div>
           <div class="metric"><div class="label">Commands</div><div class="value" id="commands">-</div></div>
+          <div class="metric"><div class="label">Camera</div><div class="value" id="cameraMetric">-</div></div>
           <div class="metric"><div class="label">Uptime</div><div class="value" id="uptime">-</div></div>
         </div>
       </section>
@@ -301,6 +302,13 @@ DASHBOARD_HTML = r"""<!doctype html>
           `${fixed(state.left_motor)} / ${fixed(state.right_motor)}`;
         document.getElementById("stopReason").textContent = state.last_stop_reason || "-";
         document.getElementById("commands").textContent = String(state.commands_received || 0);
+        if (state.camera && state.camera.enabled) {
+          const fps = typeof state.camera.cached_fps === "number" ? state.camera.cached_fps.toFixed(1) : "-";
+          const age = typeof state.camera.frame_age_s === "number" ? state.camera.frame_age_s.toFixed(2) : "-";
+          document.getElementById("cameraMetric").textContent = `${fps} fps / ${age}s old`;
+        } else {
+          document.getElementById("cameraMetric").textContent = "off";
+        }
         document.getElementById("uptime").textContent = `${fixed(state.uptime_s)}s`;
       } catch (error) {
         topStatus.innerHTML = chip("Bridge offline", "bad");
@@ -351,7 +359,7 @@ DASHBOARD_HTML = r"""<!doctype html>
     refreshEvents();
     setInterval(refreshState, 750);
     setInterval(refreshEvents, 1200);
-    setInterval(refreshCamera, 1400);
+    setInterval(refreshCamera, 500);
   </script>
 </body>
 </html>
@@ -481,14 +489,33 @@ class RobotAdapter(object):
 
 
 class CameraAdapter(object):
-    def __init__(self, enabled=False, dry_run=False, width=640, height=480):
+    def __init__(
+        self,
+        enabled=False,
+        dry_run=False,
+        width=320,
+        height=240,
+        jpeg_quality=55,
+        jpeg_fps=5.0,
+    ):
         self.enabled = bool(enabled)
         self.dry_run = bool(dry_run)
         self.width = int(width)
         self.height = int(height)
+        self.jpeg_quality = int(clamp(int(jpeg_quality), 10, 95))
+        self.jpeg_fps = max(0.2, float(jpeg_fps))
         self.camera = None
         self.error = None
+        self.latest_jpeg = None
+        self.latest_jpeg_monotonic = 0.0
+        self.frame_count = 0
+        self.encode_count = 0
+        self.status_start_monotonic = time.monotonic()
+        self.thread = None
+        self.stop_event = threading.Event()
         self.lock = threading.Lock()
+        if self.enabled:
+            self.start()
 
     def snapshot_jpeg(self):
         if not self.enabled:
@@ -500,26 +527,95 @@ class CameraAdapter(object):
                 b"////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/ASP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/ASP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IX//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z"
             )
 
+        self.start()
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            with self.lock:
+                if self.latest_jpeg:
+                    return self.latest_jpeg
+                error = self.error
+            if error:
+                raise RuntimeError(error)
+            time.sleep(0.05)
         with self.lock:
-            if self.camera is None:
-                try:
+            if self.latest_jpeg:
+                return self.latest_jpeg
+            if self.error:
+                raise RuntimeError(self.error)
+        raise RuntimeError("camera_frame_unavailable")
+
+    def start(self):
+        if self.thread is not None and self.thread.is_alive():
+            return
+        self.stop_event.clear()
+        self.thread = threading.Thread(target=self._capture_loop)
+        self.thread.daemon = True
+        self.thread.start()
+
+    def _capture_loop(self):
+        if self.dry_run:
+            try:
+                jpeg = self.snapshot_jpeg()
+                with self.lock:
+                    self.latest_jpeg = jpeg
+                    self.latest_jpeg_monotonic = time.monotonic()
+                    self.frame_count += 1
+                    self.encode_count += 1
+            except Exception as exc:
+                with self.lock:
+                    self.error = repr(exc)
+            return
+
+        interval_s = 1.0 / max(0.2, self.jpeg_fps)
+        while not self.stop_event.is_set():
+            started = time.monotonic()
+            try:
+                if self.camera is None:
                     from jetbotmini import Camera, bgr8_to_jpeg
 
                     self._bgr8_to_jpeg = bgr8_to_jpeg
                     self.camera = Camera.instance(width=self.width, height=self.height)
                     time.sleep(0.4)
-                except Exception as exc:
+                jpeg = self._bgr8_to_jpeg(self.camera.value, quality=self.jpeg_quality)
+                with self.lock:
+                    self.latest_jpeg = jpeg
+                    self.latest_jpeg_monotonic = time.monotonic()
+                    self.frame_count += 1
+                    self.encode_count += 1
+                    self.error = None
+            except Exception as exc:
+                with self.lock:
                     self.error = repr(exc)
-                    raise
-            return self._bgr8_to_jpeg(self.camera.value)
+                time.sleep(0.5)
+            elapsed = time.monotonic() - started
+            time.sleep(max(0.01, interval_s - elapsed))
 
     def status(self):
+        now = time.monotonic()
+        with self.lock:
+            error = self.error
+            frame_age_s = (
+                max(0.0, now - self.latest_jpeg_monotonic)
+                if self.latest_jpeg_monotonic > 0
+                else None
+            )
+            cached_bytes = len(self.latest_jpeg) if self.latest_jpeg else 0
+            frame_count = int(self.frame_count)
+            encode_count = int(self.encode_count)
+            cached_fps = frame_count / max(now - self.status_start_monotonic, 0.001)
         return {
             "enabled": self.enabled,
             "loaded": self.camera is not None,
-            "error": self.error,
+            "error": error,
             "width": self.width,
             "height": self.height,
+            "jpeg_quality": self.jpeg_quality,
+            "target_fps": self.jpeg_fps,
+            "cached_fps": round(cached_fps, 3),
+            "frame_count": frame_count,
+            "encode_count": encode_count,
+            "frame_age_s": frame_age_s,
+            "cached_bytes": cached_bytes,
         }
 
 
@@ -538,6 +634,8 @@ class BridgeState(object):
             dry_run=args.dry_run,
             width=args.camera_width,
             height=args.camera_height,
+            jpeg_quality=args.camera_jpeg_quality,
+            jpeg_fps=args.camera_fps,
         )
         self.started_monotonic = time.monotonic()
         self.event_log_path = args.event_log_path
@@ -761,6 +859,7 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                 jpeg = self.bridge.camera.snapshot_jpeg()
                 self.send_response(200)
                 self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Cache-Control", "no-store, max-age=0")
                 self.send_header("Content-Length", str(len(jpeg)))
                 self.end_headers()
                 self.wfile.write(jpeg)
@@ -823,8 +922,10 @@ def parse_args(argv):
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--enable-motion", action="store_true")
     parser.add_argument("--camera", action="store_true")
-    parser.add_argument("--camera-width", type=int, default=640)
-    parser.add_argument("--camera-height", type=int, default=480)
+    parser.add_argument("--camera-width", type=int, default=320)
+    parser.add_argument("--camera-height", type=int, default=240)
+    parser.add_argument("--camera-fps", type=float, default=5.0)
+    parser.add_argument("--camera-jpeg-quality", type=int, default=55)
     parser.add_argument("--deadman-timeout-s", type=float, default=0.5)
     parser.add_argument("--max-command-duration-s", type=float, default=1.0)
     parser.add_argument("--max-motor-speed", type=float, default=0.35)
