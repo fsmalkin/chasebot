@@ -110,6 +110,9 @@ Both bounded rows were measured setup handoff failures with next capability
 documented stop-and-report boundary. Further breadth gates wait for a
 supervisory sequencing decision: keep v1 waiting on the numeric bar, or pull
 the already-designed owner into the current requalification lane.
+Current handoff surface: `docs/handoffs/README.md`, which links the June 16
+decision packet, approval-gated Slice 1 work-order draft, and browser-watchable
+visual proof.
 
 ## Recommended Branch Roles
 

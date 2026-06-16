@@ -1993,3 +1993,6 @@ bar. Seed `20260650` invariance remains unrun after the postfix gate. The next
 roadmap decision is whether to keep v1 waiting on the existing numeric bar or
 advance the already-designed open-field setup trajectory owner into the current
 requalification lane.
+Current handoff surface: `docs/handoffs/README.md`, which links the June 16
+decision packet, approval-gated Slice 1 work-order draft, and browser-watchable
+visual proof.
