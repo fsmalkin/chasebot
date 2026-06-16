@@ -28,6 +28,14 @@ Basic flow:
 2. Check direct access from the laptop:
 
    ```powershell
+   python tools/robot_factory_bridge/chasecar_bridge_preflight.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_safe_preflight
+   ```
+
+   The safe preflight checks bridge health, camera readiness, a snapshot, a short camera video, and the motion lock. The command-refusal check sends zero velocity while motion is locked, so a passing run proves the command path is reachable and still guarded.
+
+3. Run individual checks when you want smaller pieces:
+
+   ```powershell
    python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty health
    python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty camera-diagnostics --frames 8 --interval-s 0.2
    python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty snapshot --output artifacts/session/manual_factory_bridge_camera/camera.jpg
@@ -36,7 +44,7 @@ Basic flow:
 
    These checks read bridge state, score camera readiness, save a camera frame, and record a short camera clip while the robot stays still. The video command writes `camera.gif`, `camera.mp4` when ffmpeg is available, and the source JPEG frames.
 
-3. Confirm that motion is still locked while the bridge is in health mode:
+4. Confirm that motion is still locked while the bridge is in health mode:
 
    ```powershell
    python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty cmd-vel --linear-x 0.05 --angular-z 0 --duration-s 0.1 --expect-refusal
@@ -44,7 +52,7 @@ Basic flow:
 
    A successful refusal returns `http_status: 423` with `error: "expected_refusal"`.
 
-4. Run the camera-gated no-motion behavior runner:
+5. Run the camera-gated no-motion behavior runner:
 
    ```powershell
    python tools/robot_factory_bridge/chasecar_bridge_behavior_runner.py --pretty --mode no-motion-command --artifact-dir artifacts/session/manual_factory_bridge_no_motion
@@ -52,7 +60,7 @@ Basic flow:
 
    This runner performs the camera readiness gate and then proves the bridge refuses a Chasecar-style `cmd_vel` while motion is locked.
 
-5. Run the target scan while motion stays locked:
+6. Run the target scan while motion stays locked:
 
    ```powershell
    python tools/robot_factory_bridge/chasecar_bridge_behavior_runner.py --pretty --mode visual-scan --artifact-dir artifacts/session/manual_factory_bridge_visual_scan
@@ -60,7 +68,7 @@ Basic flow:
 
    The scan captures one camera frame, tries the supported target color profiles, writes annotated images, and ranks the best safe target candidate. Broad color casts or missing targets become a safe no-op.
 
-6. Run the camera-guided advisor while motion stays locked:
+7. Run the camera-guided advisor while motion stays locked:
 
    ```powershell
    python tools/robot_factory_bridge/chasecar_bridge_behavior_runner.py --pretty --mode visual-advisor --target-profile yellow --artifact-dir artifacts/session/manual_factory_bridge_visual_advisor
@@ -68,19 +76,19 @@ Basic flow:
 
    The advisor captures one camera frame, marks a target candidate when one is visible, and writes the bounded `linear_x` / `angular_z` recommendation without sending a motion command. Broad color casts or missing targets become a safe no-op.
 
-7. Restart with motion enabled for lifted-wheel tests:
+8. Restart with motion enabled for lifted-wheel tests:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start -EnableMotion
    ```
 
-8. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
+9. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/test_robot_factory_bridge_lifted_wheels.ps1 -RobotHost 192.168.1.11 -ConfirmHeldInAir
    ```
 
-9. Run the bounded camera-gated turn behavior after the operator confirms the setup:
+10. Run the bounded camera-gated turn behavior after the operator confirms the setup:
 
    ```powershell
    python tools/robot_factory_bridge/chasecar_bridge_behavior_runner.py --pretty --mode tiny-turn --execute-motion --confirm-operator-ready --artifact-dir artifacts/session/manual_factory_bridge_tiny_turn
@@ -88,7 +96,7 @@ Basic flow:
 
    The runner captures camera evidence, sends the bounded `linear_x` / `angular_z` command plan, sends a final stop, and writes `behavior_summary.json`.
 
-10. Stop the bridge:
+11. Stop the bridge:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/stop_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson
