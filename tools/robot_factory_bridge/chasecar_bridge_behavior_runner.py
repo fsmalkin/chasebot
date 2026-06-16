@@ -30,6 +30,8 @@ DEFAULT_TINY_TURN_PLAN = {
     ],
 }
 
+DEFAULT_VISUAL_SCAN_PROFILES = ("yellow", "orange", "red", "green", "blue", "bright", "any-saturated")
+
 
 def utc_now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -82,6 +84,20 @@ def camera_block(health):
     if isinstance(health, dict) and isinstance(health.get("camera"), dict):
         return health["camera"]
     return {}
+
+
+def parse_visual_scan_profiles(raw_profiles):
+    allowed = set(DEFAULT_VISUAL_SCAN_PROFILES)
+    profiles = []
+    for raw_profile in str(raw_profiles or "").split(","):
+        profile = raw_profile.strip()
+        if not profile:
+            continue
+        if profile not in allowed:
+            raise ValueError("unsupported_visual_scan_profile:%s" % profile)
+        if profile not in profiles:
+            profiles.append(profile)
+    return profiles or list(DEFAULT_VISUAL_SCAN_PROFILES)
 
 
 def default_artifact_dir(mode):
@@ -144,6 +160,61 @@ def save_snapshot(client, output_path):
 def maybe_make_contact_sheet(paths, labels, output_path):
     try:
         from PIL import Image, ImageChops, ImageDraw
+    except Exception as exc:
+        return {
+            "available": False,
+            "error": repr(exc),
+        }
+
+    try:
+        thumbs = []
+        for path, label in zip(paths, labels):
+            image = Image.open(path).convert("RGB")
+            image.thumbnail((320, 240))
+            tile = Image.new("RGB", (320, 270), "white")
+            tile.paste(image, ((320 - image.width) // 2, 24))
+            draw = ImageDraw.Draw(tile)
+            draw.text((8, 6), label, fill=(0, 0, 0))
+            thumbs.append(tile)
+
+        columns = min(3, max(1, len(thumbs)))
+        rows = (len(thumbs) + columns - 1) // columns
+        sheet = Image.new("RGB", (columns * 320, rows * 270), (245, 246, 248))
+        for index, tile in enumerate(thumbs):
+            sheet.paste(tile, ((index % columns) * 320, (index // columns) * 270))
+        output_path = Path(output_path)
+        ensure_dir(output_path.parent)
+        sheet.save(output_path, quality=90)
+
+        metrics = {}
+        if len(paths) >= 2:
+            base = Image.open(paths[0]).convert("RGB")
+            for index, path in enumerate(paths[1:], start=1):
+                compare = Image.open(path).convert("RGB")
+                if compare.size != base.size:
+                    compare = compare.resize(base.size)
+                diff = ImageChops.difference(base, compare)
+                diff_bytes = diff.tobytes()
+                channel_count = max(len(diff_bytes), 1)
+                pixel_count = max(len(diff_bytes) // 3, 1)
+                abs_sum = sum(diff_bytes)
+                metrics["before_vs_%s" % labels[index].replace(" ", "_")] = {
+                    "mean_abs_diff": abs_sum / channel_count,
+                    "max_abs_diff": max(diff_bytes) if diff_bytes else 0,
+                    "strong_changed_pixel_ratio": (
+                        sum(
+                            1
+                            for offset in range(0, len(diff_bytes), 3)
+                            if max(diff_bytes[offset : offset + 3]) >= 16
+                        )
+                        / pixel_count
+                    ),
+                }
+        return {
+            "available": True,
+            "output": str(output_path),
+            "metrics": metrics,
+        }
     except Exception as exc:
         return {
             "available": False,
@@ -282,54 +353,39 @@ def analyze_target_image(image_path, args, annotated_path=None):
         },
     }
 
-    try:
-        thumbs = []
-        for path, label in zip(paths, labels):
-            image = Image.open(path).convert("RGB")
-            image.thumbnail((320, 240))
-            tile = Image.new("RGB", (320, 270), "white")
-            tile.paste(image, ((320 - image.width) // 2, 24))
-            draw = ImageDraw.Draw(tile)
-            draw.text((8, 6), label, fill=(0, 0, 0))
-            thumbs.append(tile)
 
-        columns = min(3, max(1, len(thumbs)))
-        rows = (len(thumbs) + columns - 1) // columns
-        sheet = Image.new("RGB", (columns * 320, rows * 270), (245, 246, 248))
-        for index, tile in enumerate(thumbs):
-            sheet.paste(tile, ((index % columns) * 320, (index // columns) * 270))
-        output_path = Path(output_path)
-        ensure_dir(output_path.parent)
-        sheet.save(output_path, quality=90)
+def visual_scan_sort_key(analysis):
+    detected_rank = 0 if analysis.get("detected", False) else 1
+    profile_rank = int(analysis.get("profile_rank", 999))
+    area_ratio = float(analysis.get("area_ratio", 0.0) or 0.0)
+    center_error = analysis.get("center_error")
+    center_rank = abs(float(center_error)) if center_error is not None else 999.0
+    return (detected_rank, profile_rank, -area_ratio, center_rank)
 
-        metrics = {}
-        if len(paths) >= 2:
-            base = Image.open(paths[0]).convert("RGB")
-            for index, path in enumerate(paths[1:], start=1):
-                compare = Image.open(path).convert("RGB")
-                if compare.size != base.size:
-                    compare = compare.resize(base.size)
-                diff = ImageChops.difference(base, compare)
-                pixels = list(diff.getdata())
-                channel_count = max(len(pixels) * 3, 1)
-                abs_sum = sum(red + green + blue for red, green, blue in pixels)
-                metrics["before_vs_%s" % labels[index].replace(" ", "_")] = {
-                    "mean_abs_diff": abs_sum / channel_count,
-                    "max_abs_diff": max(max(pixel) for pixel in pixels) if pixels else 0,
-                    "strong_changed_pixel_ratio": (
-                        sum(1 for pixel in pixels if max(pixel) >= 16) / max(len(pixels), 1)
-                    ),
-                }
-        return {
-            "available": True,
-            "output": str(output_path),
-            "metrics": metrics,
-        }
-    except Exception as exc:
-        return {
-            "available": False,
-            "error": repr(exc),
-        }
+
+def analyze_visual_scan(image_path, args, artifact_dir):
+    results = []
+    profiles = parse_visual_scan_profiles(args.visual_scan_profiles)
+    for profile_rank, profile in enumerate(profiles):
+        profile_args = SimpleNamespace(**vars(args))
+        profile_args.target_profile = profile
+        annotated_path = artifact_dir / ("visual_scan_%s.jpg" % profile.replace("-", "_"))
+        analysis = analyze_target_image(image_path, profile_args, annotated_path=annotated_path)
+        analysis["profile_rank"] = profile_rank
+        recommendation = dict(analysis.get("recommendation", {}))
+        recommendation["source"] = "factory_behavior_runner:visual_scan:%s" % profile
+        analysis["recommendation"] = recommendation
+        results.append(analysis)
+
+    ranked = sorted(results, key=visual_scan_sort_key)
+    detected = [analysis for analysis in ranked if analysis.get("detected", False)]
+    return {
+        "profiles": profiles,
+        "ranked_profiles": [analysis.get("target_profile") for analysis in ranked],
+        "detected_profiles": [analysis.get("target_profile") for analysis in detected],
+        "best_candidate": detected[0] if detected else None,
+        "results": ranked,
+    }
 
 
 def build_summary(args, artifact_dir):
@@ -397,6 +453,36 @@ def run_no_motion_command(client, args, summary):
         )
         if exc.status_code != 423:
             append_issue(summary, "motion_refusal_status_unexpected:%s" % exc.status_code)
+
+
+def run_visual_scan(client, args, artifact_dir, summary):
+    snapshot = save_snapshot(client, artifact_dir / "visual_scan_frame.jpg")
+    scan = analyze_visual_scan(snapshot["output"], args, artifact_dir)
+    best = scan.get("best_candidate")
+    summary["artifacts"]["visual_scan_snapshot"] = snapshot
+    summary["artifacts"]["visual_scan"] = scan
+    if best:
+        summary["steps"].append(
+            {
+                "label": "visual_scan_best_candidate",
+                "target_profile": best.get("target_profile"),
+                "recommendation": best.get("recommendation", {}),
+                "center_error": best.get("center_error"),
+                "area_ratio": best.get("area_ratio"),
+                "annotated_image_path": best.get("annotated_image_path", ""),
+            }
+        )
+        return
+    summary["steps"].append(
+        {
+            "label": "visual_scan_noop",
+            "reason": "visual_target_not_detected",
+            "detected_profiles": scan.get("detected_profiles", []),
+            "ranked_profiles": scan.get("ranked_profiles", []),
+        }
+    )
+    if args.require_target:
+        append_issue(summary, "visual_target_not_detected")
 
 
 def execute_motion_plan(client, args, artifact_dir, summary, initial_health):
@@ -581,6 +667,9 @@ def run(args):
     elif args.mode == "tiny-turn":
         if not summary["issues"]:
             execute_motion_plan(client, args, artifact_dir, summary, initial_health)
+    elif args.mode == "visual-scan":
+        if not summary["issues"]:
+            run_visual_scan(client, args, artifact_dir, summary)
     elif args.mode == "visual-advisor":
         if not summary["issues"]:
             run_visual_advisor(client, args, artifact_dir, summary, initial_health)
@@ -616,7 +705,7 @@ def build_parser():
     parser.add_argument("--timeout-s", type=float, default=bridge_client.DEFAULT_TIMEOUT_S)
     parser.add_argument(
         "--mode",
-        choices=("readiness", "no-motion-command", "tiny-turn", "visual-advisor"),
+        choices=("readiness", "no-motion-command", "tiny-turn", "visual-scan", "visual-advisor"),
         default="readiness",
     )
     parser.add_argument("--artifact-dir", default="")
@@ -652,6 +741,7 @@ def build_parser():
     parser.add_argument("--target-max-area-ratio", type=float, default=0.20)
     parser.add_argument("--target-max-bbox-width-ratio", type=float, default=0.70)
     parser.add_argument("--target-max-bbox-height-ratio", type=float, default=0.70)
+    parser.add_argument("--visual-scan-profiles", default=",".join(DEFAULT_VISUAL_SCAN_PROFILES))
     parser.add_argument("--require-target", action="store_true")
     parser.add_argument("--visual-center-deadband", type=float, default=0.16)
     parser.add_argument("--visual-turn-sign", type=float, default=1.0)

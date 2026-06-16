@@ -197,10 +197,12 @@ def test_tiny_turn_executes_bounded_plan_and_stops(tmp_path, capsys):
     assert summary["plan"]["name"] == "tiny_turn_v1"
     assert summary["steps"][0]["request"]["linear_x"] == 0.0
     assert summary["artifacts"]["finally_stop"]["response"]["left_motor"] == 0.0
+    assert summary["artifacts"]["contact_sheet"]["available"] is True
     paths = [request["path"] for request in recorded.requests]
     assert "/cmd_vel" in paths
     assert "/stop" in paths
     assert (tmp_path / "run" / "before.jpg").exists()
+    assert (tmp_path / "run" / "camera_contact_sheet.jpg").exists()
     assert (tmp_path / "run" / "behavior_summary.json").exists()
 
 
@@ -285,6 +287,76 @@ def test_visual_target_analysis_rejects_full_frame_tint(tmp_path):
     assert "target_bbox_width_above_threshold" in analysis["issues"]
     assert analysis["recommendation"]["linear_x"] == 0.0
     assert analysis["recommendation"]["angular_z"] == 0.0
+
+
+def test_visual_scan_ranks_specific_yellow_target(tmp_path):
+    image = tmp_path / "target.jpg"
+    image.write_bytes(TARGET_JPEG)
+    args = runner.build_parser().parse_args(
+        [
+            "--mode",
+            "visual-scan",
+        ]
+    )
+
+    scan = runner.analyze_visual_scan(image, args, tmp_path / "scan")
+
+    assert scan["best_candidate"]["target_profile"] == "yellow"
+    assert scan["detected_profiles"][0] == "yellow"
+    assert scan["best_candidate"]["recommendation"]["angular_z"] < 0.0
+    assert (tmp_path / "scan" / "visual_scan_yellow.jpg").exists()
+
+
+def test_visual_scan_rejects_full_frame_tint(tmp_path):
+    from PIL import Image
+
+    image = tmp_path / "yellow_frame.jpg"
+    Image.new("RGB", (320, 240), (230, 220, 40)).save(image, quality=90)
+    args = runner.build_parser().parse_args(
+        [
+            "--mode",
+            "visual-scan",
+            "--visual-scan-profiles",
+            "yellow",
+        ]
+    )
+
+    scan = runner.analyze_visual_scan(image, args, tmp_path / "scan")
+
+    assert scan["best_candidate"] is None
+    assert scan["detected_profiles"] == []
+    yellow = scan["results"][0]
+    assert yellow["target_profile"] == "yellow"
+    assert "target_bbox_width_above_threshold" in yellow["issues"]
+    assert yellow["recommendation"]["linear_x"] == 0.0
+    assert yellow["recommendation"]["angular_z"] == 0.0
+
+
+def test_visual_scan_never_posts_motion(tmp_path, capsys):
+    handler = make_handler(motion_enabled=True, image_bytes=TARGET_JPEG)
+    with run_server(handler) as (base_url, recorded):
+        code = runner.main(
+            [
+                "--base-url",
+                base_url,
+                "--artifact-dir",
+                str(tmp_path / "run"),
+                "--mode",
+                "visual-scan",
+                "--camera-frames",
+                "2",
+                "--camera-interval-s",
+                "0",
+            ]
+        )
+
+    assert code == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["pass"] is True
+    assert summary["steps"][0]["label"] == "visual_scan_best_candidate"
+    assert summary["steps"][0]["target_profile"] == "yellow"
+    assert all(request["path"] != "/cmd_vel" for request in recorded.requests)
+    assert all(request["path"] != "/stop" for request in recorded.requests)
 
 
 def test_visual_advisor_captures_recommendation_without_motion(tmp_path, capsys):
