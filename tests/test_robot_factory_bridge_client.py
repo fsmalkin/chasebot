@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import http.server
+import io
 import json
 import socketserver
 import sys
@@ -17,7 +18,18 @@ if str(BRIDGE_TOOLS_DIR) not in sys.path:
 import chasecar_bridge_client as client  # noqa: E402
 
 
-FAKE_JPEG = b"\xff\xd8" + (b"fake-jpeg-frame" * 12) + b"\xff\xd9"
+def make_jpeg(width=160, height=120):
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (width, height), (40, 45, 50))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((16, 16, width - 16, height - 16), outline=(230, 210, 40), width=3)
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=90)
+    return buffer.getvalue()
+
+
+FAKE_JPEG = make_jpeg()
 
 
 class _TestHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -203,3 +215,38 @@ def test_camera_diagnostics_scores_camera_readiness(tmp_path, capsys):
     paths = [request["path"] for request in recorded.requests]
     assert paths.count("/camera.jpg") == 3
     assert paths.count("/health") == 2
+
+
+def test_record_video_writes_gif_without_motion_requests(tmp_path, capsys):
+    handler = make_handler()
+    output_dir = tmp_path / "camera_video"
+    with run_server(handler) as (base_url, recorded):
+        code = client.main(
+            [
+                "--base-url",
+                base_url,
+                "record-video",
+                "--seconds",
+                "0.6",
+                "--fps",
+                "5",
+                "--output-dir",
+                str(output_dir),
+                "--skip-mp4",
+            ]
+        )
+
+    assert code == 0
+    summary = json.loads(capsys.readouterr().out)
+    response = summary["response"]
+    assert response["pass"] is True
+    assert response["captured_frames"] == 3
+    assert response["gif"]["ok"] is True
+    assert response["mp4"]["skipped"] is True
+    assert (output_dir / "camera.gif").exists()
+    assert (output_dir / "frames" / "camera_001.jpg").exists()
+    assert (output_dir / "camera_video_summary.json").exists()
+    paths = [request["path"] for request in recorded.requests]
+    assert paths.count("/camera.jpg") == 3
+    assert paths.count("/health") == 2
+    assert all(request["method"] != "POST" for request in recorded.requests)

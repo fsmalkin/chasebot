@@ -7,6 +7,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import time
 import urllib.error
@@ -50,6 +52,11 @@ def default_snapshot_path():
 def default_camera_diagnostics_dir():
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     return Path("artifacts") / "session" / ("factory_bridge_camera_diagnostics_%s" % stamp)
+
+
+def default_camera_video_dir():
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    return Path("artifacts") / "session" / ("factory_bridge_camera_video_%s" % stamp)
 
 
 def decode_json(raw):
@@ -203,6 +210,14 @@ def common_request_payload(args):
             "max_frame_age_s": float(args.max_frame_age_s),
             "min_frame_bytes": int(args.min_frame_bytes),
         }
+    if args.action == "record-video":
+        return {
+            "seconds": float(args.seconds),
+            "fps": float(args.fps),
+            "frames": int(max(1, round(float(args.seconds) * float(args.fps)))),
+            "output_dir": str(args.output_dir or default_camera_video_dir()),
+            "skip_mp4": bool(args.skip_mp4),
+        }
     return {}
 
 
@@ -298,6 +313,195 @@ def run_camera_diagnostics(client, args):
     return payload
 
 
+def write_animated_gif(frame_paths, output_path, fps):
+    try:
+        from PIL import Image
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": "pillow_unavailable:%r" % (exc,),
+        }
+    if not frame_paths:
+        return {
+            "ok": False,
+            "error": "no_frames",
+        }
+    images = []
+    try:
+        for frame_path in frame_paths:
+            images.append(Image.open(frame_path).convert("RGB"))
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        duration_ms = max(1, int(round(1000.0 / max(float(fps), 0.001))))
+        images[0].save(
+            output_path,
+            save_all=True,
+            append_images=images[1:],
+            duration=duration_ms,
+            loop=0,
+        )
+        return {
+            "ok": True,
+            "output": str(output_path),
+            "bytes": output_path.stat().st_size,
+            "frames": len(frame_paths),
+            "fps": float(fps),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": repr(exc),
+        }
+    finally:
+        for image in images:
+            try:
+                image.close()
+            except Exception:
+                pass
+
+
+def write_mp4_with_ffmpeg(frames_dir, output_path, fps, skip_mp4=False):
+    if skip_mp4:
+        return {
+            "ok": False,
+            "skipped": True,
+            "error": "skip_mp4_requested",
+        }
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return {
+            "ok": False,
+            "skipped": True,
+            "error": "ffmpeg_not_found",
+        }
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    input_pattern = str(Path(frames_dir) / "camera_%03d.jpg")
+    command = [
+        ffmpeg,
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-framerate",
+        str(max(float(fps), 0.001)),
+        "-i",
+        input_pattern,
+        "-vf",
+        "format=yuv420p",
+        "-c:v",
+        "libx264",
+        str(output_path),
+    ]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        if completed.returncode != 0:
+            return {
+                "ok": False,
+                "command": command,
+                "error": (completed.stderr or completed.stdout or "ffmpeg_failed").strip(),
+            }
+        return {
+            "ok": True,
+            "output": str(output_path),
+            "bytes": output_path.stat().st_size,
+            "fps": float(fps),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "command": command,
+            "error": repr(exc),
+        }
+
+
+def run_camera_video_capture(client, args):
+    seconds = max(0.1, float(args.seconds))
+    fps = max(0.1, float(args.fps))
+    frames_requested = max(1, int(round(seconds * fps)))
+    interval_s = 1.0 / fps
+    output_dir = Path(args.output_dir or default_camera_video_dir())
+    frames_dir = output_dir / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+
+    start_status, start_health = client.health()
+    start_monotonic = time.monotonic()
+    frames = []
+    for index in range(frames_requested):
+        target_time = start_monotonic + (index * interval_s)
+        sleep_s = target_time - time.monotonic()
+        if sleep_s > 0:
+            time.sleep(sleep_s)
+        frame_status, image = client.snapshot()
+        frame_path = frames_dir / ("camera_%03d.jpg" % (index + 1))
+        frame_path.write_bytes(image)
+        frames.append(
+            {
+                "index": index + 1,
+                "http_status": frame_status,
+                "bytes": len(image),
+                "output": str(frame_path),
+                "elapsed_s": round(time.monotonic() - start_monotonic, 3),
+            }
+        )
+    end_status, end_health = client.health()
+    elapsed_s = max(time.monotonic() - start_monotonic, 0.001)
+    observed_fps = len(frames) / elapsed_s
+    frame_paths = [frame["output"] for frame in frames]
+    gif = write_animated_gif(frame_paths, output_dir / "camera.gif", fps)
+    mp4 = write_mp4_with_ffmpeg(frames_dir, output_dir / "camera.mp4", fps, skip_mp4=args.skip_mp4)
+
+    start_camera = camera_block(start_health)
+    end_camera = camera_block(end_health)
+    frame_bytes = [int(frame["bytes"]) for frame in frames]
+    min_frame_bytes = min(frame_bytes) if frame_bytes else 0
+    issues = []
+    if not bool(start_health.get("ok", False)):
+        issues.append("health_not_ok")
+    if not bool(end_camera.get("enabled", False)):
+        issues.append("camera_not_enabled")
+    if len(frames) != frames_requested:
+        issues.append("missing_camera_frames")
+    if min_frame_bytes < int(args.min_frame_bytes):
+        issues.append("camera_frame_too_small")
+    if not gif.get("ok", False) and not mp4.get("ok", False):
+        issues.append("video_output_failed")
+    if bool(end_health.get("motion_enabled", False)):
+        issues.append("motion_enabled_during_video_capture")
+    if abs(float(end_health.get("left_motor", 0.0))) > 0.0001:
+        issues.append("left_motor_nonzero")
+    if abs(float(end_health.get("right_motor", 0.0))) > 0.0001:
+        issues.append("right_motor_nonzero")
+
+    payload = {
+        "ok": True,
+        "pass": not issues,
+        "issues": issues,
+        "output_dir": str(output_dir),
+        "summary_path": str(output_dir / "camera_video_summary.json"),
+        "requested_seconds": seconds,
+        "requested_fps": fps,
+        "requested_frames": frames_requested,
+        "captured_frames": len(frames),
+        "elapsed_s": round(elapsed_s, 3),
+        "observed_request_fps": round(observed_fps, 3),
+        "min_frame_bytes": min_frame_bytes,
+        "start_health_status": start_status,
+        "end_health_status": end_status,
+        "start_camera": start_camera,
+        "end_camera": end_camera,
+        "gif": gif,
+        "mp4": mp4,
+        "frames_dir": str(frames_dir),
+        "frames": frames,
+    }
+    Path(payload["summary_path"]).write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return payload
+
+
 def run_action(args):
     require_motion_confirmation(args)
     request_payload = common_request_payload(args)
@@ -331,6 +535,9 @@ def run_action(args):
         elif args.action == "camera-diagnostics":
             status = 200
             payload = run_camera_diagnostics(client, args)
+        elif args.action == "record-video":
+            status = 200
+            payload = run_camera_video_capture(client, args)
         else:
             raise BridgeClientError("unsupported_action:%s" % args.action)
         if getattr(args, "expect_refusal", False):
@@ -381,6 +588,16 @@ def build_parser():
     camera_diagnostics.add_argument("--min-fps", type=float, default=2.0)
     camera_diagnostics.add_argument("--max-frame-age-s", type=float, default=1.0)
     camera_diagnostics.add_argument("--min-frame-bytes", type=int, default=100)
+
+    record_video = subparsers.add_parser(
+        "record-video",
+        help="Record a short camera clip without sending any motion command.",
+    )
+    record_video.add_argument("--seconds", type=float, default=3.0)
+    record_video.add_argument("--fps", type=float, default=5.0)
+    record_video.add_argument("--output-dir", default="")
+    record_video.add_argument("--min-frame-bytes", type=int, default=100)
+    record_video.add_argument("--skip-mp4", action="store_true")
 
     event = subparsers.add_parser("event", help="Record an operator event on the bridge.")
     event.add_argument("--event", required=True)

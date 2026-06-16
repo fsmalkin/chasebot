@@ -31,9 +31,10 @@ Basic flow:
    python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty health
    python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty camera-diagnostics --frames 8 --interval-s 0.2
    python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty snapshot --output artifacts/session/manual_factory_bridge_camera/camera.jpg
+   python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty record-video --seconds 3 --fps 5 --output-dir artifacts/session/manual_factory_bridge_camera_video
    ```
 
-   These checks read bridge state, score camera readiness, and save camera frames while the robot stays still.
+   These checks read bridge state, score camera readiness, save a camera frame, and record a short camera clip while the robot stays still. The video command writes `camera.gif`, `camera.mp4` when ffmpeg is available, and the source JPEG frames.
 
 3. Confirm that motion is still locked while the bridge is in health mode:
 
