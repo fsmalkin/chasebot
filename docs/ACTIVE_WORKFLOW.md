@@ -533,6 +533,51 @@ June 11 Option A Phase 2 evidence:
   Recorded as a rerun per discipline (no robot evidence); recovery via
   the restart escalation, then a fresh verification rerun.
 
+June 15/16 Codex takeover evidence:
+
+- Environment recovery succeeded on dashboard `8895`: Codex stopped the stale
+  service, relaunched `scripts/run_dashboard_service.ps1 -BindHost 0.0.0.0
+  -Port 8895`, and smoked a fresh session to `environment_ready` with
+  `sim_gate_ready=true`, `operator_view_ready=true`, and
+  `world_stream_ready=true`.
+- Frozen-scene verification rerun3 confirmed the post-`b5a99a6` sibling-ball
+  coverage repair:
+  `artifacts/session/live_multiball_frozen_seed20260651_s01_replay_rerun3_20260615/fetch_multiball_retrieval_gate/scorecard.md`.
+  Scene `seed20260651_mb_route_diverse_s01_nav2` passed behaviorally: step 1
+  delivered; step 2 corridor-rejected Nav2 with `ball_count=2`,
+  `min_clearance_m=0.073581`, and `frame_yaw_offset_rad=-0.593734`, then
+  delivered via fallback; step 3 corridor-rejected with `ball_count=3`,
+  `min_clearance_m=0.003058`, and `frame_yaw_offset_rad=-0.610301`, then
+  ended as accepted bounded give-up
+  `measured_setup_handoff_failed_before_contact`. Visual evidence effective
+  pass:
+  `artifacts/session/live_multiball_frozen_seed20260651_s01_replay_rerun3_20260615_visual_package/fetch_visual_uat_package/package_summary.json`.
+- Phase 3 seed `20260651` dry-run passed:
+  `artifacts/session/live_multiball_route_diverse_seed20260651_4x3_postfix_dry_run_20260615/fetch_multiball_retrieval_gate/scorecard.md`.
+  It materialized four scenes, twelve steps, route diversity across
+  `nav2_reposition_first`, `local_setup_capture`, `recovery_or_reaim`, and
+  `fetch_ready_local`, and zero planned bounded give-ups.
+- Phase 3 seed `20260651` live postfix gate stopped at the hard bound:
+  `artifacts/session/live_multiball_route_diverse_seed20260651_4x3_postfix_20260615/fetch_multiball_retrieval_gate/scorecard.md`.
+  The run delivered `10/12`, produced `2` bounded give-ups, had `0` live
+  fetch failures, `0` environment failures, route diversity green, and
+  browser-watchable visual evidence effective-pass at
+  `artifacts/session/live_multiball_route_diverse_seed20260651_4x3_postfix_20260615_visual_package/fetch_visual_uat_package/package_summary.json`.
+  The two bounded give-ups were both
+  `measured_setup_handoff_failed_before_contact`, with next capability
+  `open_field_setup_trajectory_owner_required`:
+  `seed20260651_mb_route_diverse_s01_nav2` step 3 `ball_3`
+  (`closest_approach_m=0.656639`) and
+  `seed20260651_mb_route_diverse_s04_ready` step 3 `ball_2`
+  (`closest_approach_m=0.774709`). Codex inspected onboard/topdown keyframe
+  contact sheets for all four scene sessions and found no visual contradiction
+  with the delivery and bounded-give-up classifications.
+- Stop condition: more than one bounded give-up in a single seed run. Seed
+  `20260650` invariance was not run. The next work requires supervisory
+  decision on the planned scope: keep v1 waiting on the numeric bar, or advance
+  the already-designed open-field setup trajectory owner into the current
+  requalification lane.
+
 ## Codex execution plan (June 9, 2026 — bounded autonomous lane)
 
 Owner: GPT-5.5 Codex thread. Source-of-truth docs: this file,

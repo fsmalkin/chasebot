@@ -1969,3 +1969,27 @@ replayable scene pointers in `docs/ACTIVE_WORKFLOW.md`). The five-green
 streak is broken at four; the repair decision (concept brief with options)
 is with Fred. No tuning and no rerun before Fred's pick; the frozen-scene
 discipline is already satisfied.
+
+June 15/16 postfix requalification checkpoint: Option A repaired the original
+Nav2 setup-assist frame bug and the sibling-ball corridor coverage gap, but
+seed `20260651` remains outside the v1 promotion bar. Evidence:
+`artifacts/session/live_multiball_route_diverse_seed20260651_4x3_postfix_20260615/fetch_multiball_retrieval_gate/scorecard.md`.
+The gate delivered `10/12` across four route-diverse scenes, produced `2`
+bounded give-ups, had `0` unbounded live fetch failures, `0` environment
+failures, and browser-watchable visual evidence effective-pass at
+`artifacts/session/live_multiball_route_diverse_seed20260651_4x3_postfix_20260615_visual_package/fetch_visual_uat_package/package_summary.json`.
+The bounded give-ups were both
+`measured_setup_handoff_failed_before_contact`, with next capability
+`open_field_setup_trajectory_owner_required`: `seed20260651_mb_route_diverse_s01_nav2`
+step 3 `ball_3` (`closest_approach_m=0.656639`) and
+`seed20260651_mb_route_diverse_s04_ready` step 3 `ball_2`
+(`closest_approach_m=0.774709`). Codex reviewed onboard/topdown keyframe
+contact sheets for all four scene sessions and found no visual contradiction
+with the telemetry classification.
+
+The breadth lane is at a stop-and-report boundary: more than one bounded
+give-up occurred in one seed run, and delivery was below the `>=90%` numeric
+bar. Seed `20260650` invariance remains unrun after the postfix gate. The next
+roadmap decision is whether to keep v1 waiting on the existing numeric bar or
+advance the already-designed open-field setup trajectory owner into the current
+requalification lane.
