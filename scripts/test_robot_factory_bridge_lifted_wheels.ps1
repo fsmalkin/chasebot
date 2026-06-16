@@ -35,7 +35,7 @@ if (-not [bool]$health.motion_enabled) {
 Write-Host "Holding delay: $PreDelaySeconds seconds" -ForegroundColor Yellow
 Start-Sleep -Seconds $PreDelaySeconds
 
-$responses = New-Object System.Collections.Generic.List[object]
+$responses = @()
 $steps = @(
     @{ label = "left_forward"; left = $Speed; right = 0.0; duration_s = $PulseSeconds },
     @{ label = "right_forward"; left = 0.0; right = $Speed; duration_s = $PulseSeconds },
@@ -50,7 +50,7 @@ foreach ($step in $steps) {
         duration_s = [double]$step.duration_s
     } | ConvertTo-Json
     $response = Invoke-RestMethod -Method Post -Uri "$baseUri/motors" -Body $payload -ContentType "application/json" -TimeoutSec 3
-    $responses.Add($response)
+    $responses += $response
     Start-Sleep -Milliseconds ([int](([double]$step.duration_s + 0.35) * 1000))
     Invoke-RestMethod -Method Post -Uri "$baseUri/stop" -Body "{}" -ContentType "application/json" -TimeoutSec 3 | Out-Null
     Start-Sleep -Milliseconds 250
