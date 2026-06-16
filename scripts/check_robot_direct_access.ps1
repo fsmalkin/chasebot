@@ -66,7 +66,7 @@ $repoRoot = Get-RepoRoot
 $artifactRoot = Join-Path $repoRoot ("artifacts/session/{0}/robot_direct_access_preflight" -f $CampaignId)
 New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
 
-$checks = New-Object System.Collections.Generic.List[object]
+$checks = @()
 
 $identityCommand = @'
 set -eo pipefail
@@ -75,7 +75,7 @@ echo "hostname=$(hostname)"
 echo "user=$(whoami)"
 uname -a
 '@
-$checks.Add((Invoke-RobotSshCheck -Label "identity" -RemoteCommand $identityCommand))
+$checks += Invoke-RobotSshCheck -Label "identity" -RemoteCommand $identityCommand
 
 $toolingCommand = @'
 set -eo pipefail
@@ -102,7 +102,7 @@ else
   echo "opt_ros=MISSING"
 fi
 '@
-$checks.Add((Invoke-RobotSshCheck -Label "tooling" -RemoteCommand $toolingCommand))
+$checks += Invoke-RobotSshCheck -Label "tooling" -RemoteCommand $toolingCommand
 
 $runtimePathLiteral = ConvertTo-BashLiteral -Value $RuntimeWorkspacePath
 $repoPathLiteral = if ([string]::IsNullOrWhiteSpace($RobotRepoPath)) { "''" } else { ConvertTo-BashLiteral -Value $RobotRepoPath }
@@ -133,24 +133,24 @@ for item in "`$runtime_path" "`$repo_path"; do
   fi
 done
 "@
-$checks.Add((Invoke-RobotSshCheck -Label "paths" -RemoteCommand $pathCommand))
+$checks += Invoke-RobotSshCheck -Label "paths" -RemoteCommand $pathCommand
 
-$issues = New-Object System.Collections.Generic.List[string]
+$issues = @()
 foreach ($check in $checks) {
     if (-not $check.pass) {
-        $issues.Add(("ssh_check_failed:{0}" -f $check.label))
+        $issues += "ssh_check_failed:{0}" -f $check.label
     }
 }
 
 $combinedOutput = ($checks | ForEach-Object { $_.output }) -join "`n"
 foreach ($required in @("CHASECAR_SSH_OK=1", "bash=", "git=", "python3=")) {
     if ($combinedOutput -notmatch [regex]::Escape($required)) {
-        $issues.Add(("required_output_missing:{0}" -f $required))
+        $issues += "required_output_missing:{0}" -f $required
     }
 }
 foreach ($warning in @("ros2=MISSING", "opt_ros=MISSING")) {
     if ($combinedOutput -match [regex]::Escape($warning)) {
-        $issues.Add(("ros_command_surface_incomplete:{0}" -f $warning))
+        $issues += "ros_command_surface_incomplete:{0}" -f $warning
     }
 }
 
