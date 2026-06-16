@@ -25,19 +25,37 @@ Basic flow:
 
    Open `http://192.168.1.11:8765/dashboard` for bridge health, camera, recent commands, and operator notes.
 
-2. Restart with motion enabled for lifted-wheel tests:
+2. Check direct access from the laptop:
+
+   ```powershell
+   python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty health
+   python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty camera-diagnostics --frames 8 --interval-s 0.2
+   python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty snapshot --output artifacts/session/manual_factory_bridge_camera/camera.jpg
+   ```
+
+   These checks read bridge state, score camera readiness, and save camera frames while the robot stays still.
+
+3. Confirm that motion is still locked while the bridge is in health mode:
+
+   ```powershell
+   python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty cmd-vel --linear-x 0.05 --angular-z 0 --duration-s 0.1 --expect-refusal
+   ```
+
+   A successful refusal returns `http_status: 423` with `error: "expected_refusal"`.
+
+4. Restart with motion enabled for lifted-wheel tests:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start -EnableMotion
    ```
 
-3. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
+5. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/test_robot_factory_bridge_lifted_wheels.ps1 -RobotHost 192.168.1.11 -ConfirmHeldInAir
    ```
 
-4. Stop the bridge:
+6. Stop the bridge:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/stop_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson
