@@ -21,7 +21,7 @@ import traceback
 import urllib.parse
 
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 
 DASHBOARD_HTML = r"""<!doctype html>
@@ -224,7 +224,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         <h2>Camera</h2>
         <div class="camera-wrap" id="cameraWrap">
           <span id="cameraPlaceholder">Camera waiting</span>
-          <img id="camera" alt="Robot camera" hidden>
+          <img id="camera" alt="Robot camera" decoding="async" hidden>
         </div>
       </section>
       <section>
@@ -269,6 +269,11 @@ DASHBOARD_HTML = r"""<!doctype html>
     const cameraPlaceholder = document.getElementById("cameraPlaceholder");
     const eventsEl = document.getElementById("events");
     let cameraEnabled = false;
+    let cameraPeriodMs = 500;
+    let cameraLoading = false;
+    let cameraRequestId = 0;
+    let cameraTimer = null;
+    let cameraLoadTimeout = null;
 
     function chip(text, cls) {
       return `<span class="chip ${cls || ""}">${text}</span>`;
@@ -306,6 +311,9 @@ DASHBOARD_HTML = r"""<!doctype html>
           const fps = typeof state.camera.cached_fps === "number" ? state.camera.cached_fps.toFixed(1) : "-";
           const age = typeof state.camera.frame_age_s === "number" ? state.camera.frame_age_s.toFixed(2) : "-";
           document.getElementById("cameraMetric").textContent = `${fps} fps / ${age}s old`;
+          if (typeof state.camera.target_fps === "number" && state.camera.target_fps > 0) {
+            cameraPeriodMs = Math.max(180, Math.min(1000, Math.round(1000 / state.camera.target_fps)));
+          }
         } else {
           document.getElementById("cameraMetric").textContent = "off";
         }
@@ -325,15 +333,51 @@ DASHBOARD_HTML = r"""<!doctype html>
         eventsEl.innerHTML = `<div class="event"><strong>Event fetch failed</strong><code>${String(error)}</code></div>`;
       }
     }
+    function scheduleCamera(delayMs) {
+      if (cameraTimer) clearTimeout(cameraTimer);
+      cameraTimer = setTimeout(refreshCamera, delayMs);
+    }
     function refreshCamera() {
       if (!cameraEnabled) {
         camera.hidden = true;
         cameraPlaceholder.hidden = false;
         cameraPlaceholder.textContent = "Camera off";
+        cameraLoading = false;
+        scheduleCamera(1000);
         return;
       }
+      if (cameraLoading) {
+        scheduleCamera(250);
+        return;
+      }
+      const requestId = ++cameraRequestId;
+      cameraLoading = true;
       camera.hidden = false;
       cameraPlaceholder.hidden = true;
+      if (cameraLoadTimeout) clearTimeout(cameraLoadTimeout);
+      cameraLoadTimeout = setTimeout(() => {
+        if (requestId !== cameraRequestId) return;
+        cameraLoading = false;
+        cameraPlaceholder.hidden = false;
+        cameraPlaceholder.textContent = "Camera delayed";
+        scheduleCamera(1000);
+      }, Math.max(1500, cameraPeriodMs * 4));
+      camera.onload = () => {
+        if (requestId !== cameraRequestId) return;
+        if (cameraLoadTimeout) clearTimeout(cameraLoadTimeout);
+        cameraLoading = false;
+        cameraPlaceholder.hidden = true;
+        scheduleCamera(cameraPeriodMs);
+      };
+      camera.onerror = () => {
+        if (requestId !== cameraRequestId) return;
+        if (cameraLoadTimeout) clearTimeout(cameraLoadTimeout);
+        cameraLoading = false;
+        camera.hidden = true;
+        cameraPlaceholder.hidden = false;
+        cameraPlaceholder.textContent = "Camera retrying";
+        scheduleCamera(1000);
+      };
       camera.src = `/camera.jpg?t=${Date.now()}`;
     }
     document.querySelectorAll("button[data-event]").forEach(button => {
@@ -357,9 +401,9 @@ DASHBOARD_HTML = r"""<!doctype html>
     });
     refreshState();
     refreshEvents();
+    scheduleCamera(250);
     setInterval(refreshState, 750);
     setInterval(refreshEvents, 1200);
-    setInterval(refreshCamera, 500);
   </script>
 </body>
 </html>

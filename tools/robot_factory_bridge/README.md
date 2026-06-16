@@ -6,7 +6,7 @@ The bridge runs as one Python process on the robot. It exposes HTTP endpoints fo
 
 The default motor backend uses the same Yahboom I2C command format as the factory web app: direction and speed bytes for the left and right motors in one write.
 
-Camera mode serves a cached `320x240` JPEG from a background encoder by default. Tune `-CameraWidth`, `-CameraHeight`, `-CameraFps`, and `-CameraJpegQuality` in the deploy wrapper when the operator needs a different balance between clarity and responsiveness.
+Camera mode serves a cached `320x240` JPEG from a background encoder by default. The dashboard requests one image at a time and follows the configured camera FPS so a slow Wi-Fi link stays focused on the newest frame. Tune `-CameraWidth`, `-CameraHeight`, `-CameraFps`, and `-CameraJpegQuality` in the deploy wrapper when the operator needs a different balance between clarity and responsiveness.
 
 Safety defaults:
 
