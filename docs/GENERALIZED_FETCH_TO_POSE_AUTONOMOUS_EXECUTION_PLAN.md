@@ -64,6 +64,9 @@ the bounded-give-up frequency signal: the repaired branch delivered `10/12` and
 hit the stop-and-report bound with two measured setup handoff give-ups. Further
 breadth execution waits on the sequencing decision: hold v1 to the numeric bar,
 or pull this owner into the current requalification lane.
+Current handoff surface: `docs/handoffs/README.md`, which links the June 16
+decision packet, approval-gated Slice 1 work-order draft, and browser-watchable
+visual proof.
 
 June 2, 2026 execution pivot: the LLM/world-state planner is integrated as a
 route-classification and shadow-evidence surface. The non-local route labels

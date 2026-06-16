@@ -8,6 +8,10 @@ produced two bounded setup give-ups in one seed run and crossed the documented
 stop-and-report bound. This design is the approved capability plan if the owner
 is pulled into the current requalification lane or kept as v1.1.
 
+Current handoff surface: `docs/handoffs/README.md`, which links the June 16
+decision packet, approval-gated Slice 1 work-order draft, and browser-watchable
+visual proof.
+
 Branch context: `spike/fetch-multiball-open-field-20260606`, designed against
 commit `eb54a05`.
 
