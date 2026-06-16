@@ -98,10 +98,18 @@ complete and documented in `docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md`
 (judged three-candidate study; two-slice landing: boundary-aware wraparound
 promotion behind a CLI flag first, named `open_field_setup_trajectory` route
 promotion second; the Nav2-staged variant is rejected as a standing no-go for
-ball-relative legs). Implementation is on hold pending the v1 scope decision
-(promote with bounded give-up accepted vs require the owner) and bounded
-give-up frequency data from the route-diverse breadth seeds (`20260649`
-onward, in progress).
+ball-relative legs). Fred's June 9 decision set v1 to promote with bounded
+give-up accepted and made the owner the v1.1 headline capability.
+
+June 15/16 postfix stop update: Option A repaired the seed `20260651` Nav2
+setup-assist frame bug and sibling-ball corridor coverage, then the postfix
+`20260651` route-diverse gate delivered `10/12` with `2` bounded give-ups:
+`artifacts/session/live_multiball_route_diverse_seed20260651_4x3_postfix_20260615/fetch_multiball_retrieval_gate/scorecard.md`.
+Both bounded rows were measured setup handoff failures with next capability
+`open_field_setup_trajectory_owner_required`. The branch is now at the
+documented stop-and-report boundary. Further breadth gates wait for a
+supervisory sequencing decision: keep v1 waiting on the numeric bar, or pull
+the already-designed owner into the current requalification lane.
 
 ## Recommended Branch Roles
 

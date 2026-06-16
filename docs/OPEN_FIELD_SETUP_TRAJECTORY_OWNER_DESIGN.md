@@ -1,10 +1,12 @@
 # Open-Field Setup Trajectory Owner — Design (June 9, 2026)
 
-Status: **design complete, implementation on hold** pending (1) the v1 scope
-decision (does Multi-Ball Retrieval v1 promote with bounded give-up as an
-accepted terminal outcome, or does it require this owner?) and (2) bounded
-give-up frequency data from the route-diverse breadth seeds now running
-(seed `20260649` onward).
+Status: **design complete, implementation sequencing requires supervisory
+choice**. Fred's June 9 decision let Multi-Ball Retrieval v1 promote with
+bounded give-up as an accepted terminal outcome, leaving this owner as the
+headline v1.1 capability. The June 15/16 postfix seed `20260651` gate then
+produced two bounded setup give-ups in one seed run and crossed the documented
+stop-and-report bound. This design is the approved capability plan if the owner
+is pulled into the current requalification lane or kept as v1.1.
 
 Branch context: `spike/fetch-multiball-open-field-20260606`, designed against
 commit `eb54a05`.
@@ -17,6 +19,18 @@ passed with `11/12` deliveries and one bounded give-up:
 `seed20260648_mb_route_diverse_s02_setup` step 3 `ball_2`, reason
 `field_bounded_setup_pose_requires_open_field_setup_planner`, next capability
 `open_field_setup_trajectory_owner_required`.
+
+The June 15/16 postfix seed `20260651` requalification gate expanded the same
+capability gap from planned skip to measured setup failure:
+`artifacts/session/live_multiball_route_diverse_seed20260651_4x3_postfix_20260615/fetch_multiball_retrieval_gate/scorecard.md`.
+It delivered `10/12` and recorded two bounded give-ups, both
+`measured_setup_handoff_failed_before_contact` with next capability
+`open_field_setup_trajectory_owner_required`:
+`seed20260651_mb_route_diverse_s01_nav2` step 3 `ball_3`
+(`closest_approach_m=0.656639`) and
+`seed20260651_mb_route_diverse_s04_ready` step 3 `ball_2`
+(`closest_approach_m=0.774709`). The visual package found no contradiction
+between the frame sequence and the setup-failure classifications.
 
 The geometry class: the ball sits near the field boundary with the target on
 the far side (ball-target angle >= 145 deg, robot on the target side), so the

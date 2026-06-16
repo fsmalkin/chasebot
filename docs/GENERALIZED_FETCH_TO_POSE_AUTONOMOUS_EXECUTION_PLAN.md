@@ -58,8 +58,12 @@ orbit-arc radius/direction ladder. All downstream measured gates (behind-ready,
 contact_ready servo handoff, push-ready, guarded fetch) are unchanged. The
 design numerically solves the frozen seed `20260648` s02 step 3 `ball_2`
 geometry; expected outcome after landing is that gate at 12/12 with 0
-give-ups. Implementation awaits the v1 scope decision and breadth-seed give-up
-frequency data.
+give-ups. Fred's June 9 scope decision made the owner the v1.1 headline
+capability, while the June 15/16 postfix seed `20260651` evidence now supplies
+the bounded-give-up frequency signal: the repaired branch delivered `10/12` and
+hit the stop-and-report bound with two measured setup handoff give-ups. Further
+breadth execution waits on the sequencing decision: hold v1 to the numeric bar,
+or pull this owner into the current requalification lane.
 
 June 2, 2026 execution pivot: the LLM/world-state planner is integrated as a
 route-classification and shadow-evidence surface. The non-local route labels
