@@ -1,0 +1,41 @@
+{
+  "name": "turn_90_camera_proof_v1",
+  "description": "Conservative in-place left turn proof for before/after camera evidence. Calibrate by reviewing the contact sheet; repeat or shorten only after visual confirmation.",
+  "steps": [
+    {
+      "label": "turn_left_pulse_01",
+      "linear_x": 0.0,
+      "angular_z": 2.5,
+      "duration_s": 0.3,
+      "settle_s": 0.2
+    },
+    {
+      "label": "turn_left_pulse_02",
+      "linear_x": 0.0,
+      "angular_z": 2.5,
+      "duration_s": 0.3,
+      "settle_s": 0.2
+    },
+    {
+      "label": "turn_left_pulse_03",
+      "linear_x": 0.0,
+      "angular_z": 2.5,
+      "duration_s": 0.3,
+      "settle_s": 0.2
+    },
+    {
+      "label": "turn_left_pulse_04",
+      "linear_x": 0.0,
+      "angular_z": 2.5,
+      "duration_s": 0.3,
+      "settle_s": 0.2
+    },
+    {
+      "label": "turn_left_pulse_05",
+      "linear_x": 0.0,
+      "angular_z": 2.5,
+      "duration_s": 0.3,
+      "settle_s": 0.25
+    }
+  ]
+}

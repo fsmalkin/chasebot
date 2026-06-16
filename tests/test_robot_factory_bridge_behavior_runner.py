@@ -246,6 +246,24 @@ def test_tiny_turn_plan_limits_fail_closed(tmp_path, capsys):
     assert all(request["path"] != "/cmd_vel" for request in recorded.requests)
 
 
+def test_turn_90_camera_proof_plan_stays_within_limits():
+    args = runner.build_parser().parse_args(
+        [
+            "--mode",
+            "plan-refusal",
+            "--plan-file",
+            str(REPO_ROOT / "tools" / "robot_factory_bridge" / "plans" / "turn_90_camera_proof_v1.json"),
+        ]
+    )
+
+    plan = runner.load_plan(args)
+
+    assert plan["name"] == "turn_90_camera_proof_v1"
+    assert len(plan["steps"]) >= 2
+    assert runner.validate_plan(plan, args) == []
+    assert all(step["linear_x"] == 0.0 for step in plan["steps"])
+
+
 def test_plan_refusal_exercises_plan_while_motion_locked(tmp_path, capsys):
     plan = tmp_path / "probe.json"
     plan.write_text(

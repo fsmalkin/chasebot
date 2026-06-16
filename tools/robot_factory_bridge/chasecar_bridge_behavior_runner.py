@@ -145,7 +145,7 @@ def validate_plan(plan, args):
 
 
 def save_snapshot(client, output_path):
-    status, image = client.snapshot()
+    status, image = bridge_client.snapshot_with_retries(client)
     output_path = Path(output_path)
     ensure_dir(output_path.parent)
     output_path.write_bytes(image)

@@ -18,6 +18,7 @@ import urllib.request
 
 DEFAULT_BASE_URL = "http://192.168.1.11:8765"
 DEFAULT_TIMEOUT_S = 3.0
+DEFAULT_CAMERA_WARMUP_TIMEOUT_S = 12.0
 MOTION_ACTIONS = {"cmd-vel", "motors"}
 
 
@@ -138,6 +139,57 @@ class BridgeClient:
         return self.request("GET", "/camera.jpg", expect_json=False)
 
 
+def snapshot_with_retries(client, attempts=12, interval_s=0.25):
+    attempts = max(1, int(attempts))
+    interval_s = max(0.0, float(interval_s))
+    last_error = None
+    for index in range(attempts):
+        try:
+            return client.snapshot()
+        except BridgeHttpError as exc:
+            if exc.status_code != 503:
+                raise
+            last_error = exc
+            if index < attempts - 1 and interval_s > 0:
+                time.sleep(interval_s)
+    if last_error is not None:
+        raise last_error
+    return client.snapshot()
+
+
+def wait_for_camera_ready(client, min_fps=2.0, max_frame_age_s=1.0, min_frame_bytes=100, timeout_s=DEFAULT_CAMERA_WARMUP_TIMEOUT_S):
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    last_status = None
+    last_health = None
+    while True:
+        try:
+            last_status, last_health = client.health()
+        except BridgeClientError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.25)
+            continue
+        camera = camera_block(last_health)
+        cached_fps = camera.get("cached_fps")
+        frame_age_s = camera.get("frame_age_s")
+        cached_bytes = camera.get("cached_bytes")
+        ready = (
+            last_status == 200
+            and bool(last_health.get("ok", False))
+            and bool(camera.get("enabled", False))
+            and bool(camera.get("loaded", True))
+            and is_number(cached_fps)
+            and float(cached_fps) >= float(min_fps)
+            and is_number(frame_age_s)
+            and float(frame_age_s) <= float(max_frame_age_s)
+            and is_number(cached_bytes)
+            and int(cached_bytes) >= int(min_frame_bytes)
+        )
+        if ready or time.monotonic() >= deadline:
+            return last_status, last_health
+        time.sleep(0.25)
+
+
 def build_summary(args, request_payload, http_status=None, response=None, error=None):
     return {
         "generated_utc": utc_now(),
@@ -237,11 +289,17 @@ def run_camera_diagnostics(client, args):
     output_dir = Path(args.output_dir or default_camera_diagnostics_dir())
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    wait_for_camera_ready(
+        client,
+        min_fps=args.min_fps,
+        max_frame_age_s=args.max_frame_age_s,
+        min_frame_bytes=args.min_frame_bytes,
+    )
     start_status, start_health = client.health()
     start_monotonic = time.monotonic()
     frames = []
     for index in range(frames_requested):
-        frame_status, image = client.snapshot()
+        frame_status, image = snapshot_with_retries(client)
         frame_path = output_dir / ("camera_%03d.jpg" % (index + 1))
         frame_path.write_bytes(image)
         frames.append(
@@ -424,6 +482,12 @@ def run_camera_video_capture(client, args):
     frames_dir = output_dir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
 
+    wait_for_camera_ready(
+        client,
+        min_fps=1.0,
+        max_frame_age_s=1.0,
+        min_frame_bytes=args.min_frame_bytes,
+    )
     start_status, start_health = client.health()
     start_monotonic = time.monotonic()
     frames = []
@@ -432,7 +496,7 @@ def run_camera_video_capture(client, args):
         sleep_s = target_time - time.monotonic()
         if sleep_s > 0:
             time.sleep(sleep_s)
-        frame_status, image = client.snapshot()
+        frame_status, image = snapshot_with_retries(client)
         frame_path = frames_dir / ("camera_%03d.jpg" % (index + 1))
         frame_path.write_bytes(image)
         frames.append(

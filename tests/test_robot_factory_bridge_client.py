@@ -37,9 +37,10 @@ class _TestHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     allow_reuse_address = True
 
 
-def make_handler(post_status=200, post_payload=None):
+def make_handler(post_status=200, post_payload=None, camera_failures=0):
     class Handler(http.server.BaseHTTPRequestHandler):
         requests = []
+        camera_failures_remaining = int(camera_failures)
 
         def log_message(self, _fmt, *_args):
             return
@@ -61,8 +62,10 @@ def make_handler(post_status=200, post_payload=None):
                         "motion_enabled": False,
                         "camera": {
                             "enabled": True,
+                            "loaded": True,
                             "cached_fps": 5.0,
                             "frame_age_s": 0.1,
+                            "cached_bytes": len(FAKE_JPEG),
                         },
                     }
                 )
@@ -71,6 +74,10 @@ def make_handler(post_status=200, post_payload=None):
                 self.write_json({"ok": True, "events": []})
                 return
             if self.path == "/camera.jpg":
+                if self.camera_failures_remaining > 0:
+                    type(self).camera_failures_remaining -= 1
+                    self.write_json({"ok": False, "error": "camera_not_ready"}, status=503)
+                    return
                 image = FAKE_JPEG
                 self.send_response(200)
                 self.send_header("Content-Type", "image/jpeg")
@@ -214,7 +221,33 @@ def test_camera_diagnostics_scores_camera_readiness(tmp_path, capsys):
     assert (output_dir / "camera_diagnostics.json").exists()
     paths = [request["path"] for request in recorded.requests]
     assert paths.count("/camera.jpg") == 3
-    assert paths.count("/health") == 2
+    assert paths.count("/health") >= 2
+
+
+def test_camera_diagnostics_retries_camera_warmup_503(tmp_path, capsys):
+    handler = make_handler(camera_failures=1)
+    output_dir = tmp_path / "camera_diag"
+    with run_server(handler) as (base_url, recorded):
+        code = client.main(
+            [
+                "--base-url",
+                base_url,
+                "camera-diagnostics",
+                "--frames",
+                "2",
+                "--interval-s",
+                "0",
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
+
+    assert code == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["response"]["pass"] is True
+    assert summary["response"]["captured_frames"] == 2
+    paths = [request["path"] for request in recorded.requests]
+    assert paths.count("/camera.jpg") == 3
 
 
 def test_record_video_writes_gif_without_motion_requests(tmp_path, capsys):
@@ -248,5 +281,5 @@ def test_record_video_writes_gif_without_motion_requests(tmp_path, capsys):
     assert (output_dir / "camera_video_summary.json").exists()
     paths = [request["path"] for request in recorded.requests]
     assert paths.count("/camera.jpg") == 3
-    assert paths.count("/health") == 2
+    assert paths.count("/health") >= 2
     assert all(request["method"] != "POST" for request in recorded.requests)
