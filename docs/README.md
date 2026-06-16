@@ -3,6 +3,9 @@
 ## Current Docs (2026 Stack)
 
 ### Operations
+- [HARDWARE_FIRST_BOOT_STEP_CARD.md](HARDWARE_FIRST_BOOT_STEP_CARD.md) - Live one-step bench card for first Jetson login and SSH handoff
+- [HARDWARE_V0_DEPLOYMENT_PLAN.md](HARDWARE_V0_DEPLOYMENT_PLAN.md) - Beginner-friendly hardware deployment and direct-access ladder
+- [HARDWARE_BENCH_CONNECTION_RUNBOOK.md](HARDWARE_BENCH_CONNECTION_RUNBOOK.md) - Granular Jetson, D415, network, SSH, and Tailscale bench setup
 - [ACTIVE_WORKFLOW.md](ACTIVE_WORKFLOW.md) — Canonical bring-up, UAT execution, and GUI rehearsal sequencing
 - [FIRST_UAT_RUNBOOK.md](FIRST_UAT_RUNBOOK.md) — First operator UAT procedure and triage
 - [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md) — Browser dashboard and Xpra operator view
