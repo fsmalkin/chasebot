@@ -55,9 +55,58 @@ class DryRunRobot(object):
         self.set_motors(0.0, 0.0)
 
 
+class YahboomI2CRobot(object):
+    def __init__(self, bus_number=1, address=0x1B):
+        import smbus
+
+        self.bus = smbus.SMBus(int(bus_number))
+        self.address = int(address)
+        self.left = 0.0
+        self.right = 0.0
+
+    @staticmethod
+    def motor_bytes(value):
+        value = clamp(finite_float(value), -1.0, 1.0)
+        direction = 1 if value >= 0 else 0
+        speed = int(round(abs(value) * 255.0))
+        return direction, clamp(speed, 0, 255)
+
+    def set_motors(self, left, right):
+        left_direction, left_speed = self.motor_bytes(left)
+        right_direction, right_speed = self.motor_bytes(right)
+        self.bus.write_i2c_block_data(
+            self.address,
+            0x01,
+            [left_direction, left_speed, right_direction, right_speed],
+        )
+        self.left = float(left)
+        self.right = float(right)
+
+    def stop(self):
+        self.bus.write_i2c_block_data(self.address, 0x01, [1, 0, 1, 0])
+        self.left = 0.0
+        self.right = 0.0
+
+
+class JetbotMiniRobot(object):
+    def __init__(self):
+        from jetbotmini import Robot
+
+        self.robot = Robot()
+
+    def set_motors(self, left, right):
+        self.robot.set_motors(float(left), float(right))
+
+    def stop(self):
+        self.robot.stop()
+
+
 class RobotAdapter(object):
-    def __init__(self, dry_run=False):
+    def __init__(self, dry_run=False, backend="yahboom_i2c", i2c_bus=1, i2c_address=0x1B):
         self.dry_run = bool(dry_run)
+        self.backend = str(backend)
+        self.i2c_bus = int(i2c_bus)
+        self.i2c_address = int(i2c_address)
         self.robot = None
         self.error = None
         self.load()
@@ -67,9 +116,15 @@ class RobotAdapter(object):
             self.robot = DryRunRobot()
             return
         try:
-            from jetbotmini import Robot
-
-            self.robot = Robot()
+            if self.backend == "yahboom_i2c":
+                self.robot = YahboomI2CRobot(
+                    bus_number=self.i2c_bus,
+                    address=self.i2c_address,
+                )
+            elif self.backend == "jetbotmini":
+                self.robot = JetbotMiniRobot()
+            else:
+                raise RuntimeError("unknown_motor_backend:%s" % self.backend)
         except Exception as exc:
             self.error = repr(exc)
             raise
@@ -79,6 +134,15 @@ class RobotAdapter(object):
 
     def stop(self):
         self.robot.stop()
+
+    def status(self):
+        return {
+            "backend": self.backend,
+            "dry_run": self.dry_run,
+            "i2c_bus": self.i2c_bus,
+            "i2c_address": "0x%02X" % self.i2c_address,
+            "error": self.error,
+        }
 
 
 class CameraAdapter(object):
@@ -128,7 +192,12 @@ class BridgeState(object):
     def __init__(self, args):
         self.args = args
         self.lock = threading.RLock()
-        self.robot = RobotAdapter(dry_run=args.dry_run)
+        self.robot = RobotAdapter(
+            dry_run=args.dry_run,
+            backend=args.motor_backend,
+            i2c_bus=args.motor_i2c_bus,
+            i2c_address=args.motor_i2c_address,
+        )
         self.camera = CameraAdapter(
             enabled=args.camera,
             dry_run=args.dry_run,
@@ -163,6 +232,7 @@ class BridgeState(object):
                 "max_linear_x": float(self.args.max_linear_x),
                 "max_angular_z": float(self.args.max_angular_z),
                 "turn_gain": float(self.args.turn_gain),
+                "motor_adapter": self.robot.status(),
                 "uptime_s": round(time.monotonic() - self.started_monotonic, 3),
                 "commands_received": int(self.commands_received),
                 "last_command_age_s": self.now_age(),
@@ -372,6 +442,9 @@ def parse_args(argv):
     parser.add_argument("--turn-gain", type=float, default=0.7)
     parser.add_argument("--left-sign", type=float, default=1.0)
     parser.add_argument("--right-sign", type=float, default=1.0)
+    parser.add_argument("--motor-backend", choices=["yahboom_i2c", "jetbotmini"], default="yahboom_i2c")
+    parser.add_argument("--motor-i2c-bus", type=int, default=1)
+    parser.add_argument("--motor-i2c-address", type=lambda value: int(value, 0), default=0x1B)
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv)
 

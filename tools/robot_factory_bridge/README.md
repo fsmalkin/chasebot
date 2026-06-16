@@ -4,6 +4,8 @@ This bridge lets Chasecar talk to the factory Yahboom/JetBot Mini runtime while 
 
 The bridge runs as one Python process on the robot. It exposes HTTP endpoints for health, stop, camera snapshot, direct motor pulses, and Chasecar-style `cmd_vel` commands. Motion starts only when the process is launched with `--enable-motion`.
 
+The default motor backend uses the same Yahboom I2C command format as the factory web app: direction and speed bytes for the left and right motors in one write.
+
 Safety defaults:
 
 - `--enable-motion` is required before `/motors` or `/cmd_vel` can move wheels.
