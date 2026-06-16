@@ -21,6 +21,8 @@ Basic flow:
    powershell -ExecutionPolicy Bypass -File scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start
    ```
 
+   Open `http://192.168.1.11:8765/dashboard` for bridge health, camera, recent commands, and operator notes.
+
 2. Restart with motion enabled for lifted-wheel tests:
 
    ```powershell

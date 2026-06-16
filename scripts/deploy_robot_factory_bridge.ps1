@@ -97,4 +97,5 @@ if ($null -eq $health) {
 
 Write-Host "ROBOT_FACTORY_BRIDGE_PID=$($pidOutput | Select-Object -Last 1)"
 Write-Host "ROBOT_FACTORY_BRIDGE_HEALTH=$healthUri"
+Write-Host "ROBOT_FACTORY_BRIDGE_DASHBOARD=http://${RobotHost}:$Port/dashboard"
 $health | ConvertTo-Json -Depth 8

@@ -12,6 +12,7 @@ import base64
 import http.server
 import json
 import math
+import os
 import socketserver
 import sys
 import threading
@@ -21,6 +22,340 @@ import urllib.parse
 
 
 VERSION = "0.1.0"
+
+
+DASHBOARD_HTML = r"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chasecar Robot Bridge</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --ink: #15191f;
+      --muted: #657080;
+      --line: #d9dee7;
+      --green: #147a46;
+      --red: #b42318;
+      --amber: #946200;
+      --blue: #2457a6;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.10);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+      gap: 14px;
+      padding: 14px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 13px;
+      font-weight: 650;
+      background: #eef1f6;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    .chip.good { background: #e8f5ee; color: var(--green); border-color: #b9dfc9; }
+    .chip.bad { background: #fff0ed; color: var(--red); border-color: #f0bbb2; }
+    .chip.warn { background: #fff7df; color: var(--amber); border-color: #ead38a; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      min-height: 64px;
+      background: #fbfcfe;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .value {
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      font-size: 14px;
+      overflow-wrap: anywhere;
+    }
+    .camera-wrap {
+      aspect-ratio: 4 / 3;
+      width: 100%;
+      background: #0b0d10;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #252a32;
+      display: grid;
+      place-items: center;
+      color: #cbd3df;
+      min-height: 240px;
+    }
+    #camera {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    button {
+      min-height: 42px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--ink);
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button:hover { border-color: #9aa6b6; background: #f9fafc; }
+    button.primary { background: var(--blue); border-color: var(--blue); color: white; }
+    button.danger { background: var(--red); border-color: var(--red); color: white; }
+    .events {
+      display: grid;
+      gap: 8px;
+      max-height: 420px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .event {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      background: #fbfcfe;
+    }
+    .event strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 3px;
+    }
+    .event code {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    textarea {
+      width: 100%;
+      min-height: 72px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px;
+      font: inherit;
+    }
+    .stack { display: grid; gap: 14px; }
+    @media (max-width: 820px) {
+      main { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+      .controls { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Chasecar Robot Bridge</h1>
+    <div class="status-row" id="topStatus">
+      <span class="chip warn">Connecting</span>
+    </div>
+  </header>
+  <main>
+    <div class="stack">
+      <section>
+        <h2>Camera</h2>
+        <div class="camera-wrap" id="cameraWrap">
+          <span id="cameraPlaceholder">Camera waiting</span>
+          <img id="camera" alt="Robot camera" hidden>
+        </div>
+      </section>
+      <section>
+        <h2>Status</h2>
+        <div class="grid">
+          <div class="metric"><div class="label">Motion</div><div class="value" id="motion">-</div></div>
+          <div class="metric"><div class="label">Motor Backend</div><div class="value" id="backend">-</div></div>
+          <div class="metric"><div class="label">Left / Right</div><div class="value" id="motors">-</div></div>
+          <div class="metric"><div class="label">Last Stop</div><div class="value" id="stopReason">-</div></div>
+          <div class="metric"><div class="label">Commands</div><div class="value" id="commands">-</div></div>
+          <div class="metric"><div class="label">Uptime</div><div class="value" id="uptime">-</div></div>
+        </div>
+      </section>
+    </div>
+    <div class="stack">
+      <section>
+        <h2>Operator Input</h2>
+        <div class="controls">
+          <button class="primary" data-event="held_in_air">Held in air</button>
+          <button data-event="set_down">Set down</button>
+          <button data-event="wheels_moved">Wheels moved</button>
+          <button data-event="no_wheel_movement">No movement</button>
+          <button data-event="camera_ok">Camera OK</button>
+          <button data-event="looks_unsafe">Looks unsafe</button>
+          <button class="danger" id="stopButton">STOP</button>
+        </div>
+        <div style="margin-top: 10px;">
+          <textarea id="note" placeholder="Add an operator note"></textarea>
+          <button style="margin-top: 8px; width: 100%;" id="noteButton">Save note</button>
+        </div>
+      </section>
+      <section>
+        <h2>Recent Events</h2>
+        <div class="events" id="events"></div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const topStatus = document.getElementById("topStatus");
+    const camera = document.getElementById("camera");
+    const cameraPlaceholder = document.getElementById("cameraPlaceholder");
+    const eventsEl = document.getElementById("events");
+    let cameraEnabled = false;
+
+    function chip(text, cls) {
+      return `<span class="chip ${cls || ""}">${text}</span>`;
+    }
+    function fixed(value) {
+      if (typeof value !== "number") return "-";
+      return value.toFixed(3);
+    }
+    async function postJson(path, body) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body || {})
+      });
+      if (!response.ok) throw new Error(`${path} ${response.status}`);
+      return await response.json();
+    }
+    async function refreshState() {
+      try {
+        const state = await (await fetch("/health", {cache: "no-store"})).json();
+        cameraEnabled = Boolean(state.camera && state.camera.enabled);
+        topStatus.innerHTML = [
+          chip(state.ok ? "Bridge OK" : "Bridge issue", state.ok ? "good" : "bad"),
+          chip(state.motion_enabled ? "Motion enabled" : "Motion disabled", state.motion_enabled ? "bad" : "good"),
+          chip(cameraEnabled ? "Camera enabled" : "Camera off", cameraEnabled ? "good" : "warn")
+        ].join("");
+        document.getElementById("motion").textContent = state.motion_enabled ? "enabled" : "disabled";
+        document.getElementById("backend").textContent =
+          state.motor_adapter ? state.motor_adapter.backend : "-";
+        document.getElementById("motors").textContent =
+          `${fixed(state.left_motor)} / ${fixed(state.right_motor)}`;
+        document.getElementById("stopReason").textContent = state.last_stop_reason || "-";
+        document.getElementById("commands").textContent = String(state.commands_received || 0);
+        document.getElementById("uptime").textContent = `${fixed(state.uptime_s)}s`;
+      } catch (error) {
+        topStatus.innerHTML = chip("Bridge offline", "bad");
+      }
+    }
+    async function refreshEvents() {
+      try {
+        const payload = await (await fetch("/events", {cache: "no-store"})).json();
+        eventsEl.innerHTML = (payload.events || []).slice().reverse().map(event => {
+          const body = JSON.stringify(event.payload || {}, null, 2);
+          return `<div class="event"><strong>${event.kind} #${event.seq}</strong><code>${event.utc || ""}\n${body}</code></div>`;
+        }).join("") || `<div class="event"><strong>No events yet</strong><code></code></div>`;
+      } catch (error) {
+        eventsEl.innerHTML = `<div class="event"><strong>Event fetch failed</strong><code>${String(error)}</code></div>`;
+      }
+    }
+    function refreshCamera() {
+      if (!cameraEnabled) {
+        camera.hidden = true;
+        cameraPlaceholder.hidden = false;
+        cameraPlaceholder.textContent = "Camera off";
+        return;
+      }
+      camera.hidden = false;
+      cameraPlaceholder.hidden = true;
+      camera.src = `/camera.jpg?t=${Date.now()}`;
+    }
+    document.querySelectorAll("button[data-event]").forEach(button => {
+      button.addEventListener("click", async () => {
+        await postJson("/operator_event", {event: button.dataset.event});
+        await refreshEvents();
+      });
+    });
+    document.getElementById("stopButton").addEventListener("click", async () => {
+      await postJson("/stop", {source: "dashboard_stop"});
+      await postJson("/operator_event", {event: "stop_pressed"});
+      await refreshState();
+      await refreshEvents();
+    });
+    document.getElementById("noteButton").addEventListener("click", async () => {
+      const note = document.getElementById("note").value.trim();
+      if (!note) return;
+      await postJson("/operator_event", {event: "operator_note", note});
+      document.getElementById("note").value = "";
+      await refreshEvents();
+    });
+    refreshState();
+    refreshEvents();
+    setInterval(refreshState, 750);
+    setInterval(refreshEvents, 1200);
+    setInterval(refreshCamera, 1400);
+  </script>
+</body>
+</html>
+"""
 
 
 def clamp(value, minimum, maximum):
@@ -205,6 +540,9 @@ class BridgeState(object):
             height=args.camera_height,
         )
         self.started_monotonic = time.monotonic()
+        self.event_log_path = args.event_log_path
+        self.events = []
+        self.event_seq = 0
         self.last_command_monotonic = 0.0
         self.command_deadline_monotonic = 0.0
         self.commands_received = 0
@@ -235,6 +573,7 @@ class BridgeState(object):
                 "motor_adapter": self.robot.status(),
                 "uptime_s": round(time.monotonic() - self.started_monotonic, 3),
                 "commands_received": int(self.commands_received),
+                "event_count": int(self.event_seq),
                 "last_command_age_s": self.now_age(),
                 "last_command": self.last_command,
                 "left_motor": self.left_motor,
@@ -243,6 +582,36 @@ class BridgeState(object):
                 "camera": self.camera.status(),
             }
 
+    def record_event(self, kind, payload=None):
+        with self.lock:
+            return self._record_event_locked(kind, payload)
+
+    def _record_event_locked(self, kind, payload=None):
+        self.event_seq += 1
+        event = {
+            "seq": self.event_seq,
+            "kind": str(kind),
+            "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "uptime_s": round(time.monotonic() - self.started_monotonic, 3),
+            "payload": payload or {},
+        }
+        self.events.append(event)
+        self.events = self.events[-100:]
+        if self.event_log_path:
+            try:
+                parent = os.path.dirname(os.path.abspath(self.event_log_path))
+                if parent and not os.path.isdir(parent):
+                    os.makedirs(parent)
+                with open(self.event_log_path, "a") as handle:
+                    handle.write(json.dumps(event, sort_keys=True) + "\n")
+            except Exception:
+                traceback.print_exc()
+        return event
+
+    def recent_events(self):
+        with self.lock:
+            return list(self.events)
+
     def stop(self, reason):
         with self.lock:
             self.robot.stop()
@@ -250,6 +619,7 @@ class BridgeState(object):
             self.right_motor = 0.0
             self.command_deadline_monotonic = 0.0
             self.last_stop_reason = str(reason)
+            self._record_event_locked("stop", {"reason": str(reason)})
 
     def cmd_vel_to_motors(self, linear_x, angular_z):
         max_linear = max(0.001, abs(float(self.args.max_linear_x)))
@@ -300,6 +670,7 @@ class BridgeState(object):
                 "right": right,
                 "duration_s": duration_s,
             }
+            self._record_event_locked("motor_command", self.last_command)
             return self.status()
 
     def apply_motors(self, left, right, duration_s, source):
@@ -371,8 +742,19 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path in ("/dashboard", "/ui"):
+            data = DASHBOARD_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if parsed.path in ("/", "/health", "/state"):
             self.write_json(self.bridge.status())
+            return
+        if parsed.path == "/events":
+            self.write_json({"ok": True, "events": self.bridge.recent_events()})
             return
         if parsed.path == "/camera.jpg":
             try:
@@ -392,8 +774,16 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         try:
             payload = self.read_json()
             if parsed.path == "/stop":
-                self.bridge.stop("api_stop")
+                source = payload.get("source", "api_stop")
+                self.bridge.stop(source)
                 self.write_json(self.bridge.status())
+                return
+            if parsed.path == "/operator_event":
+                event = self.bridge.record_event(
+                    "operator:%s" % payload.get("event", "event"),
+                    payload,
+                )
+                self.write_json({"ok": True, "event": event, "state": self.bridge.status()})
                 return
             if parsed.path == "/motors":
                 status = self.bridge.apply_motors(
@@ -415,6 +805,7 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                 return
             self.write_json({"ok": False, "error": "not_found"}, status=404)
         except RuntimeError as exc:
+            self.bridge.record_event("motion_refused", {"error": str(exc), "path": parsed.path})
             self.write_json({"ok": False, "error": str(exc), "state": self.bridge.status()}, status=423)
         except Exception as exc:
             traceback.print_exc()
@@ -445,12 +836,13 @@ def parse_args(argv):
     parser.add_argument("--motor-backend", choices=["yahboom_i2c", "jetbotmini"], default="yahboom_i2c")
     parser.add_argument("--motor-i2c-bus", type=int, default=1)
     parser.add_argument("--motor-i2c-address", type=lambda value: int(value, 0), default=0x1B)
+    parser.add_argument("--event-log-path", default="operator_events.jsonl")
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv)
 
 
 def run_self_test():
-    args = parse_args(["--dry-run", "--enable-motion"])
+    args = parse_args(["--dry-run", "--enable-motion", "--event-log-path", ""])
     bridge = BridgeState(args)
     left, right = bridge.cmd_vel_to_motors(0.6, 0.0)
     assert abs(left - 0.35) < 1e-6

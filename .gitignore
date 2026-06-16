@@ -34,3 +34,4 @@ dashboard_validation/playwright-report/
 test-results/
 .tmp/
 .env
+operator_events.jsonl
