@@ -35,3 +35,4 @@ test-results/
 .tmp/
 .env
 operator_events.jsonl
+.playwright-mcp/

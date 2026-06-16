@@ -840,6 +840,11 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/favicon.ico":
+            self.send_response(204)
+            self.send_header("Cache-Control", "max-age=86400")
+            self.end_headers()
+            return
         if parsed.path in ("/dashboard", "/ui"):
             data = DASHBOARD_HTML.encode("utf-8")
             self.send_response(200)
