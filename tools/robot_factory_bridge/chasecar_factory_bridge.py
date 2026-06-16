@@ -192,9 +192,9 @@ class BridgeState(object):
         max_abs = max(1.0, abs(left), abs(right))
         left = left / max_abs
         right = right / max_abs
-        return self.prepare_motor_values(left, right)
+        return self.scale_motor_units(left, right)
 
-    def prepare_motor_values(self, left, right):
+    def scale_motor_units(self, left, right):
         max_speed = clamp(abs(float(self.args.max_motor_speed)), 0.0, 1.0)
         left = clamp(finite_float(left), -1.0, 1.0) * max_speed
         right = clamp(finite_float(right), -1.0, 1.0) * max_speed
@@ -202,12 +202,19 @@ class BridgeState(object):
         right *= float(self.args.right_sign)
         return clamp(left, -1.0, 1.0), clamp(right, -1.0, 1.0)
 
-    def apply_motors(self, left, right, duration_s, source):
+    def clamp_motor_values(self, left, right):
+        max_speed = clamp(abs(float(self.args.max_motor_speed)), 0.0, 1.0)
+        left = clamp(finite_float(left), -max_speed, max_speed)
+        right = clamp(finite_float(right), -max_speed, max_speed)
+        left *= float(self.args.left_sign)
+        right *= float(self.args.right_sign)
+        return clamp(left, -1.0, 1.0), clamp(right, -1.0, 1.0)
+
+    def apply_prepared_motors(self, left, right, duration_s, source):
         if not self.args.enable_motion:
             self.stop("motion_disabled")
             raise RuntimeError("motion_disabled")
         with self.lock:
-            left, right = self.prepare_motor_values(left, right)
             duration_s = finite_float(duration_s, self.args.deadman_timeout_s)
             duration_s = clamp(duration_s, 0.0, float(self.args.max_command_duration_s))
             now = time.monotonic()
@@ -225,12 +232,13 @@ class BridgeState(object):
             }
             return self.status()
 
+    def apply_motors(self, left, right, duration_s, source):
+        left, right = self.clamp_motor_values(left, right)
+        return self.apply_prepared_motors(left, right, duration_s, source)
+
     def apply_cmd_vel(self, linear_x, angular_z, duration_s, source):
         left, right = self.cmd_vel_to_motors(linear_x, angular_z)
-        status = self.apply_motors(left / max(abs(float(self.args.max_motor_speed)), 0.001),
-                                   right / max(abs(float(self.args.max_motor_speed)), 0.001),
-                                   duration_s,
-                                   source)
+        status = self.apply_prepared_motors(left, right, duration_s, source)
         status["cmd_vel"] = {"linear_x": linear_x, "angular_z": angular_z}
         return status
 
