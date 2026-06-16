@@ -577,6 +577,9 @@ June 15/16 Codex takeover evidence:
   decision on the planned scope: keep v1 waiting on the numeric bar, or advance
   the already-designed open-field setup trajectory owner into the current
   requalification lane.
+- Current handoff surface: `docs/handoffs/README.md`. Start there for the
+  June 16 decision packet, approval-gated Slice 1 work-order draft, and
+  browser-watchable visual proof links.
 
 ## Codex execution plan (June 9, 2026 — bounded autonomous lane)
 
