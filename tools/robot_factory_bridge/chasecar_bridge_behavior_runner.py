@@ -455,6 +455,69 @@ def run_no_motion_command(client, args, summary):
             append_issue(summary, "motion_refusal_status_unexpected:%s" % exc.status_code)
 
 
+def run_plan_refusal_check(client, args, summary, initial_health):
+    plan = load_plan(args)
+    plan_issues = validate_plan(plan, args)
+    summary["plan"] = plan
+    summary["plan_limits"] = {
+        "max_abs_linear_x": float(args.max_abs_linear_x),
+        "max_abs_angular_z": float(args.max_abs_angular_z),
+        "max_step_duration_s": float(args.max_step_duration_s),
+    }
+    summary["issues"].extend(plan_issues)
+    if plan_issues:
+        return
+    if bool(initial_health.get("motion_enabled", False)):
+        summary["steps"].append(
+            {
+                "label": "plan_refusal_skipped",
+                "reason": "bridge_motion_enabled",
+            }
+        )
+        append_issue(summary, "bridge_motion_enabled_for_plan_refusal")
+        return
+
+    for step in plan["steps"]:
+        try:
+            status, payload = client.cmd_vel(
+                step["linear_x"],
+                step["angular_z"],
+                step["duration_s"],
+                "factory_behavior_runner:plan_refusal:%s" % step["label"],
+            )
+            summary["steps"].append(
+                {
+                    "label": step["label"],
+                    "request": {
+                        "linear_x": step["linear_x"],
+                        "angular_z": step["angular_z"],
+                        "duration_s": step["duration_s"],
+                    },
+                    "http_status": status,
+                    "response": payload,
+                    "expected_refusal": False,
+                }
+            )
+            append_issue(summary, "plan_refusal_unexpected_success:%s" % step["label"])
+        except bridge_client.BridgeHttpError as exc:
+            expected = exc.status_code == 423
+            summary["steps"].append(
+                {
+                    "label": step["label"],
+                    "request": {
+                        "linear_x": step["linear_x"],
+                        "angular_z": step["angular_z"],
+                        "duration_s": step["duration_s"],
+                    },
+                    "http_status": exc.status_code,
+                    "response": exc.payload,
+                    "expected_refusal": expected,
+                }
+            )
+            if not expected:
+                append_issue(summary, "plan_refusal_status_unexpected:%s:%s" % (step["label"], exc.status_code))
+
+
 def run_visual_scan(client, args, artifact_dir, summary):
     snapshot = save_snapshot(client, artifact_dir / "visual_scan_frame.jpg")
     scan = analyze_visual_scan(snapshot["output"], args, artifact_dir)
@@ -654,7 +717,7 @@ def run(args):
     client = bridge_client.BridgeClient(args.base_url, args.timeout_s)
     if args.dry_run:
         summary["pass"] = True
-        summary["dry_run_plan"] = load_plan(args) if args.mode == "tiny-turn" else None
+        summary["dry_run_plan"] = load_plan(args) if args.mode in ("tiny-turn", "plan-refusal") else None
         write_json(artifact_dir / "behavior_summary.json", summary)
         return summary
 
@@ -667,6 +730,9 @@ def run(args):
     elif args.mode == "tiny-turn":
         if not summary["issues"]:
             execute_motion_plan(client, args, artifact_dir, summary, initial_health)
+    elif args.mode == "plan-refusal":
+        if not summary["issues"]:
+            run_plan_refusal_check(client, args, summary, initial_health)
     elif args.mode == "visual-scan":
         if not summary["issues"]:
             run_visual_scan(client, args, artifact_dir, summary)
@@ -705,7 +771,7 @@ def build_parser():
     parser.add_argument("--timeout-s", type=float, default=bridge_client.DEFAULT_TIMEOUT_S)
     parser.add_argument(
         "--mode",
-        choices=("readiness", "no-motion-command", "tiny-turn", "visual-scan", "visual-advisor"),
+        choices=("readiness", "no-motion-command", "tiny-turn", "plan-refusal", "visual-scan", "visual-advisor"),
         default="readiness",
     )
     parser.add_argument("--artifact-dir", default="")

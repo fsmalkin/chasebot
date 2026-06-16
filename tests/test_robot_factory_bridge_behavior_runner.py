@@ -246,6 +246,86 @@ def test_tiny_turn_plan_limits_fail_closed(tmp_path, capsys):
     assert all(request["path"] != "/cmd_vel" for request in recorded.requests)
 
 
+def test_plan_refusal_exercises_plan_while_motion_locked(tmp_path, capsys):
+    plan = tmp_path / "probe.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "name": "probe",
+                "steps": [
+                    {
+                        "label": "left_turn_probe",
+                        "linear_x": 0.0,
+                        "angular_z": 0.6,
+                        "duration_s": 0.1,
+                    },
+                    {
+                        "label": "forward_probe",
+                        "linear_x": 0.02,
+                        "angular_z": 0.0,
+                        "duration_s": 0.1,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    handler = make_handler(motion_enabled=False)
+    with run_server(handler) as (base_url, recorded):
+        code = runner.main(
+            [
+                "--base-url",
+                base_url,
+                "--artifact-dir",
+                str(tmp_path / "run"),
+                "--mode",
+                "plan-refusal",
+                "--plan-file",
+                str(plan),
+                "--camera-frames",
+                "2",
+                "--camera-interval-s",
+                "0",
+            ]
+        )
+
+    assert code == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["pass"] is True
+    assert summary["plan"]["name"] == "probe"
+    assert [step["label"] for step in summary["steps"]] == ["left_turn_probe", "forward_probe"]
+    assert all(step["expected_refusal"] is True for step in summary["steps"])
+    cmd_vel_requests = [request for request in recorded.requests if request["path"] == "/cmd_vel"]
+    assert len(cmd_vel_requests) == 2
+    assert cmd_vel_requests[0]["payload"]["angular_z"] == 0.6
+    assert cmd_vel_requests[1]["payload"]["linear_x"] == 0.02
+
+
+def test_plan_refusal_skips_commands_when_motion_enabled(tmp_path, capsys):
+    handler = make_handler(motion_enabled=True)
+    with run_server(handler) as (base_url, recorded):
+        code = runner.main(
+            [
+                "--base-url",
+                base_url,
+                "--artifact-dir",
+                str(tmp_path / "run"),
+                "--mode",
+                "plan-refusal",
+                "--camera-frames",
+                "2",
+                "--camera-interval-s",
+                "0",
+            ]
+        )
+
+    assert code == 1
+    summary = json.loads(capsys.readouterr().out)
+    assert "bridge_motion_enabled_for_plan_refusal" in summary["issues"]
+    assert summary["steps"][0]["label"] == "plan_refusal_skipped"
+    assert all(request["path"] != "/cmd_vel" for request in recorded.requests)
+
+
 def test_visual_target_analysis_recommends_turn_for_off_center_target(tmp_path):
     image = tmp_path / "target.jpg"
     image.write_bytes(TARGET_JPEG)
