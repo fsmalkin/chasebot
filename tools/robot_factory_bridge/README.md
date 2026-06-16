@@ -51,19 +51,27 @@ Basic flow:
 
    This runner performs the camera readiness gate and then proves the bridge refuses a Chasecar-style `cmd_vel` while motion is locked.
 
-5. Restart with motion enabled for lifted-wheel tests:
+5. Run the camera-guided advisor while motion stays locked:
+
+   ```powershell
+   python tools/robot_factory_bridge/chasecar_bridge_behavior_runner.py --pretty --mode visual-advisor --target-profile yellow --artifact-dir artifacts/session/manual_factory_bridge_visual_advisor
+   ```
+
+   The advisor captures one camera frame, marks a target candidate when one is visible, and writes the bounded `linear_x` / `angular_z` recommendation without sending a motion command. Broad color casts or missing targets become a safe no-op.
+
+6. Restart with motion enabled for lifted-wheel tests:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start -EnableMotion
    ```
 
-6. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
+7. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/test_robot_factory_bridge_lifted_wheels.ps1 -RobotHost 192.168.1.11 -ConfirmHeldInAir
    ```
 
-7. Run the bounded camera-gated turn behavior after the operator confirms the setup:
+8. Run the bounded camera-gated turn behavior after the operator confirms the setup:
 
    ```powershell
    python tools/robot_factory_bridge/chasecar_bridge_behavior_runner.py --pretty --mode tiny-turn --execute-motion --confirm-operator-ready --artifact-dir artifacts/session/manual_factory_bridge_tiny_turn
@@ -71,7 +79,7 @@ Basic flow:
 
    The runner captures camera evidence, sends the bounded `linear_x` / `angular_z` command plan, sends a final stop, and writes `behavior_summary.json`.
 
-8. Stop the bridge:
+9. Stop the bridge:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/stop_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson

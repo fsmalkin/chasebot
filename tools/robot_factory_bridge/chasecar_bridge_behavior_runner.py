@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import colorsys
 import hashlib
 import json
 import os
@@ -148,6 +149,138 @@ def maybe_make_contact_sheet(paths, labels, output_path):
             "available": False,
             "error": repr(exc),
         }
+
+
+def clamp(value, minimum, maximum):
+    return max(minimum, min(maximum, value))
+
+
+def target_pixel_match(red, green, blue, profile, args):
+    red_unit = red / 255.0
+    green_unit = green / 255.0
+    blue_unit = blue / 255.0
+    hue, saturation, value = colorsys.rgb_to_hsv(red_unit, green_unit, blue_unit)
+    hue_degrees = hue * 360.0
+    luma = (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
+    if profile == "bright":
+        return luma >= args.target_min_luma
+    if profile == "any-saturated":
+        return saturation >= args.target_min_saturation and value >= args.target_min_value
+    if profile == "yellow":
+        return 35.0 <= hue_degrees <= 75.0 and saturation >= args.target_min_saturation and value >= args.target_min_value
+    if profile == "orange":
+        return 10.0 <= hue_degrees <= 40.0 and saturation >= args.target_min_saturation and value >= args.target_min_value
+    if profile == "green":
+        return 75.0 <= hue_degrees <= 165.0 and saturation >= args.target_min_saturation and value >= args.target_min_value
+    if profile == "blue":
+        return 180.0 <= hue_degrees <= 260.0 and saturation >= args.target_min_saturation and value >= args.target_min_value
+    if profile == "red":
+        red_hue = hue_degrees <= 20.0 or hue_degrees >= 335.0
+        return red_hue and saturation >= args.target_min_saturation and value >= args.target_min_value
+    return False
+
+
+def analyze_target_image(image_path, args, annotated_path=None):
+    try:
+        from PIL import Image, ImageDraw
+    except Exception as exc:
+        return {
+            "detected": False,
+            "issues": ["pillow_unavailable:%r" % (exc,)],
+            "image_path": str(image_path),
+        }
+
+    image_path = Path(image_path)
+    image = Image.open(image_path).convert("RGB")
+    width, height = image.size
+    pixels = image.load()
+    matched = 0
+    sum_x = 0.0
+    sum_y = 0.0
+    min_x = width
+    min_y = height
+    max_x = -1
+    max_y = -1
+    for y in range(height):
+        for x in range(width):
+            red, green, blue = pixels[x, y]
+            if target_pixel_match(red, green, blue, args.target_profile, args):
+                matched += 1
+                sum_x += x
+                sum_y += y
+                min_x = min(min_x, x)
+                min_y = min(min_y, y)
+                max_x = max(max_x, x)
+                max_y = max(max_y, y)
+
+    total = max(width * height, 1)
+    area_ratio = matched / total
+    issues = []
+    if matched <= 0:
+        issues.append("target_not_detected")
+    if area_ratio < args.target_min_area_ratio:
+        issues.append("target_area_below_threshold")
+    if area_ratio > args.target_max_area_ratio:
+        issues.append("target_area_above_threshold")
+    bbox_width_ratio = ((max_x - min_x + 1) / width) if matched else 0.0
+    bbox_height_ratio = ((max_y - min_y + 1) / height) if matched else 0.0
+    if bbox_width_ratio > args.target_max_bbox_width_ratio:
+        issues.append("target_bbox_width_above_threshold")
+    if bbox_height_ratio > args.target_max_bbox_height_ratio:
+        issues.append("target_bbox_height_above_threshold")
+
+    detected = matched > 0 and not issues
+    centroid_x = (sum_x / matched) if matched else None
+    centroid_y = (sum_y / matched) if matched else None
+    center_error = ((centroid_x - (width / 2.0)) / (width / 2.0)) if centroid_x is not None else None
+    centered = abs(center_error or 0.0) <= args.visual_center_deadband
+    angular_z = 0.0
+    linear_x = 0.0
+    if detected and center_error is not None:
+        angular_z = clamp(
+            -float(args.visual_turn_sign) * center_error * float(args.visual_angular_gain),
+            -float(args.max_visual_angular_z),
+            float(args.max_visual_angular_z),
+        )
+        if args.allow_forward and centered and area_ratio < args.forward_stop_area_ratio:
+            linear_x = clamp(float(args.visual_forward_x), 0.0, float(args.max_visual_linear_x))
+
+    annotated = ""
+    if annotated_path:
+        annotated_path = Path(annotated_path)
+        ensure_dir(annotated_path.parent)
+        annotated_image = image.copy()
+        draw = ImageDraw.Draw(annotated_image)
+        if matched:
+            draw.rectangle((min_x, min_y, max_x, max_y), outline=(255, 0, 0), width=3)
+            draw.line((width / 2, 0, width / 2, height), fill=(255, 255, 255), width=1)
+            draw.ellipse((centroid_x - 5, centroid_y - 5, centroid_x + 5, centroid_y + 5), outline=(0, 255, 0), width=2)
+        annotated_image.save(annotated_path, quality=90)
+        annotated = str(annotated_path)
+
+    return {
+        "detected": bool(detected),
+        "issues": issues,
+        "image_path": str(image_path),
+        "annotated_image_path": annotated,
+        "target_profile": args.target_profile,
+        "image_width": width,
+        "image_height": height,
+        "matched_pixels": matched,
+        "area_ratio": area_ratio,
+        "bbox_width_ratio": bbox_width_ratio,
+        "bbox_height_ratio": bbox_height_ratio,
+        "centroid": {"x": centroid_x, "y": centroid_y} if centroid_x is not None else None,
+        "bbox": {"x0": min_x, "y0": min_y, "x1": max_x, "y1": max_y} if matched else None,
+        "center_error": center_error,
+        "centered": bool(centered and detected),
+        "recommendation": {
+            "linear_x": linear_x,
+            "angular_z": angular_z,
+            "duration_s": float(args.visual_command_duration_s),
+            "source": "factory_behavior_runner:visual_advisor",
+        },
+    }
 
     try:
         thumbs = []
@@ -345,6 +478,90 @@ def execute_motion_plan(client, args, artifact_dir, summary, initial_health):
         summary["artifacts"]["contact_sheet"] = contact_sheet
 
 
+def run_visual_advisor(client, args, artifact_dir, summary, initial_health):
+    snapshot = save_snapshot(client, artifact_dir / "visual_advisor_frame.jpg")
+    analysis = analyze_target_image(
+        snapshot["output"],
+        args,
+        annotated_path=artifact_dir / "visual_advisor_annotated.jpg",
+    )
+    summary["artifacts"]["visual_advisor_snapshot"] = snapshot
+    summary["artifacts"]["visual_advisor_analysis"] = analysis
+    if not analysis.get("detected", False):
+        summary["steps"].append(
+            {
+                "label": "visual_advisor_noop",
+                "reason": "visual_target_not_detected",
+                "analysis_issues": analysis.get("issues", []),
+                "recommendation": analysis.get("recommendation", {}),
+            }
+        )
+        if args.require_target:
+            append_issue(summary, "visual_target_not_detected")
+        return
+    if not args.execute_motion:
+        return
+    if not args.confirm_operator_ready:
+        append_issue(summary, "operator_ready_confirmation_required")
+        return
+    if not bool(initial_health.get("motion_enabled", False)):
+        append_issue(summary, "bridge_motion_not_enabled")
+        return
+    recommendation = analysis.get("recommendation", {})
+    linear_x = float(recommendation.get("linear_x", 0.0))
+    angular_z = float(recommendation.get("angular_z", 0.0))
+    duration_s = float(recommendation.get("duration_s", args.visual_command_duration_s))
+    if abs(linear_x) > float(args.max_visual_linear_x):
+        append_issue(summary, "visual_linear_x_above_limit")
+        return
+    if abs(angular_z) > float(args.max_visual_angular_z):
+        append_issue(summary, "visual_angular_z_above_limit")
+        return
+    if duration_s > float(args.max_step_duration_s):
+        append_issue(summary, "visual_duration_above_limit")
+        return
+    motion_started = False
+    try:
+        status, payload = client.cmd_vel(
+            linear_x,
+            angular_z,
+            duration_s,
+            recommendation.get("source", "factory_behavior_runner:visual_advisor"),
+        )
+        motion_started = True
+        summary["steps"].append(
+            {
+                "label": "visual_advisor_cmd_vel",
+                "request": {
+                    "linear_x": linear_x,
+                    "angular_z": angular_z,
+                    "duration_s": duration_s,
+                },
+                "http_status": status,
+                "response": payload,
+            }
+        )
+        if args.visual_post_settle_s > 0:
+            time.sleep(args.visual_post_settle_s)
+        diagnostics = bridge_client.run_camera_diagnostics(
+            client,
+            camera_diag_args(args, artifact_dir / "visual_advisor_after_frames"),
+        )
+        summary["artifacts"]["visual_advisor_after_camera_diagnostics"] = diagnostics
+        if not camera_ready(diagnostics):
+            append_issue(summary, "visual_advisor_post_camera_diagnostics_not_pass")
+    finally:
+        if motion_started:
+            try:
+                status, payload = client.stop("factory_behavior_runner:visual_advisor_finally_stop")
+                summary["artifacts"]["visual_advisor_finally_stop"] = {
+                    "http_status": status,
+                    "response": payload,
+                }
+            except Exception as exc:  # pragma: no cover - defensive hardware cleanup
+                append_issue(summary, "visual_advisor_finally_stop_failed:%r" % (exc,))
+
+
 def run(args):
     artifact_dir = ensure_dir(args.artifact_dir or default_artifact_dir(args.mode))
     summary = build_summary(args, artifact_dir)
@@ -364,6 +581,9 @@ def run(args):
     elif args.mode == "tiny-turn":
         if not summary["issues"]:
             execute_motion_plan(client, args, artifact_dir, summary, initial_health)
+    elif args.mode == "visual-advisor":
+        if not summary["issues"]:
+            run_visual_advisor(client, args, artifact_dir, summary, initial_health)
     else:
         append_issue(summary, "unsupported_mode:%s" % args.mode)
 
@@ -394,7 +614,11 @@ def build_parser():
         default=os.environ.get("CHASECAR_FACTORY_BRIDGE_URL", bridge_client.DEFAULT_BASE_URL),
     )
     parser.add_argument("--timeout-s", type=float, default=bridge_client.DEFAULT_TIMEOUT_S)
-    parser.add_argument("--mode", choices=("readiness", "no-motion-command", "tiny-turn"), default="readiness")
+    parser.add_argument(
+        "--mode",
+        choices=("readiness", "no-motion-command", "tiny-turn", "visual-advisor"),
+        default="readiness",
+    )
     parser.add_argument("--artifact-dir", default="")
     parser.add_argument("--pretty", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -415,6 +639,30 @@ def build_parser():
     parser.add_argument("--max-abs-linear-x", type=float, default=0.05)
     parser.add_argument("--max-abs-angular-z", type=float, default=2.5)
     parser.add_argument("--max-step-duration-s", type=float, default=0.5)
+
+    parser.add_argument(
+        "--target-profile",
+        choices=("bright", "any-saturated", "yellow", "orange", "red", "green", "blue"),
+        default="yellow",
+    )
+    parser.add_argument("--target-min-luma", type=float, default=180.0)
+    parser.add_argument("--target-min-saturation", type=float, default=0.35)
+    parser.add_argument("--target-min-value", type=float, default=0.35)
+    parser.add_argument("--target-min-area-ratio", type=float, default=0.0008)
+    parser.add_argument("--target-max-area-ratio", type=float, default=0.20)
+    parser.add_argument("--target-max-bbox-width-ratio", type=float, default=0.70)
+    parser.add_argument("--target-max-bbox-height-ratio", type=float, default=0.70)
+    parser.add_argument("--require-target", action="store_true")
+    parser.add_argument("--visual-center-deadband", type=float, default=0.16)
+    parser.add_argument("--visual-turn-sign", type=float, default=1.0)
+    parser.add_argument("--visual-angular-gain", type=float, default=0.8)
+    parser.add_argument("--max-visual-angular-z", type=float, default=0.45)
+    parser.add_argument("--allow-forward", action="store_true")
+    parser.add_argument("--visual-forward-x", type=float, default=0.03)
+    parser.add_argument("--max-visual-linear-x", type=float, default=0.04)
+    parser.add_argument("--forward-stop-area-ratio", type=float, default=0.08)
+    parser.add_argument("--visual-command-duration-s", type=float, default=0.20)
+    parser.add_argument("--visual-post-settle-s", type=float, default=0.30)
     return parser
 
 

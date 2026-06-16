@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import http.server
+import io
 import json
 import socketserver
 import sys
@@ -17,7 +18,21 @@ if str(BRIDGE_TOOLS_DIR) not in sys.path:
 import chasecar_bridge_behavior_runner as runner  # noqa: E402
 
 
-FAKE_JPEG = b"\xff\xd8" + (b"behavior-frame" * 24) + b"\xff\xd9"
+def make_jpeg(width=320, height=240, target=False, target_x=240):
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (width, height), (20, 30, 40))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, height - 40, width, height), fill=(45, 45, 45))
+    if target:
+        draw.ellipse((target_x - 18, 110 - 18, target_x + 18, 110 + 18), fill=(245, 220, 30))
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=90)
+    return buffer.getvalue()
+
+
+FAKE_JPEG = make_jpeg(target=False)
+TARGET_JPEG = make_jpeg(target=True, target_x=244)
 
 
 class _TestHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -25,7 +40,7 @@ class _TestHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     allow_reuse_address = True
 
 
-def make_handler(*, motion_enabled=False):
+def make_handler(*, motion_enabled=False, image_bytes=FAKE_JPEG):
     class Handler(http.server.BaseHTTPRequestHandler):
         requests = []
         left_motor = 0.0
@@ -52,7 +67,7 @@ def make_handler(*, motion_enabled=False):
                     "enabled": True,
                     "cached_fps": 5.0,
                     "frame_age_s": 0.05,
-                    "cached_bytes": len(FAKE_JPEG),
+                    "cached_bytes": len(image_bytes),
                 },
             }
 
@@ -64,9 +79,9 @@ def make_handler(*, motion_enabled=False):
             if self.path == "/camera.jpg":
                 self.send_response(200)
                 self.send_header("Content-Type", "image/jpeg")
-                self.send_header("Content-Length", str(len(FAKE_JPEG)))
+                self.send_header("Content-Length", str(len(image_bytes)))
                 self.end_headers()
-                self.wfile.write(FAKE_JPEG)
+                self.wfile.write(image_bytes)
                 return
             self.write_json({"ok": False, "error": "not_found"}, status=404)
 
@@ -227,3 +242,128 @@ def test_tiny_turn_plan_limits_fail_closed(tmp_path, capsys):
     summary = json.loads(capsys.readouterr().out)
     assert "step_linear_x_above_limit:step_01" in summary["issues"]
     assert all(request["path"] != "/cmd_vel" for request in recorded.requests)
+
+
+def test_visual_target_analysis_recommends_turn_for_off_center_target(tmp_path):
+    image = tmp_path / "target.jpg"
+    image.write_bytes(TARGET_JPEG)
+    args = runner.build_parser().parse_args(
+        [
+            "--mode",
+            "visual-advisor",
+            "--target-profile",
+            "yellow",
+        ]
+    )
+
+    analysis = runner.analyze_target_image(image, args, annotated_path=tmp_path / "annotated.jpg")
+
+    assert analysis["detected"] is True
+    assert analysis["centroid"]["x"] > 200
+    assert analysis["recommendation"]["linear_x"] == 0.0
+    assert analysis["recommendation"]["angular_z"] < 0.0
+    assert (tmp_path / "annotated.jpg").exists()
+
+
+def test_visual_target_analysis_rejects_full_frame_tint(tmp_path):
+    from PIL import Image
+
+    image = tmp_path / "yellow_frame.jpg"
+    Image.new("RGB", (320, 240), (230, 220, 40)).save(image, quality=90)
+    args = runner.build_parser().parse_args(
+        [
+            "--mode",
+            "visual-advisor",
+            "--target-profile",
+            "yellow",
+        ]
+    )
+
+    analysis = runner.analyze_target_image(image, args)
+
+    assert analysis["detected"] is False
+    assert "target_bbox_width_above_threshold" in analysis["issues"]
+    assert analysis["recommendation"]["linear_x"] == 0.0
+    assert analysis["recommendation"]["angular_z"] == 0.0
+
+
+def test_visual_advisor_captures_recommendation_without_motion(tmp_path, capsys):
+    handler = make_handler(motion_enabled=False, image_bytes=TARGET_JPEG)
+    with run_server(handler) as (base_url, recorded):
+        code = runner.main(
+            [
+                "--base-url",
+                base_url,
+                "--artifact-dir",
+                str(tmp_path / "run"),
+                "--mode",
+                "visual-advisor",
+                "--camera-frames",
+                "2",
+                "--camera-interval-s",
+                "0",
+            ]
+        )
+
+    assert code == 0
+    summary = json.loads(capsys.readouterr().out)
+    analysis = summary["artifacts"]["visual_advisor_analysis"]
+    assert summary["pass"] is True
+    assert analysis["detected"] is True
+    assert analysis["recommendation"]["angular_z"] < 0.0
+    assert all(request["path"] != "/cmd_vel" for request in recorded.requests)
+
+
+def test_visual_advisor_noops_without_valid_target(tmp_path, capsys):
+    handler = make_handler(motion_enabled=False, image_bytes=FAKE_JPEG)
+    with run_server(handler) as (base_url, recorded):
+        code = runner.main(
+            [
+                "--base-url",
+                base_url,
+                "--artifact-dir",
+                str(tmp_path / "run"),
+                "--mode",
+                "visual-advisor",
+                "--camera-frames",
+                "2",
+                "--camera-interval-s",
+                "0",
+            ]
+        )
+
+    assert code == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["pass"] is True
+    assert summary["steps"][0]["label"] == "visual_advisor_noop"
+    assert all(request["path"] != "/cmd_vel" for request in recorded.requests)
+
+
+def test_visual_advisor_executes_only_with_confirmation(tmp_path, capsys):
+    handler = make_handler(motion_enabled=True, image_bytes=TARGET_JPEG)
+    with run_server(handler) as (base_url, recorded):
+        code = runner.main(
+            [
+                "--base-url",
+                base_url,
+                "--artifact-dir",
+                str(tmp_path / "run"),
+                "--mode",
+                "visual-advisor",
+                "--execute-motion",
+                "--confirm-operator-ready",
+                "--camera-frames",
+                "2",
+                "--camera-interval-s",
+                "0",
+            ]
+        )
+
+    assert code == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["pass"] is True
+    assert summary["steps"][0]["label"] == "visual_advisor_cmd_vel"
+    assert summary["artifacts"]["visual_advisor_finally_stop"]["response"]["left_motor"] == 0.0
+    paths = [request["path"] for request in recorded.requests]
+    assert "/cmd_vel" in paths
+    assert "/stop" in paths
