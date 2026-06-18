@@ -31,6 +31,17 @@ def make_jpeg(width=320, height=240, target=False, target_x=240):
     return buffer.getvalue()
 
 
+def make_shifted_scene(path, offset_x=0):
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (320, 240), (85, 82, 78))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((20 + offset_x, 70, 130 + offset_x, 105), fill=(18, 20, 22))
+    draw.rectangle((155 + offset_x, 45, 185 + offset_x, 180), fill=(35, 35, 38))
+    draw.line((230 + offset_x, 20, 230 + offset_x, 220), fill=(210, 210, 210), width=4)
+    image.save(path, quality=90)
+
+
 FAKE_JPEG = make_jpeg(target=False)
 TARGET_JPEG = make_jpeg(target=True, target_x=244)
 
@@ -204,6 +215,65 @@ def test_tiny_turn_executes_bounded_plan_and_stops(tmp_path, capsys):
     assert (tmp_path / "run" / "before.jpg").exists()
     assert (tmp_path / "run" / "camera_contact_sheet.jpg").exists()
     assert (tmp_path / "run" / "behavior_summary.json").exists()
+
+
+def test_visual_motion_evidence_rejects_static_frames(tmp_path):
+    before = tmp_path / "before.jpg"
+    after = tmp_path / "after.jpg"
+    make_shifted_scene(before, offset_x=0)
+    make_shifted_scene(after, offset_x=0)
+    args = runner.build_parser().parse_args(["--mode", "tiny-turn"])
+
+    evidence = runner.analyze_visual_motion(before, [after], ["after 01"], args)
+
+    assert evidence["available"] is True
+    assert evidence["movement_detected"] is False
+    assert "visual_motion_not_confirmed" in evidence["issues"]
+    assert abs(evidence["frames"][0]["best_shift_px"]) < args.min_visual_shift_px
+
+
+def test_visual_motion_evidence_detects_shifted_scene(tmp_path):
+    before = tmp_path / "before.jpg"
+    after = tmp_path / "after.jpg"
+    make_shifted_scene(before, offset_x=0)
+    make_shifted_scene(after, offset_x=48)
+    args = runner.build_parser().parse_args(["--mode", "tiny-turn"])
+
+    evidence = runner.analyze_visual_motion(before, [after], ["after 01"], args)
+
+    assert evidence["available"] is True
+    assert evidence["movement_detected"] is True
+    assert abs(evidence["frames"][0]["best_shift_px"]) >= args.min_visual_shift_px
+
+
+def test_tiny_turn_can_require_visual_motion_confirmation(tmp_path, capsys):
+    handler = make_handler(motion_enabled=True)
+    with run_server(handler) as (base_url, recorded):
+        code = runner.main(
+            [
+                "--base-url",
+                base_url,
+                "--artifact-dir",
+                str(tmp_path / "run"),
+                "--mode",
+                "tiny-turn",
+                "--execute-motion",
+                "--confirm-operator-ready",
+                "--require-visual-motion",
+                "--camera-frames",
+                "2",
+                "--camera-interval-s",
+                "0",
+            ]
+        )
+
+    assert code == 1
+    summary = json.loads(capsys.readouterr().out)
+    assert "visual_motion_not_confirmed" in summary["issues"]
+    assert summary["artifacts"]["visual_motion_evidence"]["movement_detected"] is False
+    paths = [request["path"] for request in recorded.requests]
+    assert "/cmd_vel" in paths
+    assert "/stop" in paths
 
 
 def test_tiny_turn_plan_limits_fail_closed(tmp_path, capsys):

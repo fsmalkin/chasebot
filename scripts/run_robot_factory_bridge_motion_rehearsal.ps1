@@ -178,6 +178,9 @@ try {
             "--confirm-operator-ready",
             "--artifact-dir", $motionRunDir
         ) + $planArgs
+        if ($Turn90Proof) {
+            $motionCommand += @("--require-visual-motion")
+        }
         $summary.steps += Invoke-CheckedCommand -Name $motionStepName -Command $motionCommand -ArtifactDir $motionRunDir
     }
 

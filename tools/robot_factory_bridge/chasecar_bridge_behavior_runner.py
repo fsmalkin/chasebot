@@ -7,6 +7,7 @@ import argparse
 import colorsys
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -220,6 +221,142 @@ def maybe_make_contact_sheet(paths, labels, output_path):
             "available": False,
             "error": repr(exc),
         }
+
+
+def image_edge_profile(image_path, sample_width=160, sample_height=120):
+    from PIL import Image, ImageFilter
+
+    image_path = Path(image_path)
+    image = (
+        Image.open(image_path)
+        .convert("L")
+        .filter(ImageFilter.GaussianBlur(radius=2.0))
+        .resize((sample_width, sample_height))
+    )
+    pixels = image.load()
+    y_start = int(sample_height * 0.15)
+    y_end = int(sample_height * 0.88)
+    profile = []
+    for x_coord in range(sample_width - 1):
+        total = 0.0
+        count = 0
+        for y_coord in range(y_start, y_end):
+            total += abs(pixels[x_coord + 1, y_coord] - pixels[x_coord, y_coord])
+            count += 1
+        profile.append(total / max(count, 1))
+    mean = sum(profile) / max(len(profile), 1)
+    profile = [value - mean for value in profile]
+    norm = math.sqrt(sum(value * value for value in profile))
+    if norm <= 0.0:
+        return []
+    return [value / norm for value in profile]
+
+
+def shifted_profile_score(base_profile, compare_profile, shift):
+    if shift < 0:
+        base_window = base_profile[-shift:]
+        compare_window = compare_profile[: len(base_window)]
+    elif shift > 0:
+        base_window = base_profile[:-shift]
+        compare_window = compare_profile[shift:]
+    else:
+        base_window = base_profile
+        compare_window = compare_profile
+    if not base_window or not compare_window:
+        return -1.0
+    dot = sum(base_value * compare_value for base_value, compare_value in zip(base_window, compare_window))
+    base_norm = math.sqrt(sum(value * value for value in base_window))
+    compare_norm = math.sqrt(sum(value * value for value in compare_window))
+    return dot / ((base_norm * compare_norm) + 1e-9)
+
+
+def analyze_visual_motion(before_path, after_paths, labels, args):
+    try:
+        from PIL import Image
+    except Exception as exc:
+        return {
+            "available": False,
+            "movement_detected": False,
+            "issues": ["pillow_unavailable:%r" % (exc,)],
+        }
+
+    before_path = Path(before_path)
+    after_paths = [Path(path) for path in after_paths]
+    labels = list(labels)
+    if not after_paths:
+        return {
+            "available": True,
+            "movement_detected": False,
+            "issues": ["after_frames_missing"],
+            "frames": [],
+        }
+
+    before_width = Image.open(before_path).size[0]
+    base_profile = image_edge_profile(before_path)
+    if not base_profile:
+        return {
+            "available": True,
+            "movement_detected": False,
+            "issues": ["visual_motion_texture_insufficient"],
+            "before_path": str(before_path),
+            "frames": [],
+        }
+    sample_scale = before_width / max(len(base_profile) + 1, 1)
+    max_shift = max(1, min(80, len(base_profile) - 1))
+    frames = []
+    for index, after_path in enumerate(after_paths):
+        compare_profile = image_edge_profile(after_path)
+        if not compare_profile:
+            frames.append(
+                {
+                    "label": labels[index] if index < len(labels) else "after_%02d" % (index + 1),
+                    "path": str(after_path),
+                    "movement_detected": False,
+                    "issues": ["visual_motion_texture_insufficient"],
+                }
+            )
+            continue
+        zero_shift_score = shifted_profile_score(base_profile, compare_profile, 0)
+        best_shift, best_score = max(
+            (
+                (shift, shifted_profile_score(base_profile, compare_profile, shift))
+                for shift in range(-max_shift, max_shift + 1)
+            ),
+            key=lambda item: item[1],
+        )
+        best_shift_px = best_shift * sample_scale
+        shift_detected = (
+            abs(best_shift_px) >= float(args.min_visual_shift_px)
+            and best_score >= zero_shift_score + float(args.min_visual_shift_score_gain)
+        )
+        scene_change_detected = zero_shift_score <= float(args.max_static_visual_similarity)
+        frames.append(
+            {
+                "label": labels[index] if index < len(labels) else "after_%02d" % (index + 1),
+                "path": str(after_path),
+                "zero_shift_similarity": zero_shift_score,
+                "best_shift_similarity": best_score,
+                "best_shift_px": best_shift_px,
+                "shift_detected": bool(shift_detected),
+                "scene_change_detected": bool(scene_change_detected),
+                "movement_detected": bool(shift_detected or scene_change_detected),
+            }
+        )
+
+    movement_detected = any(frame["movement_detected"] for frame in frames)
+    issues = [] if movement_detected else ["visual_motion_not_confirmed"]
+    return {
+        "available": True,
+        "movement_detected": bool(movement_detected),
+        "issues": issues,
+        "before_path": str(before_path),
+        "thresholds": {
+            "min_visual_shift_px": float(args.min_visual_shift_px),
+            "min_visual_shift_score_gain": float(args.min_visual_shift_score_gain),
+            "max_static_visual_similarity": float(args.max_static_visual_similarity),
+        },
+        "frames": frames,
+    }
 
 
 def clamp(value, minimum, maximum):
@@ -625,6 +762,10 @@ def execute_motion_plan(client, args, artifact_dir, summary, initial_health):
             artifact_dir / "camera_contact_sheet.jpg",
         )
         summary["artifacts"]["contact_sheet"] = contact_sheet
+        motion_evidence = analyze_visual_motion(before["output"], after_paths, labels[1:], args)
+        summary["artifacts"]["visual_motion_evidence"] = motion_evidence
+        if args.require_visual_motion and not motion_evidence.get("movement_detected", False):
+            append_issue(summary, "visual_motion_not_confirmed")
 
 
 def run_visual_advisor(client, args, artifact_dir, summary, initial_health):
@@ -794,6 +935,10 @@ def build_parser():
     parser.add_argument("--max-abs-linear-x", type=float, default=0.05)
     parser.add_argument("--max-abs-angular-z", type=float, default=2.5)
     parser.add_argument("--max-step-duration-s", type=float, default=0.5)
+    parser.add_argument("--require-visual-motion", action="store_true")
+    parser.add_argument("--min-visual-shift-px", type=float, default=12.0)
+    parser.add_argument("--min-visual-shift-score-gain", type=float, default=0.03)
+    parser.add_argument("--max-static-visual-similarity", type=float, default=0.82)
 
     parser.add_argument(
         "--target-profile",

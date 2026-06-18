@@ -110,7 +110,7 @@ Basic flow:
    powershell -ExecutionPolicy Bypass -File scripts/run_robot_factory_bridge_motion_rehearsal.ps1 -RobotHost 192.168.1.11 -Turn90Proof -ExecuteMotion -ConfirmFloorClear -MaxMotorSpeed 0.20
    ```
 
-   The rehearsal runs the safe preflight, proves the turn plan is refused while motion is locked, restarts with motion enabled, runs the bounded multi-pulse turn plan, writes before/after camera evidence, and returns the bridge to health mode.
+   The rehearsal runs the safe preflight, proves the turn plan is refused while motion is locked, restarts with motion enabled, runs the bounded multi-pulse turn plan, writes before/after camera evidence, and returns the bridge to health mode. Floor-turn proof also requires saved frames to show visual movement; static before/after frames fail with `visual_motion_not_confirmed` even when the bridge accepted motor commands.
 
 13. Stop the bridge:
 
