@@ -12,6 +12,12 @@ from geometry_msgs.msg import Twist
 from geometry_msgs.msg import TwistStamped
 from rclpy.node import Node
 
+try:
+    from rclpy.executors import ExternalShutdownException
+except Exception:  # pragma: no cover - keeps non-ROS unit stubs importable.
+    class ExternalShutdownException(Exception):
+        pass
+
 
 def parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
@@ -102,10 +108,14 @@ def main() -> int:
     node = GatherMotionBridge(args)
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
-        node._publish_twist(0.0, 0.0)
+        if rclpy.ok():
+            try:
+                node._publish_twist(0.0, 0.0)
+            except Exception as exc:
+                node.get_logger().warn(f"Unable to publish shutdown stop: {exc!r}")
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

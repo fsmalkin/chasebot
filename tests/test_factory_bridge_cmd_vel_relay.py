@@ -128,3 +128,30 @@ def test_parse_args_keeps_relay_defaults_beginner_safe():
     assert args.max_bridge_linear_x == 0.36
     assert args.max_bridge_angular_z == 1.0
     assert args.require_motion_enabled is False
+
+
+def test_main_treats_external_shutdown_as_clean_exit(monkeypatch):
+    events = []
+
+    class FakeNode:
+        def __init__(self, _args) -> None:
+            events.append("init")
+
+        def get_logger(self):
+            return SimpleNamespace(info=lambda *_args, **_kwargs: events.append("info"))
+
+        def close(self) -> None:
+            events.append("close")
+
+        def destroy_node(self) -> None:
+            events.append("destroy")
+
+    def raise_external_shutdown(_node) -> None:
+        raise relay.ExternalShutdownException()
+
+    monkeypatch.setattr(relay, "FactoryBridgeCmdVelRelay", FakeNode)
+    monkeypatch.setattr(relay.rclpy, "spin", raise_external_shutdown)
+    monkeypatch.setattr(relay.rclpy, "ok", lambda: False)
+
+    assert relay.main(["--dry-run"]) == 0
+    assert events == ["init", "close", "destroy"]

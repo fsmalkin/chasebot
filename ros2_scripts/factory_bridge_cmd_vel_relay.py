@@ -15,6 +15,12 @@ import rclpy
 from geometry_msgs.msg import Twist, TwistStamped
 from rclpy.node import Node
 
+try:
+    from rclpy.executors import ExternalShutdownException
+except Exception:  # pragma: no cover - keeps non-ROS unit stubs importable.
+    class ExternalShutdownException(Exception):
+        pass
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BRIDGE_TOOLS_DIR = REPO_ROOT / "tools" / "robot_factory_bridge"
@@ -375,6 +381,8 @@ def main(argv: list[str] | None = None) -> int:
         rclpy.spin(node)
     except KeyboardInterrupt:
         node.get_logger().info("Shutting down factory bridge cmd_vel relay...")
+    except ExternalShutdownException:
+        pass
     finally:
         node.close()
         node.destroy_node()
