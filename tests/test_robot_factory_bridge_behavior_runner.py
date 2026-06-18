@@ -462,6 +462,69 @@ def test_visual_target_analysis_selects_compact_component_over_wide_floor(tmp_pa
     assert analysis["recommendation"]["angular_z"] < 0.0
 
 
+def test_visual_target_analysis_selects_red_rectangle_over_border_blob(tmp_path):
+    from PIL import Image, ImageDraw
+
+    image = tmp_path / "red_rectangle.jpg"
+    frame = Image.new("RGB", (320, 240), (22, 28, 34))
+    draw = ImageDraw.Draw(frame)
+    draw.rectangle((0, 0, 319, 24), fill=(220, 20, 20))
+    draw.rectangle((116, 98, 216, 142), fill=(230, 25, 25))
+    frame.save(image, quality=90)
+    args = runner.build_parser().parse_args(
+        [
+            "--mode",
+            "visual-advisor",
+            "--target-profile",
+            "red",
+            "--target-border-margin-ratio",
+            "0.03",
+            "--target-min-bbox-aspect-ratio",
+            "1.4",
+            "--target-max-bbox-aspect-ratio",
+            "8.0",
+        ]
+    )
+
+    analysis = runner.analyze_target_image(image, args)
+
+    assert analysis["detected"] is True
+    assert analysis["bbox"]["y0"] > 50
+    assert analysis["bbox_aspect_ratio"] > 1.4
+    border_candidates = [candidate for candidate in analysis["component_candidates"] if candidate["touches_border"]]
+    assert border_candidates
+    assert "target_touches_image_border" in border_candidates[0]["issues"]
+
+
+def test_visual_target_analysis_rejects_vertical_red_component_for_rectangle_profile(tmp_path):
+    from PIL import Image, ImageDraw
+
+    image = tmp_path / "red_vertical.jpg"
+    frame = Image.new("RGB", (320, 240), (22, 28, 34))
+    draw = ImageDraw.Draw(frame)
+    draw.rectangle((145, 54, 174, 186), fill=(235, 25, 25))
+    frame.save(image, quality=90)
+    args = runner.build_parser().parse_args(
+        [
+            "--mode",
+            "visual-advisor",
+            "--target-profile",
+            "red",
+            "--target-min-bbox-aspect-ratio",
+            "1.4",
+            "--target-max-bbox-aspect-ratio",
+            "8.0",
+        ]
+    )
+
+    analysis = runner.analyze_target_image(image, args)
+
+    assert analysis["detected"] is False
+    assert "target_bbox_aspect_below_threshold" in analysis["issues"]
+    assert analysis["recommendation"]["linear_x"] == 0.0
+    assert analysis["recommendation"]["angular_z"] == 0.0
+
+
 def test_visual_target_analysis_rejects_full_frame_tint(tmp_path):
     from PIL import Image
 

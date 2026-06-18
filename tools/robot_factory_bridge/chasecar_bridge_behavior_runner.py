@@ -388,23 +388,37 @@ def target_pixel_match(red, green, blue, profile, args):
     return False
 
 
-def component_summary(area, sum_x, sum_y, min_x, min_y, max_x, max_y, width, height):
+def component_summary(area, sum_x, sum_y, min_x, min_y, max_x, max_y, width, height, border_margin_ratio=0.0):
     centroid_x = sum_x / max(area, 1)
     centroid_y = sum_y / max(area, 1)
+    margin_x = max(0, int(round(width * float(border_margin_ratio))))
+    margin_y = max(0, int(round(height * float(border_margin_ratio))))
+    touches_border = bool(
+        area
+        and (
+            min_x <= margin_x
+            or min_y <= margin_y
+            or max_x >= (width - 1 - margin_x)
+            or max_y >= (height - 1 - margin_y)
+        )
+    )
     return {
         "matched_pixels": area,
         "area_ratio": area / max(width * height, 1),
         "bbox_width_ratio": ((max_x - min_x + 1) / width) if area else 0.0,
         "bbox_height_ratio": ((max_y - min_y + 1) / height) if area else 0.0,
+        "bbox_aspect_ratio": ((max_x - min_x + 1) / max((max_y - min_y + 1), 1)) if area else 0.0,
         "centroid": {"x": centroid_x, "y": centroid_y} if area else None,
         "bbox": {"x0": min_x, "y0": min_y, "x1": max_x, "y1": max_y} if area else None,
         "center_error": ((centroid_x - (width / 2.0)) / (width / 2.0)) if area else None,
+        "touches_border": touches_border,
     }
 
 
 def find_target_components(image, args):
     width, height = image.size
     pixels = image.load()
+    border_margin_ratio = float(args.target_border_margin_ratio)
     mask = []
     total_matched = 0
     aggregate = {"area": 0, "sum_x": 0.0, "sum_y": 0.0, "min_x": width, "min_y": height, "max_x": -1, "max_y": -1}
@@ -462,7 +476,18 @@ def find_target_components(image, args):
                     ):
                         seen[y_next][x_next] = 1
                         stack.append((x_next, y_next))
-            summary = component_summary(area, sum_x, sum_y, min_x, min_y, max_x, max_y, width, height)
+            summary = component_summary(
+                area,
+                sum_x,
+                sum_y,
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+                width,
+                height,
+                border_margin_ratio,
+            )
             summary["issues"] = component_issues(summary, args)
             components.append(summary)
 
@@ -483,6 +508,7 @@ def find_target_components(image, args):
         aggregate["max_y"],
         width,
         height,
+        border_margin_ratio,
     )
     aggregate_summary["issues"] = component_issues(aggregate_summary, args)
     return total_matched, aggregate_summary, components
@@ -494,6 +520,7 @@ def component_issues(summary, args):
     area_ratio = float(summary.get("area_ratio", 0.0) or 0.0)
     bbox_width_ratio = float(summary.get("bbox_width_ratio", 0.0) or 0.0)
     bbox_height_ratio = float(summary.get("bbox_height_ratio", 0.0) or 0.0)
+    bbox_aspect_ratio = float(summary.get("bbox_aspect_ratio", 0.0) or 0.0)
     if matched <= 0:
         issues.append("target_not_detected")
     if area_ratio < args.target_min_area_ratio:
@@ -504,6 +531,12 @@ def component_issues(summary, args):
         issues.append("target_bbox_width_above_threshold")
     if bbox_height_ratio > args.target_max_bbox_height_ratio:
         issues.append("target_bbox_height_above_threshold")
+    if float(args.target_border_margin_ratio) > 0.0 and bool(summary.get("touches_border", False)):
+        issues.append("target_touches_image_border")
+    if bbox_aspect_ratio < float(args.target_min_bbox_aspect_ratio):
+        issues.append("target_bbox_aspect_below_threshold")
+    if float(args.target_max_bbox_aspect_ratio) > 0.0 and bbox_aspect_ratio > float(args.target_max_bbox_aspect_ratio):
+        issues.append("target_bbox_aspect_above_threshold")
     return issues
 
 
@@ -531,6 +564,7 @@ def analyze_target_image(image_path, args, annotated_path=None):
     area_ratio = float(target.get("area_ratio", 0.0) or 0.0)
     bbox_width_ratio = float(target.get("bbox_width_ratio", 0.0) or 0.0)
     bbox_height_ratio = float(target.get("bbox_height_ratio", 0.0) or 0.0)
+    bbox_aspect_ratio = float(target.get("bbox_aspect_ratio", 0.0) or 0.0)
     centroid = target.get("centroid")
     bbox = target.get("bbox")
     detected = bool(valid_components)
@@ -577,6 +611,7 @@ def analyze_target_image(image_path, args, annotated_path=None):
         "area_ratio": area_ratio,
         "bbox_width_ratio": bbox_width_ratio,
         "bbox_height_ratio": bbox_height_ratio,
+        "bbox_aspect_ratio": bbox_aspect_ratio,
         "centroid": {"x": centroid_x, "y": centroid_y} if centroid_x is not None else None,
         "bbox": bbox,
         "component_count": len(components),
@@ -1053,6 +1088,9 @@ def build_parser():
     parser.add_argument("--target-max-area-ratio", type=float, default=0.20)
     parser.add_argument("--target-max-bbox-width-ratio", type=float, default=0.70)
     parser.add_argument("--target-max-bbox-height-ratio", type=float, default=0.70)
+    parser.add_argument("--target-border-margin-ratio", type=float, default=0.0)
+    parser.add_argument("--target-min-bbox-aspect-ratio", type=float, default=0.0)
+    parser.add_argument("--target-max-bbox-aspect-ratio", type=float, default=0.0)
     parser.add_argument("--visual-scan-profiles", default=",".join(DEFAULT_VISUAL_SCAN_PROFILES))
     parser.add_argument("--require-target", action="store_true")
     parser.add_argument("--visual-center-deadband", type=float, default=0.16)
