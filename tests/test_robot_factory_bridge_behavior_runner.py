@@ -435,6 +435,33 @@ def test_visual_target_analysis_recommends_turn_for_off_center_target(tmp_path):
     assert (tmp_path / "annotated.jpg").exists()
 
 
+def test_visual_target_analysis_selects_compact_component_over_wide_floor(tmp_path):
+    from PIL import Image, ImageDraw
+
+    image = tmp_path / "target_with_floor.jpg"
+    frame = Image.new("RGB", (320, 240), (20, 30, 40))
+    draw = ImageDraw.Draw(frame)
+    draw.rectangle((0, 205, 319, 239), fill=(230, 220, 40))
+    draw.ellipse((226, 92, 262, 128), fill=(245, 220, 30))
+    frame.save(image, quality=90)
+    args = runner.build_parser().parse_args(
+        [
+            "--mode",
+            "visual-advisor",
+            "--target-profile",
+            "yellow",
+        ]
+    )
+
+    analysis = runner.analyze_target_image(image, args)
+
+    assert analysis["detected"] is True
+    assert analysis["matched_pixels"] < analysis["total_matched_pixels"]
+    assert analysis["bbox"]["x0"] > 200
+    assert analysis["bbox_width_ratio"] < args.target_max_bbox_width_ratio
+    assert analysis["recommendation"]["angular_z"] < 0.0
+
+
 def test_visual_target_analysis_rejects_full_frame_tint(tmp_path):
     from PIL import Image
 

@@ -388,6 +388,125 @@ def target_pixel_match(red, green, blue, profile, args):
     return False
 
 
+def component_summary(area, sum_x, sum_y, min_x, min_y, max_x, max_y, width, height):
+    centroid_x = sum_x / max(area, 1)
+    centroid_y = sum_y / max(area, 1)
+    return {
+        "matched_pixels": area,
+        "area_ratio": area / max(width * height, 1),
+        "bbox_width_ratio": ((max_x - min_x + 1) / width) if area else 0.0,
+        "bbox_height_ratio": ((max_y - min_y + 1) / height) if area else 0.0,
+        "centroid": {"x": centroid_x, "y": centroid_y} if area else None,
+        "bbox": {"x0": min_x, "y0": min_y, "x1": max_x, "y1": max_y} if area else None,
+        "center_error": ((centroid_x - (width / 2.0)) / (width / 2.0)) if area else None,
+    }
+
+
+def find_target_components(image, args):
+    width, height = image.size
+    pixels = image.load()
+    mask = []
+    total_matched = 0
+    aggregate = {"area": 0, "sum_x": 0.0, "sum_y": 0.0, "min_x": width, "min_y": height, "max_x": -1, "max_y": -1}
+    for y_coord in range(height):
+        row = bytearray(width)
+        for x_coord in range(width):
+            red, green, blue = pixels[x_coord, y_coord]
+            if target_pixel_match(red, green, blue, args.target_profile, args):
+                row[x_coord] = 1
+                total_matched += 1
+                aggregate["area"] += 1
+                aggregate["sum_x"] += x_coord
+                aggregate["sum_y"] += y_coord
+                aggregate["min_x"] = min(aggregate["min_x"], x_coord)
+                aggregate["min_y"] = min(aggregate["min_y"], y_coord)
+                aggregate["max_x"] = max(aggregate["max_x"], x_coord)
+                aggregate["max_y"] = max(aggregate["max_y"], y_coord)
+        mask.append(row)
+
+    seen = [bytearray(width) for _ in range(height)]
+    components = []
+    for y_coord in range(height):
+        for x_coord in range(width):
+            if not mask[y_coord][x_coord] or seen[y_coord][x_coord]:
+                continue
+            stack = [(x_coord, y_coord)]
+            seen[y_coord][x_coord] = 1
+            area = 0
+            sum_x = 0.0
+            sum_y = 0.0
+            min_x = width
+            min_y = height
+            max_x = -1
+            max_y = -1
+            while stack:
+                x_current, y_current = stack.pop()
+                area += 1
+                sum_x += x_current
+                sum_y += y_current
+                min_x = min(min_x, x_current)
+                min_y = min(min_y, y_current)
+                max_x = max(max_x, x_current)
+                max_y = max(max_y, y_current)
+                for x_next, y_next in (
+                    (x_current + 1, y_current),
+                    (x_current - 1, y_current),
+                    (x_current, y_current + 1),
+                    (x_current, y_current - 1),
+                ):
+                    if (
+                        0 <= x_next < width
+                        and 0 <= y_next < height
+                        and mask[y_next][x_next]
+                        and not seen[y_next][x_next]
+                    ):
+                        seen[y_next][x_next] = 1
+                        stack.append((x_next, y_next))
+            summary = component_summary(area, sum_x, sum_y, min_x, min_y, max_x, max_y, width, height)
+            summary["issues"] = component_issues(summary, args)
+            components.append(summary)
+
+    components.sort(
+        key=lambda component: (
+            bool(component.get("issues")),
+            -float(component.get("area_ratio", 0.0) or 0.0),
+            abs(float(component.get("center_error", 999.0) or 999.0)),
+        )
+    )
+    aggregate_summary = component_summary(
+        aggregate["area"],
+        aggregate["sum_x"],
+        aggregate["sum_y"],
+        aggregate["min_x"],
+        aggregate["min_y"],
+        aggregate["max_x"],
+        aggregate["max_y"],
+        width,
+        height,
+    )
+    aggregate_summary["issues"] = component_issues(aggregate_summary, args)
+    return total_matched, aggregate_summary, components
+
+
+def component_issues(summary, args):
+    issues = []
+    matched = int(summary.get("matched_pixels", 0) or 0)
+    area_ratio = float(summary.get("area_ratio", 0.0) or 0.0)
+    bbox_width_ratio = float(summary.get("bbox_width_ratio", 0.0) or 0.0)
+    bbox_height_ratio = float(summary.get("bbox_height_ratio", 0.0) or 0.0)
+    if matched <= 0:
+        issues.append("target_not_detected")
+    if area_ratio < args.target_min_area_ratio:
+        issues.append("target_area_below_threshold")
+    if area_ratio > args.target_max_area_ratio:
+        issues.append("target_area_above_threshold")
+    if bbox_width_ratio > args.target_max_bbox_width_ratio:
+        issues.append("target_bbox_width_above_threshold")
+    if bbox_height_ratio > args.target_max_bbox_height_ratio:
+        issues.append("target_bbox_height_above_threshold")
+    return issues
+
+
 def analyze_target_image(image_path, args, annotated_path=None):
     try:
         from PIL import Image, ImageDraw
@@ -401,46 +520,23 @@ def analyze_target_image(image_path, args, annotated_path=None):
     image_path = Path(image_path)
     image = Image.open(image_path).convert("RGB")
     width, height = image.size
-    pixels = image.load()
-    matched = 0
-    sum_x = 0.0
-    sum_y = 0.0
-    min_x = width
-    min_y = height
-    max_x = -1
-    max_y = -1
-    for y in range(height):
-        for x in range(width):
-            red, green, blue = pixels[x, y]
-            if target_pixel_match(red, green, blue, args.target_profile, args):
-                matched += 1
-                sum_x += x
-                sum_y += y
-                min_x = min(min_x, x)
-                min_y = min(min_y, y)
-                max_x = max(max_x, x)
-                max_y = max(max_y, y)
+    total_matched, aggregate, components = find_target_components(image, args)
+    valid_components = [component for component in components if not component.get("issues")]
+    target = valid_components[0] if valid_components else aggregate
+    issues = [] if valid_components else list(aggregate.get("issues", []))
+    if total_matched > 0 and not valid_components and "target_component_not_detected" not in issues:
+        issues.append("target_component_not_detected")
 
-    total = max(width * height, 1)
-    area_ratio = matched / total
-    issues = []
-    if matched <= 0:
-        issues.append("target_not_detected")
-    if area_ratio < args.target_min_area_ratio:
-        issues.append("target_area_below_threshold")
-    if area_ratio > args.target_max_area_ratio:
-        issues.append("target_area_above_threshold")
-    bbox_width_ratio = ((max_x - min_x + 1) / width) if matched else 0.0
-    bbox_height_ratio = ((max_y - min_y + 1) / height) if matched else 0.0
-    if bbox_width_ratio > args.target_max_bbox_width_ratio:
-        issues.append("target_bbox_width_above_threshold")
-    if bbox_height_ratio > args.target_max_bbox_height_ratio:
-        issues.append("target_bbox_height_above_threshold")
-
-    detected = matched > 0 and not issues
-    centroid_x = (sum_x / matched) if matched else None
-    centroid_y = (sum_y / matched) if matched else None
-    center_error = ((centroid_x - (width / 2.0)) / (width / 2.0)) if centroid_x is not None else None
+    matched = int(target.get("matched_pixels", 0) or 0)
+    area_ratio = float(target.get("area_ratio", 0.0) or 0.0)
+    bbox_width_ratio = float(target.get("bbox_width_ratio", 0.0) or 0.0)
+    bbox_height_ratio = float(target.get("bbox_height_ratio", 0.0) or 0.0)
+    centroid = target.get("centroid")
+    bbox = target.get("bbox")
+    detected = bool(valid_components)
+    centroid_x = centroid.get("x") if centroid else None
+    centroid_y = centroid.get("y") if centroid else None
+    center_error = target.get("center_error")
     centered = abs(center_error or 0.0) <= args.visual_center_deadband
     angular_z = 0.0
     linear_x = 0.0
@@ -459,10 +555,12 @@ def analyze_target_image(image_path, args, annotated_path=None):
         ensure_dir(annotated_path.parent)
         annotated_image = image.copy()
         draw = ImageDraw.Draw(annotated_image)
-        if matched:
-            draw.rectangle((min_x, min_y, max_x, max_y), outline=(255, 0, 0), width=3)
+        if bbox:
+            outline = (0, 255, 0) if detected else (255, 0, 0)
+            draw.rectangle((bbox["x0"], bbox["y0"], bbox["x1"], bbox["y1"]), outline=outline, width=3)
             draw.line((width / 2, 0, width / 2, height), fill=(255, 255, 255), width=1)
-            draw.ellipse((centroid_x - 5, centroid_y - 5, centroid_x + 5, centroid_y + 5), outline=(0, 255, 0), width=2)
+            if centroid_x is not None and centroid_y is not None:
+                draw.ellipse((centroid_x - 5, centroid_y - 5, centroid_x + 5, centroid_y + 5), outline=outline, width=2)
         annotated_image.save(annotated_path, quality=90)
         annotated = str(annotated_path)
 
@@ -475,11 +573,14 @@ def analyze_target_image(image_path, args, annotated_path=None):
         "image_width": width,
         "image_height": height,
         "matched_pixels": matched,
+        "total_matched_pixels": total_matched,
         "area_ratio": area_ratio,
         "bbox_width_ratio": bbox_width_ratio,
         "bbox_height_ratio": bbox_height_ratio,
         "centroid": {"x": centroid_x, "y": centroid_y} if centroid_x is not None else None,
-        "bbox": {"x0": min_x, "y0": min_y, "x1": max_x, "y1": max_y} if matched else None,
+        "bbox": bbox,
+        "component_count": len(components),
+        "component_candidates": components[:8],
         "center_error": center_error,
         "centered": bool(centered and detected),
         "recommendation": {
