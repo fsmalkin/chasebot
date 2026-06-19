@@ -16,6 +16,8 @@ import chasecar_bridge_stack_path_gate as stack_gate
 
 DEFAULT_ARTIFACT_STEM = "factory_bridge_stack_closed_loop"
 SAFE_TERMINAL_POLICY_STOPS = {"target_inside_stack_forward_stop_area"}
+REAL_STACK_BOOT_REPORT_FILENAME = "real_stack_boot_report.json"
+REAL_STACK_BOOT_REPORT_MD_FILENAME = "real_stack_boot_report.md"
 
 
 def utc_now() -> str:
@@ -46,6 +48,254 @@ def write_text(path: Path | str, payload: str) -> None:
 
 def default_artifact_dir() -> Path:
     return Path("artifacts") / "session" / ("%s_%s" % (DEFAULT_ARTIFACT_STEM, utc_stamp()))
+
+
+def read_source_text(relative_path: str) -> tuple[Path, str]:
+    source_path = stack_gate.REPO_ROOT / relative_path
+    if not source_path.is_file():
+        return source_path, ""
+    return source_path, source_path.read_text(encoding="utf-8")
+
+
+def source_component(
+    *,
+    name: str,
+    relative_path: str,
+    governing_symbols: dict[str, str],
+    bridge_runtime_status: str,
+    route_or_gap: str,
+    evidence: str,
+) -> dict[str, Any]:
+    source_path, source_text = read_source_text(relative_path)
+    symbols = {symbol: (needle in source_text if source_text else False) for symbol, needle in governing_symbols.items()}
+    return {
+        "name": name,
+        "source_path": stack_gate.repo_display_path(source_path),
+        "source_present": source_path.is_file(),
+        "governing_symbols": symbols,
+        "bridge_runtime_status": bridge_runtime_status,
+        "route_or_gap": route_or_gap,
+        "evidence": evidence,
+    }
+
+
+def build_policy_smoke(args: argparse.Namespace) -> dict[str, Any]:
+    analysis = {
+        "detected": True,
+        "centered": True,
+        "target_profile": args.target_profile,
+        "center_error": 0.0,
+        "area_ratio": min(float(args.stack_forward_stop_area_ratio) * 0.25, 0.05),
+        "bbox": [120, 70, 200, 170],
+        "recommendation": {
+            "linear_x": 0.0,
+            "angular_z": 0.0,
+        },
+    }
+    decision_id = "real_stack_boot_report:%s" % utc_stamp()
+    stack_state = stack_gate.stack_state_from_analysis(analysis, decision_id=decision_id)
+    policy_snapshot = stack_gate.supervisor_policy.build_policy_snapshot(stack_state, sim_gate_ready=True)
+    command, command_issues, stop_reason = stack_gate.stack_command_from_policy(analysis, policy_snapshot, args)
+    return {
+        "decision_id": decision_id,
+        "policy_stage": policy_snapshot.get("stage", ""),
+        "policy_preferred_intent": policy_snapshot.get("preferred_intent", ""),
+        "policy_allowed_intents": policy_snapshot.get("allowed_intents", []),
+        "policy_reason": policy_snapshot.get("reason", ""),
+        "command": command,
+        "command_issues": command_issues,
+        "stop_reason": stop_reason,
+        "pass": bool(
+            policy_snapshot.get("preferred_intent") == "plan_to_target"
+            and not command_issues
+            and stack_gate.command_nonzero(command)
+        ),
+    }
+
+
+def build_real_stack_boot_report(args: argparse.Namespace) -> dict[str, Any]:
+    policy_smoke = build_policy_smoke(args)
+    components = {
+        "supervisor_policy": source_component(
+            name="supervisor_policy",
+            relative_path="scripts/brain_supervisor_policy.py",
+            governing_symbols={
+                "build_policy_snapshot": "def build_policy_snapshot",
+                "policy_signal_snapshot": "def policy_signal_snapshot",
+                "intent_readiness_snapshot": "def intent_readiness_snapshot",
+            },
+            bridge_runtime_status="routed",
+            route_or_gap=(
+                "tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py:"
+                "run_chasecar_stack_fetch_adapter_policy calls build_policy_snapshot."
+            ),
+            evidence="The bridge runner builds a stack_state from the live camera analysis before command selection.",
+        ),
+        "factory_bridge_stack_adapter": source_component(
+            name="factory_bridge_stack_adapter",
+            relative_path="tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py",
+            governing_symbols={
+                "run_chasecar_stack_fetch_adapter_policy": "def run_chasecar_stack_fetch_adapter_policy",
+                "stack_state_from_analysis": "def stack_state_from_analysis",
+                "stack_command_from_policy": "def stack_command_from_policy",
+                "relay_bash": "def relay_bash",
+            },
+            bridge_runtime_status="routed",
+            route_or_gap="Maps the supervisor policy intent to bounded bridge cmd_vel through the runtime JSON relay.",
+            evidence="Every closed-loop step invokes stack_gate.run with chasecar_stack_fetch_adapter_v0.",
+        ),
+        "supervisor_loop": source_component(
+            name="supervisor_loop",
+            relative_path="scripts/brain_supervisor_loop.py",
+            governing_symbols={
+                "SupervisorController": "class SupervisorController",
+                "evaluate_once": "def evaluate_once",
+                "fetch_dashboard_state": "fetch_dashboard_state",
+            },
+            bridge_runtime_status="source_present_gap",
+            route_or_gap=(
+                "The loop is a dashboard shadow evaluator; the factory bridge runner currently supplies a direct "
+                "camera snapshot, stack_state, and relay command instead of dashboard preview/dispatch surfaces."
+            ),
+            evidence="Use this as the next bridge adapter target after object pose and dashboard state are bridge-backed.",
+        ),
+        "brain_intent_executor": source_component(
+            name="brain_intent_executor",
+            relative_path="scripts/brain_intent_executor.py",
+            governing_symbols={
+                "BrainIntentExecutor": "class BrainIntentExecutor",
+                "NavigateToPose": "NavigateToPose",
+                "cmd_vel": "cmd_vel",
+            },
+            bridge_runtime_status="source_present_gap",
+            route_or_gap=(
+                "The executor is a ROS/Nav2 node that requires odom, detections, action servers, and ROS topics; "
+                "the JetBot factory bridge exposes HTTP camera, health, lock, and cmd_vel endpoints."
+            ),
+            evidence="The current bridge path reuses the command contract and relay while preserving the factory image.",
+        ),
+        "object_centric_fetch_policy": source_component(
+            name="object_centric_fetch_policy",
+            relative_path="scripts/gather_object_centric_policy_helpers.py",
+            governing_symbols={
+                "fetch_to_pose": "fetch_to_pose",
+                "ball": "ball",
+                "target": "target",
+            },
+            bridge_runtime_status="source_present_gap",
+            route_or_gap=(
+                "The policy requires measured robot, ball, and delivery target pose plus contact evidence; "
+                "the current v0 bridge target is a color rectangle in a single CSI frame."
+            ),
+            evidence="The progress scorecard is the current safety gate until bridge observations include object pose and delivery geometry.",
+        ),
+    }
+    sim_vs_hardware_differences = [
+        {
+            "area": "perception",
+            "sim_stack_surface": "D415/YOLO image and 3D ball-position topics.",
+            "bridge_surface": "Factory CSI camera snapshot plus color-target analysis.",
+            "next_adapter": "Publish bridge-derived target observations into the same state shape as the runtime dashboard.",
+        },
+        {
+            "area": "state",
+            "sim_stack_surface": "Robot pose, ball pose, delivery pose, target freshness, and corridor geometry.",
+            "bridge_surface": "Target bbox, area ratio, center error, and a placeholder robot pose in stack_state.",
+            "next_adapter": "Add calibrated object-pose estimation or fiducial/marker geometry before contact-rich fetch.",
+        },
+        {
+            "area": "execution",
+            "sim_stack_surface": "BrainIntentExecutor dispatches ROS/Nav2 goals and cmd_vel topics.",
+            "bridge_surface": "Runtime JSON handoff to gather_motion_bridge, ROS cmd_vel relay, and HTTP /cmd_vel.",
+            "next_adapter": "Choose whether to run a ROS executor shim against bridge-backed topics or keep a direct HTTP executor for v0.",
+        },
+        {
+            "area": "success_evidence",
+            "sim_stack_surface": "Fetch-to-pose pass uses ball trajectory intersection with a delivery radius.",
+            "bridge_surface": "Progress scorecard uses target area and centering after bounded pulses.",
+            "next_adapter": "Track the ball and delivery marker so hardware scorecards use the fetch-to-pose contract.",
+        },
+    ]
+    report = {
+        "generated_utc": utc_now(),
+        "type": "factory_bridge_real_stack_boot_report",
+        "selected_entrypoint": stack_gate.POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0,
+        "stack_family": "planner_routed_fetch_to_pose",
+        "runtime_target_reference": "robot_fidelity_orin",
+        "inference_backend_reference": "tensorrt_int8",
+        "bridge_safety_gate": "factory_bridge_locked_by_default_plus_progress_scorecard",
+        "full_onboard_stack_booted": False,
+        "claim": (
+            "The live v0 hardware lane runs the shared supervisor policy through a bridge adapter and records the "
+            "remaining ROS/Nav2/object-pose gaps before claiming full stack onboarding."
+        ),
+        "policy_smoke": policy_smoke,
+        "components": components,
+        "sim_vs_hardware_differences": sim_vs_hardware_differences,
+        "minimum_next_adapters": [
+            "Bridge-backed dashboard state for supervisor_loop.evaluate_once.",
+            "Object-pose observation for ball and delivery target geometry.",
+            "Executor choice between ROS topic shim and direct bridge intent executor.",
+            "Fetch-to-pose hardware scorecard based on ball trajectory, delivery radius, and contact safety.",
+        ],
+        "pass": bool(policy_smoke.get("pass", False) and components["supervisor_policy"]["source_present"]),
+    }
+    return report
+
+
+def real_stack_boot_report_markdown(report: dict[str, Any]) -> str:
+    components = report.get("components") if isinstance(report.get("components"), dict) else {}
+    lines = [
+        "# Real Stack Boot Report",
+        "",
+        "- Pass: `%s`" % bool(report.get("pass", False)),
+        "- Selected entrypoint: `%s`" % report.get("selected_entrypoint", ""),
+        "- Bridge safety gate: `%s`" % report.get("bridge_safety_gate", ""),
+        "- Full onboard stack booted: `%s`" % bool(report.get("full_onboard_stack_booted", False)),
+        "",
+        "## Policy Smoke",
+        "",
+    ]
+    smoke = report.get("policy_smoke") if isinstance(report.get("policy_smoke"), dict) else {}
+    lines.extend(
+        [
+            "- Stage: `%s`" % smoke.get("policy_stage", ""),
+            "- Preferred intent: `%s`" % smoke.get("policy_preferred_intent", ""),
+            "- Stop reason: `%s`" % smoke.get("stop_reason", ""),
+            "- Command: `%s`" % json.dumps(smoke.get("command", {}), sort_keys=True),
+            "",
+            "## Components",
+            "",
+            "| Component | Source | Bridge status | Route or gap |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    for component in components.values():
+        if not isinstance(component, dict):
+            continue
+        lines.append(
+            "| %s | `%s` | `%s` | %s |"
+            % (
+                component.get("name", ""),
+                component.get("source_path", ""),
+                component.get("bridge_runtime_status", ""),
+                str(component.get("route_or_gap", "")).replace("|", "/"),
+            )
+        )
+    lines.extend(["", "## Sim To Hardware Differences", "", "| Area | Sim stack surface | Bridge surface | Next adapter |", "| --- | --- | --- | --- |"])
+    for item in report.get("sim_vs_hardware_differences", []):
+        if not isinstance(item, dict):
+            continue
+        lines.append(
+            "| %s | %s | %s | %s |"
+            % (
+                item.get("area", ""),
+                str(item.get("sim_stack_surface", "")).replace("|", "/"),
+                str(item.get("bridge_surface", "")).replace("|", "/"),
+                str(item.get("next_adapter", "")).replace("|", "/"),
+            )
+        )
+    return "\n".join(lines) + "\n"
 
 
 def copy_step_args(args: argparse.Namespace, artifact_dir: Path) -> argparse.Namespace:
@@ -475,6 +725,13 @@ def independent_health(args: argparse.Namespace) -> dict[str, Any]:
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     artifact_root = ensure_dir(args.artifact_dir or default_artifact_dir())
+    real_stack_report = build_real_stack_boot_report(args)
+    real_stack_report_path = artifact_root / REAL_STACK_BOOT_REPORT_FILENAME
+    real_stack_report_md_path = artifact_root / REAL_STACK_BOOT_REPORT_MD_FILENAME
+    real_stack_report["json_path"] = str(real_stack_report_path)
+    real_stack_report["markdown_path"] = str(real_stack_report_md_path)
+    write_json(real_stack_report_path, real_stack_report)
+    write_text(real_stack_report_md_path, real_stack_boot_report_markdown(real_stack_report))
     summary: dict[str, Any] = {
         "generated_utc": utc_now(),
         "type": "factory_bridge_stack_closed_loop_runner",
@@ -487,6 +744,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "min_completed_steps": int(args.min_completed_steps),
         "step_settle_s": float(args.step_settle_s),
         "stop_area_ratio": float(args.stack_forward_stop_area_ratio),
+        "real_stack_boot_report": real_stack_report,
         "steps": [],
         "issues": [],
         "pass": False,

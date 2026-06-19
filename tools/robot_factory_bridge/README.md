@@ -122,9 +122,13 @@ Basic flow:
     python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_progress_live --steps 3 --step-settle-s 1.0 --target-min-area-ratio 0.008 --execute-motion --confirm-operator-ready
     ```
 
-    The runner writes `progress_scorecard.json` and `progress_scorecard.md`.
-    The scorecard compares target area and centering across live steps, includes
-    a final post-loop target observation for the last pulse, and fails the run
+    The runner writes `real_stack_boot_report.json`,
+    `real_stack_boot_report.md`, `progress_scorecard.json`, and
+    `progress_scorecard.md`. The boot report names the active Chasecar stack
+    slice, runs a deterministic supervisor-policy smoke, and lists the
+    ROS/Nav2/object-pose adapters still required for full stack onboarding. The
+    scorecard compares target area and centering across live steps, includes a
+    final post-loop target observation for the last pulse, and fails the run
     when target loss, meaningful regression, stale camera, visual contradiction,
     command mismatch, or unsafe final health appears.
 

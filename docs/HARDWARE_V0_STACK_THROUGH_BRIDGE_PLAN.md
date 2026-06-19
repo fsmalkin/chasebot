@@ -73,6 +73,16 @@ target remains centered without meaningful area loss. It fails on target loss,
 stale camera, meaningful area regression, centering regression, unsafe bridge
 state, or command evidence that contradicts the bridge telemetry.
 
+Every closed-loop run now writes a real-stack boot report beside the scorecard.
+`real_stack_boot_report.json` and `real_stack_boot_report.md` name the selected
+entrypoint, run a deterministic policy smoke through
+`scripts/brain_supervisor_policy.py:build_policy_snapshot`, and classify the
+current stack components by bridge status. The report keeps the current claim
+precise: the v0 hardware lane runs the shared supervisor policy through the
+factory-bridge adapter, while the ROS/Nav2 executor loop and object-centric
+fetch-to-pose contact policy still require bridge-backed object pose, dashboard
+state, and executor shims before full stack onboarding.
+
 ## Gate 1: Locked Stack-To-Bridge Command Path
 
 Claim: the offboard stack path can produce bounded velocity commands and route
@@ -181,6 +191,35 @@ Pass criteria:
   unsafe final bridge state.
 - Final independent bridge health is locked, both motors are zero, and camera
   frames are fresh.
+
+## Gate 6: Real Stack Boot Boundary
+
+Claim: the hardware lane can boot the closest current Chasecar stack path
+through the bridge and produce code-referenced evidence for the remaining
+sim-to-hardware gaps.
+
+Representative dry-run command:
+
+```powershell
+python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/<id>/real_stack_boot_boundary --dry-run
+```
+
+Pass criteria:
+
+- `real_stack_boot_report.json` and `real_stack_boot_report.md` exist beside
+  `closed_loop_summary.json`.
+- The report names `chasecar_stack_fetch_adapter_v0` as the selected bridge
+  entrypoint.
+- The policy smoke produces `preferred_intent=plan_to_target` and a bounded
+  nonzero command through the same `stack_command_from_policy` mapping used by
+  live runs.
+- The component table marks `brain_supervisor_policy` and the factory-bridge
+  stack adapter as routed.
+- The component table marks `brain_supervisor_loop`,
+  `brain_intent_executor`, and `gather_object_centric_policy_helpers.py` as
+  source-present bridge gaps, with a code path or missing adapter named for each.
+- The sim-to-hardware section lists perception, state, execution, and success
+  evidence differences before any run claims full stack onboarding.
 
 ## Stop Conditions
 

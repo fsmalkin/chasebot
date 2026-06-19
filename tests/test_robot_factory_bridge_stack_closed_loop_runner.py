@@ -115,6 +115,21 @@ def test_parser_defaults_to_stack_adapter_blue_loop():
     assert args.score_final_progress_observation is True
 
 
+def test_real_stack_boot_report_is_written_for_dry_run(tmp_path):
+    args = runner.parse_args(["--artifact-dir", str(tmp_path), "--dry-run"])
+    summary = runner.run(args)
+    report = summary["real_stack_boot_report"]
+
+    assert summary["pass"] is True
+    assert report["pass"] is True
+    assert report["selected_entrypoint"] == gate.POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0
+    assert report["policy_smoke"]["policy_preferred_intent"] == "plan_to_target"
+    assert report["components"]["supervisor_policy"]["bridge_runtime_status"] == "routed"
+    assert report["components"]["brain_intent_executor"]["bridge_runtime_status"] == "source_present_gap"
+    assert (tmp_path / "real_stack_boot_report.json").exists()
+    assert (tmp_path / "real_stack_boot_report.md").exists()
+
+
 def test_closed_loop_runs_two_steps_and_writes_summary(tmp_path, monkeypatch):
     calls = []
     gate_summaries = [
@@ -139,6 +154,7 @@ def test_closed_loop_runs_two_steps_and_writes_summary(tmp_path, monkeypatch):
     assert (tmp_path / "closed_loop_summary.json").exists()
     assert (tmp_path / "progress_scorecard.json").exists()
     assert (tmp_path / "progress_scorecard.md").exists()
+    assert (tmp_path / "real_stack_boot_report.json").exists()
     assert summary["steps"][0]["policy_preferred_intent"] == "plan_to_target"
     assert summary["progress_scorecard"]["pass"] is True
     assert len(summary["progress_scorecard"]["transitions"]) == 2
