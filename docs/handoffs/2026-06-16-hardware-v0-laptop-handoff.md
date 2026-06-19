@@ -83,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File scripts/check_robot_direct_access.ps1 -
 ## Boundaries
 
 - The USB helper sends no movement commands.
-- The first-boot probe only prints host, network, SSH, USB, RealSense, and
+- The first-boot probe only prints host, network, SSH, USB, camera/tool, and
   Tailscale state.
 - The optional beacon service is installed only after local login and operator
   confirmation.

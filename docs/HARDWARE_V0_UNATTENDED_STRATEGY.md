@@ -6,6 +6,13 @@ The hardware lane optimizes for unattended operation. The robot must start,
 diagnose its sensing path, run bounded control, and fail locked without a human
 recovering camera state, moving cables, or swapping ad hoc viewers during a run.
 
+Current hardware v0 is the Yahboom/JetBot Mini factory bridge lane. It uses the
+robot's onboard CSI camera through the factory Jetson image and the HTTP factory
+bridge. The Orin Nano plus RealSense D415 depth-camera lane remains the later
+hardware-transfer target. D415-specific depth/ROS/TensorRT proof starts after
+the current bridge lane proves locked camera readiness and bounded command
+transport.
+
 ## Operating Model
 
 The factory bridge remains the safety and actuator layer. It owns motion
@@ -25,10 +32,16 @@ The first deployable loop runs offboard control through the bridge:
 
 ## Camera Policy
 
-The preferred camera is the onboard camera path because it can run without an
-operator. A fallback camera is acceptable only when it is fixed to the robot or
-bench, powered with the robot, auto-started by the run command, and covered by
-the same readiness gate.
+The current preferred camera is the onboard CSI camera because it is already
+mounted, powered with the robot, and available to the Jetson camera stack. The
+bridge camera backend should serve fresh JPEG frames without importing the
+crashing `jetbotmini`/`cv2` Python camera path. GStreamer/Argus is the current
+recovery path because a robot-side still-frame probe produced a valid image from
+the sensor.
+
+A fallback camera is acceptable only when it is fixed to the robot or bench,
+powered with the robot, auto-started by the run command, and covered by the same
+readiness gate.
 
 Manual camera recovery, phone repositioning, laptop webcam aiming, and
 interactive viewer setup are debugging tools. They can explain a failure.
@@ -45,16 +58,18 @@ The bridge has proven the useful safety surface:
 - The reusable color-target runner now stops before relay or motion when the
   camera readiness gate is red.
 
-The current blocker is camera bring-up stability. The robot reports the bridge
-healthy and locked, while camera health remains unloaded with zero cached
-frames. Robot-side logs showed NVIDIA Argus / IMX219 camera-provider failures.
-The next workstream is readiness recovery for unattended autonomy before
-additional policy tuning.
+The bridge camera backend is the current blocker. The robot reports the bridge
+healthy and locked, while the Python camera backend can leave camera health
+unloaded with zero cached frames or crash while importing `jetbotmini`/`cv2`. A
+direct GStreamer/Argus still-frame probe produced a valid JPEG from the onboard
+sensor, so the next workstream is a bridge-served GStreamer camera backend with
+the existing readiness gate.
 
 Reference artifact:
 
 ```text
 artifacts/session/live_factory_blue_bottle_camera_gate_block_20260618/goal_summary.json
+artifacts/session/jetbot_reconnect_20260619T1505Z/camera_probe.jpg
 ```
 
 ## Acceleration Path
@@ -73,12 +88,13 @@ turning camera setup into an operator ritual.
 
 ## Next Milestone
 
-Run a one-target offboard Chasecar policy proof through the factory bridge after
-camera readiness is green.
+Recover locked bridge camera readiness, then run a one-target offboard Chasecar
+policy proof through the factory bridge.
 
 Success criteria:
 
-- Bridge starts locked and reports fresh camera frames.
+- Bridge starts locked and reports fresh camera frames from the onboard CSI
+  camera through the GStreamer backend.
 - Target perception produces a stable target observation.
 - Policy produces bounded `linear_x` / `angular_z` commands.
 - The robot turns toward the target and performs a short bounded approach.

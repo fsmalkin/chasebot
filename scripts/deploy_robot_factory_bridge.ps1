@@ -28,6 +28,11 @@ param(
 
     [int]$CameraJpegQuality = 55,
 
+    [ValidateSet("gstreamer", "jetbotmini")]
+    [string]$CameraBackend = "gstreamer",
+
+    [int]$CameraGstreamerSensorId = 0,
+
     [switch]$Start,
 
     [switch]$EnableMotion,
@@ -71,7 +76,7 @@ if (-not $Start) {
 }
 
 $motionArg = if ($EnableMotion) { "--enable-motion" } else { "" }
-$cameraArg = if ($Camera) { "--camera --camera-width $CameraWidth --camera-height $CameraHeight --camera-fps $CameraFps --camera-jpeg-quality $CameraJpegQuality" } else { "" }
+$cameraArg = if ($Camera) { "--camera --camera-width $CameraWidth --camera-height $CameraHeight --camera-fps $CameraFps --camera-jpeg-quality $CameraJpegQuality --camera-backend $CameraBackend --camera-gstreamer-sensor-id $CameraGstreamerSensorId" } else { "" }
 $startCommand = @(
     "set -e",
     "cd '$RemoteDir'",

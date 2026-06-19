@@ -2,20 +2,24 @@
 
 Last researched: 2026-06-16.
 
-This runbook starts at the physical bench: power, network, Intel RealSense D415,
-and first remote access. The exit condition is simple: Codex can reach the
-Jetson over SSH and run the no-motion preflight from
-`scripts/check_robot_direct_access.ps1`.
+This runbook starts at the physical bench: power, network, onboard camera, and
+first remote access. The current lane is the Yahboom/JetBot Mini factory bridge
+robot with its onboard CSI camera. The Intel RealSense D415 sections are
+future-lane notes for the later Orin/D415 depth-camera transfer.
+
+The exit condition is simple: Codex can reach the Jetson over SSH and run the
+no-motion preflight from `scripts/check_robot_direct_access.ps1`.
 
 ## What We Are Building
 
 The first useful hardware state is direct, safe command access:
 
-1. Jetson Orin Nano boots from known storage.
+1. The current Jetson board boots from known storage.
 2. The operator can log in locally.
 3. Network access works.
 4. SSH works from the Windows machine.
-5. The D415 is connected by USB and visible to Linux.
+5. The current onboard CSI camera is visible to Linux or bridge-served through
+   GStreamer.
 6. Codex can run no-motion checks.
 
 Wheel movement, motor power, and autonomous control stay out of scope for this
@@ -40,17 +44,16 @@ the normal path for new hardware.
 
 Gather these before power-on:
 
-- Jetson Orin Nano Developer Kit.
-- Included 19 V Jetson power supply.
-- Boot storage: microSD card or NVMe SSD already prepared for Jetson Linux.
-- DisplayPort monitor, DisplayPort cable or DisplayPort-to-HDMI adapter, USB
-  keyboard, and USB mouse.
-- Ethernet cable for the first network path.
+- Current Yahboom/JetBot Mini robot.
+- Its normal power source or charged battery.
+- Boot storage already prepared for the current Jetson image.
+- Monitor, display cable or adapter that matches the active board, USB keyboard,
+  and USB mouse when local login is needed.
+- Ethernet cable for the first network path, if available.
 - Existing USB Wi-Fi dongle, if it is already attached to the robot.
-- Intel RealSense D415.
-- USB 3 data cable for the D415. The D415 side is USB Type-C. Use a certified
-  USB Type-C cable or a reliable USB-C-to-USB-A 3.x data cable. Charger-only
-  cables are a common failure mode.
+- Onboard CSI camera ribbon seated in the Jetson camera connector.
+- Future Orin/D415 lane only: Intel RealSense D415 and a certified USB 3 data
+  cable.
 - Optional: phone or laptop camera for photos of cable state and LED state.
 
 ## Physical Safety Setup
@@ -60,8 +63,8 @@ Before connecting power:
 1. Put the robot on a stable table.
 2. Lift the wheels or disconnect motor power if the hardware layout allows it.
 3. Keep a hand-reachable power disconnect available.
-4. Route the D415 cable with enough slack for table movement and camera strain
-   relief.
+4. Route camera, power, and network cables with enough slack for table movement
+   and strain relief.
 5. Keep the robot pointed away from people and fragile objects.
 
 Stop immediately if any board, cable, or regulator gets hot, smells unusual,
@@ -69,7 +72,12 @@ shows visible damage, or makes unexpected noise.
 
 ## Step 1: Identify Jetson Ports
 
-Use the Jetson Orin Nano Developer Kit layout as the map:
+Use the actual board on the robot as the map. The current JetBot Mini board may
+look closer to a Jetson Nano-style carrier with HDMI, USB-A, Ethernet, and a
+Micro-USB device/power port. The later Orin Nano developer kit uses a different
+layout with DisplayPort and USB-C.
+
+For the future Orin Nano developer kit, the port map is:
 
 - DC power jack: use the included 19 V power supply.
 - Power indicator LED: confirms board power.
@@ -85,16 +93,17 @@ Decision:
   switch.
 - Treat headless serial as an advanced fallback.
 
-## Step 2: First Power-On Without The D415
+## Step 2: First Power-On Without Extra USB Camera
 
-Leave the D415 unplugged for the first boot. This keeps the first failure
-surface small.
+Leave any extra USB camera unplugged for the first boot. The current lane uses
+the onboard CSI camera. The D415 stays unplugged until the future Orin/D415 lane
+starts.
 
 1. Insert the boot microSD or confirm the NVMe SSD is installed.
-2. Connect DisplayPort monitor.
+2. Connect the monitor through the display output available on the active board.
 3. Connect USB keyboard and mouse.
 4. Connect Ethernet.
-5. Connect the included 19 V power supply.
+5. Connect the correct power supply for the active robot.
 6. Confirm the power LED turns on.
 7. Wait for the first-boot or login screen.
 
@@ -345,8 +354,8 @@ bash first_boot_probe.sh
 ```
 
 Send the output to Codex. The probe sends no motion commands and reports
-hostname, IP address, SSH status, USB devices, RealSense tool status, and
-Tailscale status.
+hostname, IP address, SSH status, USB devices, camera/tool status, and Tailscale
+status.
 
 After Codex confirms the network and SSH state, install the optional boot-time
 beacon:
@@ -382,7 +391,10 @@ Cold-boot boundary:
   task, because the NVIDIA path involves boot media, firmware, and target
   storage decisions.
 
-## Step 9: Connect The D415
+## Future Lane Step: Connect The D415
+
+Use this section only after the Orin/D415 hardware-transfer lane starts. Skip it
+for the current JetBot Mini factory bridge lane.
 
 Keep the robot still and wheels lifted.
 
@@ -414,7 +426,9 @@ Evidence:
 - `lsusb` output.
 - `dmesg` tail after plug-in.
 
-## Step 10: Install Or Verify RealSense Tools
+## Future Lane Step: Install Or Verify RealSense Tools
+
+Use this section only after the D415 is physically present and connected.
 
 First check whether the tools are already present:
 

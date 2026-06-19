@@ -7,10 +7,10 @@ local login first, network second, Codex SSH access third.
 
 Set up local console access.
 
-1. Keep the D415 unplugged.
+1. Leave any extra USB camera unplugged.
 2. Put the robot on a stable table.
 3. Lift the wheels or disconnect motor power if the layout makes that easy.
-4. Connect DisplayPort monitor.
+4. Connect a monitor through the display port available on the active board.
 5. Connect USB keyboard and mouse.
 6. Leave the existing USB Wi-Fi dongle attached.
 7. Connect Ethernet if it is easy to reach.

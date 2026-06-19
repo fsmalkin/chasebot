@@ -6,7 +6,7 @@ The bridge runs as one Python process on the robot. It exposes HTTP endpoints fo
 
 The default motor backend uses the same Yahboom I2C command format as the factory web app: direction and speed bytes for the left and right motors in one write.
 
-Camera mode serves a cached `320x240` JPEG from a background encoder by default. The dashboard requests one image at a time and follows the configured camera FPS so a slow Wi-Fi link stays focused on the newest frame. Tune `-CameraWidth`, `-CameraHeight`, `-CameraFps`, and `-CameraJpegQuality` in the deploy wrapper when the operator needs a different balance between clarity and responsiveness.
+Camera mode serves a cached `320x240` JPEG from a background encoder by default. The current JetBot Mini hardware uses the onboard CSI camera through the GStreamer/Argus backend, which avoids the crashing `jetbotmini`/`cv2` Python camera imports observed during bring-up. The legacy `jetbotmini` camera backend remains available with `-CameraBackend jetbotmini` when the factory Python camera package is healthy. The dashboard requests one image at a time and follows the configured camera FPS so a slow Wi-Fi link stays focused on the newest frame. Tune `-CameraWidth`, `-CameraHeight`, `-CameraFps`, `-CameraJpegQuality`, and `-CameraBackend` in the deploy wrapper when the operator needs a different balance between clarity and responsiveness.
 
 Safety defaults:
 
@@ -20,7 +20,7 @@ Basic flow:
 1. Deploy and start health mode:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start
+   powershell -ExecutionPolicy Bypass -File scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start -Camera
    ```
 
    Open `http://192.168.1.11:8765/dashboard` for bridge health, camera, recent commands, and operator notes.

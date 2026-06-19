@@ -2,9 +2,9 @@
 """Small HTTP bridge for the factory Yahboom/JetBot Mini runtime.
 
 The bridge keeps Chasecar logic outside the robot image and adapts commands to
-the factory `jetbotmini` motor/camera APIs. It is intentionally manual: copy it
-to the robot, run it in the foreground or with nohup, and remove the file to
-return to the factory state.
+the factory motor and camera surfaces. It is intentionally manual: copy it to
+the robot, run it in the foreground or with nohup, and remove the file to return
+to the factory state.
 """
 
 import argparse
@@ -14,6 +14,7 @@ import json
 import math
 import os
 import socketserver
+import subprocess
 import sys
 import threading
 import time
@@ -21,7 +22,7 @@ import traceback
 import urllib.parse
 
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 
 
 DASHBOARD_HTML = r"""<!doctype html>
@@ -541,6 +542,8 @@ class CameraAdapter(object):
         height=240,
         jpeg_quality=55,
         jpeg_fps=5.0,
+        backend="gstreamer",
+        gstreamer_sensor_id=0,
     ):
         self.enabled = bool(enabled)
         self.dry_run = bool(dry_run)
@@ -548,7 +551,12 @@ class CameraAdapter(object):
         self.height = int(height)
         self.jpeg_quality = int(clamp(int(jpeg_quality), 10, 95))
         self.jpeg_fps = max(0.2, float(jpeg_fps))
+        self.backend = str(backend or "gstreamer")
+        self.gstreamer_sensor_id = int(gstreamer_sensor_id)
         self.camera = None
+        self.gstreamer_dir = "/tmp/chasecar_bridge_camera_%s" % os.getpid()
+        self.gstreamer_last_path = None
+        self.gstreamer_last_mtime = 0.0
         self.error = None
         self.latest_jpeg = None
         self.latest_jpeg_monotonic = 0.0
@@ -610,6 +618,16 @@ class CameraAdapter(object):
                     self.error = repr(exc)
             return
 
+        if self.backend == "gstreamer":
+            self._capture_loop_gstreamer()
+            return
+        if self.backend == "jetbotmini":
+            self._capture_loop_jetbotmini()
+            return
+        with self.lock:
+            self.error = "unsupported_camera_backend:%s" % self.backend
+
+    def _capture_loop_jetbotmini(self):
         interval_s = 1.0 / max(0.2, self.jpeg_fps)
         while not self.stop_event.is_set():
             started = time.monotonic()
@@ -634,6 +652,131 @@ class CameraAdapter(object):
             elapsed = time.monotonic() - started
             time.sleep(max(0.01, interval_s - elapsed))
 
+    def gstreamer_output_pattern(self):
+        return os.path.join(self.gstreamer_dir, "camera_%06d.jpg")
+
+    def build_gstreamer_command(self):
+        fps = max(1, int(round(self.jpeg_fps)))
+        caps = "video/x-raw(memory:NVMM),width=%s,height=%s,framerate=%s/1" % (
+            int(self.width),
+            int(self.height),
+            fps,
+        )
+        return [
+            "gst-launch-1.0",
+            "-q",
+            "nvarguscamerasrc",
+            "sensor-id=%s" % int(self.gstreamer_sensor_id),
+            "!",
+            caps,
+            "!",
+            "nvvidconv",
+            "!",
+            "video/x-raw,format=I420",
+            "!",
+            "jpegenc",
+            "quality=%s" % int(self.jpeg_quality),
+            "!",
+            "multifilesink",
+            "location=%s" % self.gstreamer_output_pattern(),
+            "max-files=4",
+        ]
+
+    def _ensure_gstreamer_process(self):
+        if self.camera is not None and self.camera.poll() is None:
+            return
+        if self.camera is not None and self.camera.poll() is not None:
+            self.camera = None
+        if not os.path.isdir(self.gstreamer_dir):
+            os.makedirs(self.gstreamer_dir)
+        for name in os.listdir(self.gstreamer_dir):
+            if name.lower().endswith(".jpg"):
+                try:
+                    os.unlink(os.path.join(self.gstreamer_dir, name))
+                except Exception:
+                    pass
+        self.gstreamer_last_path = None
+        self.gstreamer_last_mtime = 0.0
+        self.camera = subprocess.Popen(
+            self.build_gstreamer_command(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def _latest_gstreamer_frame_path(self):
+        if not os.path.isdir(self.gstreamer_dir):
+            return None
+        candidates = []
+        for name in os.listdir(self.gstreamer_dir):
+            if not name.lower().endswith(".jpg"):
+                continue
+            path = os.path.join(self.gstreamer_dir, name)
+            try:
+                if os.path.getsize(path) <= 0:
+                    continue
+                candidates.append((os.path.getmtime(path), path))
+            except Exception:
+                continue
+        if not candidates:
+            return None
+        candidates.sort()
+        return candidates[-1][1]
+
+    def read_latest_gstreamer_frame_once(self):
+        frame_path = self._latest_gstreamer_frame_path()
+        if not frame_path:
+            return False
+        frame_mtime = os.path.getmtime(frame_path)
+        if frame_path == self.gstreamer_last_path and frame_mtime <= self.gstreamer_last_mtime:
+            return False
+        with open(frame_path, "rb") as handle:
+            jpeg = handle.read()
+        if not jpeg.startswith(b"\xff\xd8"):
+            raise RuntimeError("gstreamer_frame_not_jpeg")
+        self.gstreamer_last_path = frame_path
+        self.gstreamer_last_mtime = frame_mtime
+        with self.lock:
+            self.latest_jpeg = jpeg
+            self.latest_jpeg_monotonic = time.monotonic()
+            self.frame_count += 1
+            self.encode_count += 1
+            self.error = None
+        return True
+
+    def _capture_loop_gstreamer(self):
+        interval_s = 1.0 / max(0.2, self.jpeg_fps)
+        while not self.stop_event.is_set():
+            started = time.monotonic()
+            try:
+                self._ensure_gstreamer_process()
+                if self.camera is not None and self.camera.poll() is not None:
+                    return_code = self.camera.returncode
+                    self.camera = None
+                    raise RuntimeError("gstreamer_exited:%s" % return_code)
+                self.read_latest_gstreamer_frame_once()
+            except Exception as exc:
+                with self.lock:
+                    self.error = repr(exc)
+                time.sleep(0.5)
+            elapsed = time.monotonic() - started
+            time.sleep(max(0.01, interval_s - elapsed))
+
+    def loaded(self):
+        if self.dry_run:
+            return True
+        if self.backend == "gstreamer":
+            return self.camera is not None and self.camera.poll() is None
+        return self.camera is not None
+
+    def stop(self):
+        self.stop_event.set()
+        if self.camera is not None and hasattr(self.camera, "poll") and self.camera.poll() is None:
+            try:
+                self.camera.terminate()
+            except Exception:
+                pass
+
     def status(self):
         now = time.monotonic()
         with self.lock:
@@ -649,7 +792,8 @@ class CameraAdapter(object):
             cached_fps = frame_count / max(now - self.status_start_monotonic, 0.001)
         return {
             "enabled": self.enabled,
-            "loaded": self.camera is not None,
+            "loaded": self.loaded(),
+            "backend": self.backend,
             "error": error,
             "width": self.width,
             "height": self.height,
@@ -680,6 +824,8 @@ class BridgeState(object):
             height=args.camera_height,
             jpeg_quality=args.camera_jpeg_quality,
             jpeg_fps=args.camera_fps,
+            backend=args.camera_backend,
+            gstreamer_sensor_id=args.camera_gstreamer_sensor_id,
         )
         self.started_monotonic = time.monotonic()
         self.event_log_path = args.event_log_path
@@ -762,6 +908,12 @@ class BridgeState(object):
             self.command_deadline_monotonic = 0.0
             self.last_stop_reason = str(reason)
             self._record_event_locked("stop", {"reason": str(reason)})
+
+    def close(self):
+        try:
+            self.camera.stop()
+        except Exception:
+            pass
 
     def cmd_vel_to_motors(self, linear_x, angular_z):
         max_linear = max(0.001, abs(float(self.args.max_linear_x)))
@@ -975,6 +1127,8 @@ def parse_args(argv):
     parser.add_argument("--camera-height", type=int, default=240)
     parser.add_argument("--camera-fps", type=float, default=5.0)
     parser.add_argument("--camera-jpeg-quality", type=int, default=55)
+    parser.add_argument("--camera-backend", choices=["gstreamer", "jetbotmini"], default="gstreamer")
+    parser.add_argument("--camera-gstreamer-sensor-id", type=int, default=0)
     parser.add_argument("--deadman-timeout-s", type=float, default=0.5)
     parser.add_argument("--max-command-duration-s", type=float, default=1.0)
     parser.add_argument("--max-motor-speed", type=float, default=0.35)
@@ -1035,6 +1189,7 @@ def main(argv=None):
         pass
     finally:
         bridge.stop("shutdown")
+        bridge.close()
         server.server_close()
     return 0
 

@@ -1,10 +1,15 @@
 # Hardware V0 Deployment Plan
 
-This plan gets a new operator from a clean Windows worktree to direct,
-safe Codex access to the Chasecar hardware. The first target is SSH-level
-command access that lets Codex inspect the robot, update code, sync runtime
-files, and run no-motion probes. Motion authority comes later, after the robot
-has proven power, sensors, command timeout, and lifted-wheel behavior.
+This plan gets a new operator from a clean Windows worktree to direct, safe
+Codex access to the current Chasecar hardware lane. The current lane is the
+Yahboom/JetBot Mini factory bridge robot with its onboard CSI camera. The later
+hardware-transfer lane is the Jetson Orin Nano plus Intel RealSense D415 depth
+camera target.
+
+The first target is SSH-level command access that lets Codex inspect the robot,
+update code, sync runtime files, and run no-motion probes. Motion authority
+comes later, after the robot has proven power, sensors, command timeout, and
+lifted-wheel behavior.
 
 ## Current Workspace
 
@@ -44,7 +49,8 @@ That gives us direct hardware visibility while physical motion remains locked.
 
 Bench wiring and login setup are handled in
 `docs/HARDWARE_BENCH_CONNECTION_RUNBOOK.md`. Start there when the question is
-physical power, network cabling, D415 cabling, SSH, or Tailscale.
+physical power, network cabling, CSI camera cabling, SSH, or Tailscale. D415
+depth-camera cabling belongs to the later Orin/D415 transfer lane.
 
 Operator provides:
 
@@ -99,15 +105,24 @@ Fastest next branch outcome:
 
 ## Shared Baseline
 
-The physical target is the Chasecar JetBot-derived differential-drive robot:
+The current physical target is the Chasecar JetBot-derived differential-drive
+robot:
 
-- Compute: Jetson Orin Nano 8GB.
-- Camera: Intel RealSense D415.
-- Runtime target: `robot_fidelity_orin`.
-- Inference backend: `tensorrt_int8`.
-- Command topic: `/jetbot_base_controller/cmd_vel` with `TwistStamped`.
+- Compute: factory Jetson board on the Yahboom/JetBot Mini platform.
+- Camera: onboard CSI camera exposed through NVIDIA Argus / GStreamer.
+- Safety bridge: `tools/robot_factory_bridge/chasecar_factory_bridge.py`.
+- Command surface: HTTP `/cmd_vel` and `/motors`, locked unless the bridge is
+  started with `--enable-motion`.
 - Command timeout: `0.5 s`.
 - Deadman timeout: `0.5 s`.
+
+The later hardware-transfer target remains:
+
+- Compute: Jetson Orin Nano 8GB.
+- Camera: Intel RealSense D415 depth camera.
+- Runtime target: `robot_fidelity_orin`.
+- Inference backend: `tensorrt_int8`.
+- ROS command topic: `/jetbot_base_controller/cmd_vel` with `TwistStamped`.
 - Controller update rate: `100 Hz`.
 
 Authoritative references:
@@ -233,12 +248,14 @@ Operator setup:
 - Put the robot on a stable bench.
 - Keep wheels lifted or motor power disconnected.
 - Confirm the emergency stop or power disconnect is within reach.
-- Connect the D415 and any required power/network cables.
+- Confirm the onboard CSI camera ribbon is seated and any required
+  power/network cables are connected. Connect the D415 only when working the
+  later Orin/D415 transfer lane.
 
 Evidence to collect:
 
 - Robot power source and battery or bench-supply notes.
-- Jetson Orin Nano model and OS version.
+- Jetson board model and OS version.
 - Network address and login method.
 - `tegrastats` sample for thermals and power mode.
 - Camera connection evidence from the OS.
@@ -259,30 +276,37 @@ Stop condition:
 
 - Power, thermals, login, camera enumeration, or physical wiring looks unstable.
 
-## Rung 5: Sensor-Only ROS Bring-Up
+## Rung 5: Sensor-Only Camera Bring-Up
 
-Claim: the D415 publishes usable RGB and depth data with motors inactive.
+Claim: the current onboard camera produces bridge-served RGB frames with motors
+inactive.
 
 Evidence:
 
-- ROS topic list includes D415 color and depth topics.
-- Color and depth rates are near `640x480 @ 30 Hz`.
-- One raw color frame and one depth-derived frame are captured.
+- Bridge health reports camera enabled, loaded, nonempty cached bytes, fresh
+  frame age, and acceptable FPS.
+- `camera-diagnostics` captures several JPEG frames from `/camera.jpg`.
+- One raw color frame is captured and reviewed.
 - Camera orientation is documented from the robot's forward direction.
 
 Suggested checks:
 
-```bash
-ros2 topic list
-ros2 topic hz /d415/color/image_raw
-ros2 topic hz /d415/depth/image_rect_raw
-ros2 topic echo /d415/color/camera_info --once
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start -Camera
+python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty health
+python tools/robot_factory_bridge/chasecar_bridge_client.py --pretty camera-diagnostics --frames 8 --interval-s 0.2
 ```
 
 Stop condition:
 
-- Camera topics are missing, stale, low-rate, incorrectly oriented, or unstable
+- Camera frames are missing, stale, low-rate, incorrectly oriented, or unstable
   under the current cable and power setup.
+
+Later Orin/D415 transfer evidence:
+
+- ROS topic list includes D415 color and depth topics.
+- Color and depth rates are near `640x480 @ 30 Hz`.
+- One raw color frame and one depth-derived frame are captured.
 
 ## Rung 6: Controller And Deadman Proof With Wheels Lifted
 
@@ -379,8 +403,8 @@ Evidence:
 
 Stop condition:
 
-- Camera drops, stale detections, vibration blur, poor depth, or target pose
-  instability.
+- Camera drops, stale detections, vibration blur, poor frame quality, or target
+  pose instability.
 
 ## Rung 10: Low-Energy Contact Sandbox
 
