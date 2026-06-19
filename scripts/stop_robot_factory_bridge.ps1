@@ -24,7 +24,10 @@ try {
 
 $remote = @(
     "set +e",
-    "if [ -f '$RemoteDir/bridge.pid' ]; then pid=`$(cat '$RemoteDir/bridge.pid' 2>/dev/null); if [ -n `"`$pid`" ]; then kill `"`$pid`" 2>/dev/null || true; fi; rm -f '$RemoteDir/bridge.pid'; fi",
+    "if [ -f '$RemoteDir/bridge.pid' ]; then pid=`$(cat '$RemoteDir/bridge.pid' 2>/dev/null); if [ -n `"`$pid`" ]; then pkill -TERM -P `"`$pid`" 2>/dev/null || true; kill `"`$pid`" 2>/dev/null || true; sleep 0.3; pkill -KILL -P `"`$pid`" 2>/dev/null || true; kill -KILL `"`$pid`" 2>/dev/null || true; fi; rm -f '$RemoteDir/bridge.pid'; fi",
+    "pkill -TERM -f '[g]st-launch-1.0 .*chasecar_bridge_camera_' 2>/dev/null || true",
+    "sleep 0.2",
+    "pkill -KILL -f '[g]st-launch-1.0 .*chasecar_bridge_camera_' 2>/dev/null || true",
     "python3 -c 'from jetbotmini import Robot; r=Robot(); r.stop()' 2>/dev/null || true",
     "echo ROBOT_FACTORY_BRIDGE_STOPPED=1"
 ) -join "; "

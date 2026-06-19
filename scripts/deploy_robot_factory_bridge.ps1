@@ -80,7 +80,10 @@ $cameraArg = if ($Camera) { "--camera --camera-width $CameraWidth --camera-heigh
 $startCommand = @(
     "set -e",
     "cd '$RemoteDir'",
-    "if [ -f bridge.pid ]; then old_pid=`$(cat bridge.pid 2>/dev/null || true); if [ -n `"`$old_pid`" ]; then kill `"`$old_pid`" 2>/dev/null || true; fi; rm -f bridge.pid; fi",
+    "if [ -f bridge.pid ]; then old_pid=`$(cat bridge.pid 2>/dev/null || true); if [ -n `"`$old_pid`" ]; then pkill -TERM -P `"`$old_pid`" 2>/dev/null || true; kill `"`$old_pid`" 2>/dev/null || true; sleep 0.3; pkill -KILL -P `"`$old_pid`" 2>/dev/null || true; kill -KILL `"`$old_pid`" 2>/dev/null || true; fi; rm -f bridge.pid; fi",
+    "pkill -TERM -f '[g]st-launch-1.0 .*chasecar_bridge_camera_' 2>/dev/null || true",
+    "sleep 0.2",
+    "pkill -KILL -f '[g]st-launch-1.0 .*chasecar_bridge_camera_' 2>/dev/null || true",
     "nohup python3 '$remoteScript' --host 0.0.0.0 --port $Port --deadman-timeout-s $DeadmanTimeoutS --max-command-duration-s $MaxCommandDurationS --max-motor-speed $MaxMotorSpeed --max-linear-x $MaxLinearX --max-angular-z $MaxAngularZ --turn-gain $TurnGain $motionArg $cameraArg > bridge.log 2>&1 < /dev/null & echo `$! > bridge.pid",
     "sleep 1",
     "cat bridge.pid"
