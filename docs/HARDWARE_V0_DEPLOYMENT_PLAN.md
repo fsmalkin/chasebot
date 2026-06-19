@@ -63,11 +63,13 @@ Evidence:
 Representative command:
 
 ```powershell
-python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --artifact-dir artifacts/session/<id>/locked_stack_path --command-linear-x 0 --command-angular-z 0.2
+python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --artifact-dir artifacts/session/<id>/locked_policy_path --policy-entrypoint jetbot_visual_target_turn_v0
 ```
 
-This command proves the command path. Policy promotion starts after the
-stack-owned policy entry point drives the same relay and artifact contract.
+This command captures a bridge camera frame, runs the
+`jetbot_visual_target_turn_v0` policy entry point, and proves that the policy
+decision reaches the locked bridge through the same relay and artifact
+contract.
 
 ## Codex Direct Hardware Access
 

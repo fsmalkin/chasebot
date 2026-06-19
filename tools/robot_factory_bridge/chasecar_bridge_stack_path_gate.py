@@ -18,6 +18,9 @@ import chasecar_bridge_client as bridge_client
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RUNTIME_SOURCE_PATH = "$HOME/ros2_ws/src/chasecar_runtime"
 DEFAULT_ARTIFACT_STEM = "factory_bridge_stack_path_gate"
+POLICY_FIXED_COMMAND_V0 = "fixed_command_v0"
+POLICY_JETBOT_VISUAL_TARGET_TURN_V0 = "jetbot_visual_target_turn_v0"
+POLICY_ENTRYPOINTS = (POLICY_FIXED_COMMAND_V0, POLICY_JETBOT_VISUAL_TARGET_TURN_V0)
 
 
 def utc_now() -> str:
@@ -63,10 +66,52 @@ def command_nonzero(command: dict[str, float]) -> bool:
     ) > 1.0e-6
 
 
-def runtime_payload(sequence: int, command: dict[str, float], *, enabled: bool) -> dict[str, Any]:
+def command_from_args(args: argparse.Namespace) -> dict[str, float]:
+    return {"linear_x": float(args.command_linear_x), "angular_z": float(args.command_angular_z)}
+
+
+def clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def bound_policy_command(command: dict[str, Any], args: argparse.Namespace) -> dict[str, float]:
+    return {
+        "linear_x": clamp(
+            float(command.get("linear_x", 0.0) or 0.0),
+            -float(args.max_runtime_linear_x),
+            float(args.max_runtime_linear_x),
+        ),
+        "angular_z": clamp(
+            float(command.get("angular_z", 0.0) or 0.0),
+            -float(args.max_runtime_angular_z),
+            float(args.max_runtime_angular_z),
+        ),
+    }
+
+
+def command_bounds(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "max_runtime_linear_x": float(args.max_runtime_linear_x),
+        "max_runtime_angular_z": float(args.max_runtime_angular_z),
+        "max_bridge_linear_x": float(args.max_bridge_linear_x),
+        "max_bridge_angular_z": float(args.max_bridge_angular_z),
+        "linear_scale": float(args.linear_scale),
+        "angular_scale": float(args.angular_scale),
+        "command_duration_s": float(args.command_duration_s),
+        "post_rate_hz": float(args.post_rate_hz),
+    }
+
+
+def runtime_payload(
+    sequence: int,
+    command: dict[str, float],
+    *,
+    enabled: bool,
+    policy_decision: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if not enabled:
         command = {"linear_x": 0.0, "angular_z": 0.0}
-    return {
+    payload = {
         "manual_drive": {
             "enabled": bool(enabled),
             "sequence": int(sequence),
@@ -77,6 +122,133 @@ def runtime_payload(sequence: int, command: dict[str, float], *, enabled: bool) 
             "source": "chasecar_bridge_stack_path_gate",
         }
     }
+    if policy_decision:
+        payload["policy"] = {
+            "entrypoint": policy_decision.get("entrypoint", ""),
+            "decision_id": policy_decision.get("decision_id", ""),
+            "stop_reason": policy_decision.get("stop_reason", ""),
+            "command_bounds": policy_decision.get("command_bounds", {}),
+        }
+    return payload
+
+
+def build_visual_policy_args(args: argparse.Namespace) -> argparse.Namespace:
+    argv = [
+        "--mode",
+        "visual-advisor",
+        "--target-profile",
+        args.target_profile,
+        "--target-min-luma",
+        str(args.target_min_luma),
+        "--target-min-saturation",
+        str(args.target_min_saturation),
+        "--target-min-value",
+        str(args.target_min_value),
+        "--target-min-area-ratio",
+        str(args.target_min_area_ratio),
+        "--target-max-area-ratio",
+        str(args.target_max_area_ratio),
+        "--target-max-bbox-width-ratio",
+        str(args.target_max_bbox_width_ratio),
+        "--target-max-bbox-height-ratio",
+        str(args.target_max_bbox_height_ratio),
+        "--target-border-margin-ratio",
+        str(args.target_border_margin_ratio),
+        "--target-min-bbox-aspect-ratio",
+        str(args.target_min_bbox_aspect_ratio),
+        "--target-max-bbox-aspect-ratio",
+        str(args.target_max_bbox_aspect_ratio),
+        "--visual-center-deadband",
+        str(args.visual_center_deadband),
+        "--visual-turn-sign",
+        str(args.visual_turn_sign),
+        "--visual-angular-gain",
+        str(args.visual_angular_gain),
+        "--max-visual-angular-z",
+        str(args.max_policy_angular_z),
+        "--visual-command-duration-s",
+        str(args.command_duration_s),
+        "--visual-forward-x",
+        "0",
+        "--max-visual-linear-x",
+        "0",
+    ]
+    return behavior_runner.build_parser().parse_args(argv)
+
+
+def run_visual_target_turn_policy(
+    client: bridge_client.BridgeClient,
+    args: argparse.Namespace,
+    artifact_dir: Path,
+) -> dict[str, Any]:
+    ensure_dir(artifact_dir)
+    frame_path = artifact_dir / "policy_observation.jpg"
+    annotated_path = artifact_dir / "policy_observation_annotated.jpg"
+    snapshot = save_snapshot(client, frame_path, args)
+    behavior_args = build_visual_policy_args(args)
+    analysis = behavior_runner.analyze_target_image(frame_path, behavior_args, annotated_path=annotated_path)
+    raw_command = analysis.get("recommendation") if isinstance(analysis.get("recommendation"), dict) else {}
+    command = bound_policy_command(raw_command, args)
+    detected = bool(analysis.get("detected", False))
+    issues = list(analysis.get("issues", [])) if isinstance(analysis.get("issues"), list) else []
+    stop_reason = "target_detected_turn_command" if detected and command_nonzero(command) else "no_bounded_motion_command"
+    if not detected:
+        stop_reason = "target_not_detected"
+    if not detected and "target_not_detected" not in issues:
+        issues.append("target_not_detected")
+    if detected and not command_nonzero(command):
+        issues.append("policy_command_zero")
+    decision = {
+        "entrypoint": POLICY_JETBOT_VISUAL_TARGET_TURN_V0,
+        "decision_id": "%s:%s" % (POLICY_JETBOT_VISUAL_TARGET_TURN_V0, utc_stamp()),
+        "pass": bool(not issues and command_nonzero(command)),
+        "issues": issues,
+        "stop_reason": stop_reason,
+        "observation": {
+            "snapshot": snapshot,
+            "target_profile": args.target_profile,
+            "detected": detected,
+            "center_error": analysis.get("center_error"),
+            "area_ratio": analysis.get("area_ratio"),
+            "bbox": analysis.get("bbox"),
+            "annotated_image_path": str(annotated_path),
+        },
+        "raw_recommendation": raw_command,
+        "command": command,
+        "command_bounds": command_bounds(args),
+        "analysis": analysis,
+    }
+    write_json(artifact_dir / "policy_decision.json", decision)
+    return decision
+
+
+def run_policy_entrypoint(
+    client: bridge_client.BridgeClient,
+    args: argparse.Namespace,
+    artifact_dir: Path,
+) -> dict[str, Any]:
+    ensure_dir(artifact_dir)
+    if args.policy_entrypoint == POLICY_FIXED_COMMAND_V0:
+        command = bound_policy_command(command_from_args(args), args)
+        issues: list[str] = []
+        if not command_nonzero(command):
+            issues.append("policy_command_zero")
+        decision = {
+            "entrypoint": POLICY_FIXED_COMMAND_V0,
+            "decision_id": "%s:%s" % (POLICY_FIXED_COMMAND_V0, utc_stamp()),
+            "pass": bool(not issues),
+            "issues": issues,
+            "stop_reason": "fixed_command_loaded" if not issues else "fixed_command_invalid",
+            "observation": {"source": "operator_cli"},
+            "raw_recommendation": command_from_args(args),
+            "command": command,
+            "command_bounds": command_bounds(args),
+        }
+        write_json(artifact_dir / "policy_decision.json", decision)
+        return decision
+    if args.policy_entrypoint == POLICY_JETBOT_VISUAL_TARGET_TURN_V0:
+        return run_visual_target_turn_policy(client, args, artifact_dir)
+    raise RuntimeError("unsupported_policy_entrypoint:%s" % args.policy_entrypoint)
 
 
 def deploy_bridge(args: argparse.Namespace, artifact_dir: Path, *, enable_motion: bool) -> dict[str, Any]:
@@ -336,6 +508,9 @@ def compute_pass(summary: dict[str, Any]) -> bool:
     command = summary.get("command") if isinstance(summary.get("command"), dict) else {}
     if not command_nonzero(command):
         return False
+    policy_decision = summary.get("policy_decision") if isinstance(summary.get("policy_decision"), dict) else {}
+    if not bool(policy_decision.get("pass", False)):
+        return False
     counters = relay_counters(summary.get("relay_summary", {}))
     if int(counters.get("messages_received", 0) or 0) <= 0:
         return False
@@ -358,23 +533,26 @@ def compute_pass(summary: dict[str, Any]) -> bool:
 
 def validate_args(args: argparse.Namespace) -> list[str]:
     issues: list[str] = []
-    command = {"linear_x": float(args.command_linear_x), "angular_z": float(args.command_angular_z)}
-    if not command_nonzero(command):
-        issues.append("nonzero_command_required")
+    if args.policy_entrypoint == POLICY_FIXED_COMMAND_V0:
+        command = command_from_args(args)
+        if not command_nonzero(command):
+            issues.append("nonzero_command_required")
+        if abs(float(args.command_linear_x)) > float(args.max_runtime_linear_x):
+            issues.append("command_linear_x_above_runtime_limit")
+        if abs(float(args.command_angular_z)) > float(args.max_runtime_angular_z):
+            issues.append("command_angular_z_above_runtime_limit")
     if args.execute_motion and not args.confirm_operator_ready:
         issues.append("operator_ready_confirmation_required")
-    if abs(float(args.command_linear_x)) > float(args.max_runtime_linear_x):
-        issues.append("command_linear_x_above_runtime_limit")
-    if abs(float(args.command_angular_z)) > float(args.max_runtime_angular_z):
-        issues.append("command_angular_z_above_runtime_limit")
     if float(args.max_bridge_linear_x) > 0.36:
         issues.append("max_bridge_linear_x_above_conservative_limit")
     if float(args.max_bridge_angular_z) > 0.8:
         issues.append("max_bridge_angular_z_above_locked_gate_limit")
-    if args.execute_motion and abs(float(args.command_linear_x)) > 1.0e-6:
+    if args.execute_motion and args.policy_entrypoint == POLICY_FIXED_COMMAND_V0 and abs(float(args.command_linear_x)) > 1.0e-6:
         issues.append("live_stack_motion_requires_turn_only")
     if float(args.max_motor_speed) > 1.0:
         issues.append("max_motor_speed_above_1")
+    if float(args.max_policy_angular_z) > float(args.max_runtime_angular_z):
+        issues.append("max_policy_angular_z_above_runtime_limit")
     return issues
 
 
@@ -451,7 +629,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "type": "factory_bridge_stack_path_gate",
         "artifact_dir": str(artifact_root),
         "base_url": args.base_url,
-        "command": command,
+        "policy_entrypoint": args.policy_entrypoint,
+        "command": command if args.policy_entrypoint == POLICY_FIXED_COMMAND_V0 else {},
         "execute_motion": bool(args.execute_motion),
         "issues": validate_args(args),
         "pass": False,
@@ -475,7 +654,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if not camera_ready["pass"]:
             summary["issues"].append("camera_readiness_gate_not_pass")
             return summary
-        write_json(runtime_path, runtime_payload(1, command, enabled=True))
+        policy_decision = run_policy_entrypoint(client, args, artifact_root / "policy")
+        summary["policy_decision"] = policy_decision
+        if not bool(policy_decision.get("pass", False)):
+            summary["issues"].append("policy_decision_not_pass")
+            return summary
+        command = dict(policy_decision.get("command", {}))
+        summary["command"] = command
+        write_json(runtime_path, runtime_payload(1, command, enabled=True, policy_decision=policy_decision))
         relay_summary = run_relay_phase(args, relay_dir, runtime_path)
         summary["relay_summary"] = relay_summary
         locked_ok = compute_pass(
@@ -492,7 +678,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     except Exception as exc:
         summary["issues"].append("runner_exception:%r" % (exc,))
     finally:
-        write_json(runtime_path, runtime_payload(99, command, enabled=False))
+        write_json(runtime_path, runtime_payload(99, command, enabled=False, policy_decision=summary.get("policy_decision")))
         try:
             deploy_bridge_locked(args, artifact_root / "final_restore_locked")
         except Exception as exc:
@@ -520,6 +706,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pretty", action="store_true")
     parser.add_argument("--execute-motion", action="store_true")
     parser.add_argument("--confirm-operator-ready", action="store_true")
+    parser.add_argument("--policy-entrypoint", choices=POLICY_ENTRYPOINTS, default=POLICY_JETBOT_VISUAL_TARGET_TURN_V0)
 
     parser.add_argument("--distro", default="Ubuntu-24.04")
     parser.add_argument("--ros-distro", default="jazzy")
@@ -558,6 +745,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-visual-shift-px", type=float, default=2.0)
     parser.add_argument("--min-visual-shift-score-gain", type=float, default=0.03)
     parser.add_argument("--max-static-visual-similarity", type=float, default=0.975)
+    parser.add_argument("--target-profile", choices=behavior_runner.DEFAULT_VISUAL_SCAN_PROFILES, default="any-saturated")
+    parser.add_argument("--target-min-luma", type=float, default=180.0)
+    parser.add_argument("--target-min-saturation", type=float, default=0.25)
+    parser.add_argument("--target-min-value", type=float, default=0.20)
+    parser.add_argument("--target-min-area-ratio", type=float, default=0.05)
+    parser.add_argument("--target-max-area-ratio", type=float, default=0.45)
+    parser.add_argument("--target-max-bbox-width-ratio", type=float, default=1.0)
+    parser.add_argument("--target-max-bbox-height-ratio", type=float, default=1.0)
+    parser.add_argument("--target-border-margin-ratio", type=float, default=0.0)
+    parser.add_argument("--target-min-bbox-aspect-ratio", type=float, default=0.0)
+    parser.add_argument("--target-max-bbox-aspect-ratio", type=float, default=0.0)
+    parser.add_argument("--visual-center-deadband", type=float, default=0.16)
+    parser.add_argument("--visual-turn-sign", type=float, default=1.0)
+    parser.add_argument("--visual-angular-gain", type=float, default=4.0)
+    parser.add_argument("--max-policy-angular-z", type=float, default=0.4)
     return parser
 
 

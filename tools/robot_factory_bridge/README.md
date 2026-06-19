@@ -87,15 +87,15 @@ Basic flow:
 9. Prove the offboard stack-through-bridge command path while motion stays locked:
 
    ```powershell
-   python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_locked --command-linear-x 0 --command-angular-z 0.2
+   python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_locked --policy-entrypoint jetbot_visual_target_turn_v0
    ```
 
-   The gate writes a Chasecar-style runtime command, publishes it through ROS `/cmd_vel`, forwards it through the factory bridge relay, and requires the locked bridge to refuse motion with HTTP `423`. A passing run proves the workstation stack path reaches the robot bridge without moving the robot.
+   The gate captures a bridge camera frame, runs the `jetbot_visual_target_turn_v0` policy entry point, writes the policy command to the Chasecar runtime handoff, publishes it through ROS `/cmd_vel`, forwards it through the factory bridge relay, and requires the locked bridge to refuse motion with HTTP `423`. A passing run proves the workstation policy path reaches the robot bridge without moving the robot.
 
 10. Run one bounded live stack-path motion proof after the locked gate passes:
 
    ```powershell
-   python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_live --execute-motion --confirm-operator-ready --command-linear-x 0 --command-angular-z 0.2 --max-bridge-linear-x 0 --max-bridge-angular-z 0.8 --max-motor-speed 0.7
+   python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_live --policy-entrypoint jetbot_visual_target_turn_v0 --execute-motion --confirm-operator-ready --max-bridge-linear-x 0 --max-bridge-angular-z 0.8 --max-motor-speed 0.7
    ```
 
    The live gate uses the same runtime JSON, ROS `/cmd_vel`, relay, and bridge path. It enables motion only for the bounded turn-only slice, records before/after camera evidence, and restores locked bridge health before returning success.

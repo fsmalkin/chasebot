@@ -47,10 +47,12 @@ understands:
    motion is explicitly enabled.
 5. Every run restores the bridge to locked mode and records final health.
 
-The color-target smoke runner is a command-path probe. It can prove camera,
-runtime JSON, ROS `cmd_vel`, relay, bridge refusal, bridge command acceptance,
-and relock behavior. Policy promotion requires the stack-owned perception and
-decision surfaces to drive the same relay path.
+The stack path gate now supports the first policy entry point:
+`jetbot_visual_target_turn_v0`. It captures a bridge camera frame, runs the
+Chasecar visual target analyzer, records the observation and decision, emits a
+bounded turn command, and sends that command through the same runtime JSON, ROS
+`cmd_vel`, relay, bridge, and relock path. The fixed-command mode remains a
+diagnostic fallback named `fixed_command_v0`.
 
 ## Gate 1: Locked Stack-To-Bridge Command Path
 
@@ -60,14 +62,15 @@ them to the robot bridge while the bridge remains locked.
 Representative command:
 
 ```powershell
-python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --artifact-dir artifacts/session/<id>/locked_stack_path --command-linear-x 0 --command-angular-z 0.2
+python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --artifact-dir artifacts/session/<id>/locked_policy_path --policy-entrypoint jetbot_visual_target_turn_v0
 ```
 
 Pass criteria:
 
 - Bridge health is reachable and locked.
 - Camera readiness passes before relay starts.
-- Target perception or stack adapter emits a bounded command.
+- `jetbot_visual_target_turn_v0` records observation, decision, command bounds,
+  and stop reason.
 - The ROS relay sees the command.
 - The bridge refuses nonzero commands with HTTP `423` while locked.
 - Final bridge health is locked, motors are zero, and camera frames are live.
@@ -96,7 +99,7 @@ produces the command that reaches the bridge.
 
 Pass criteria:
 
-- The artifact names the policy entry point and config.
+- The artifact names `jetbot_visual_target_turn_v0` and its config.
 - The policy records its observation, chosen command, command bounds, and stop
   reason.
 - The same relay and relock evidence from Gate 1 and Gate 2 is present.
