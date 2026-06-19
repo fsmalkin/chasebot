@@ -6,10 +6,14 @@ Yahboom/JetBot Mini factory bridge robot with its onboard CSI camera. The later
 hardware-transfer lane is the Jetson Orin Nano plus Intel RealSense D415 depth
 camera target.
 
-The first target is SSH-level command access that lets Codex inspect the robot,
-update code, sync runtime files, and run no-motion probes. Motion authority
-comes later, after the robot has proven power, sensors, command timeout, and
-lifted-wheel behavior.
+The current acceleration target is stack-through-bridge operation: run the
+Chasecar stack offboard, route its bounded velocity output through the factory
+bridge, prove the locked no-motion command path, and then execute tiny live
+motion only through the same adapter. Direct SSH access remains useful for
+robot inspection and future onboard install work.
+
+Detailed stack-through-bridge gates live in
+`docs/HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md`.
 
 ## Current Workspace
 
@@ -41,7 +45,31 @@ proves the claim for that rung. If the robot moves unexpectedly, loses command
 timeout behavior, overheats, drops camera frames, or publishes confusing odom,
 stop the run and write the failure down before changing code.
 
-## Fast Track: Codex Direct Hardware Access
+## Fast Track: Stack Through The Factory Bridge
+
+Fastest useful milestone: Codex can run the offboard Chasecar command path into
+the factory bridge while the robot remains locked. This proves the adapter path
+from host/runtime code to ROS `cmd_vel` to bridge HTTP without spending time on
+an onboard install first.
+
+Evidence:
+
+- Bridge health reports `motion_enabled=false`.
+- Camera readiness passes with fresh onboard CSI frames.
+- The offboard command path publishes bounded `linear_x` / `angular_z`.
+- The relay records the command and expected locked refusals.
+- Final health is locked, both motors are `0.0`, and camera frames are live.
+
+Representative command:
+
+```powershell
+python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --artifact-dir artifacts/session/<id>/locked_stack_path --command-linear-x 0 --command-angular-z 0.2
+```
+
+This command proves the command path. Policy promotion starts after the
+stack-owned policy entry point drives the same relay and artifact contract.
+
+## Codex Direct Hardware Access
 
 Fastest useful milestone: Codex can run no-motion commands on the robot through
 SSH, produce a preflight artifact, and identify the repo/runtime path to update.
@@ -522,7 +550,7 @@ Stop conditions still open:
 
 ## Next Safe Action
 
-Start with Rung 0 and Rung 1 from this worktree. After host preflight is green,
-sync the runtime workspace in Rung 2. Connect the robot only after the sim gate
-or a deliberate operator decision says the software baseline is clear enough for
-bench-only inventory.
+Run the stack-through-bridge locked command-path gate from this worktree. If it
+passes, advance to the bounded live stack-motion gate with the same relay path
+and final relock checks. Use the direct-access ladder when robot-side inspection
+or onboard install work becomes the active blocker.

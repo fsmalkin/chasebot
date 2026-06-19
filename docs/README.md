@@ -5,6 +5,7 @@
 ### Operations
 - [HARDWARE_FIRST_BOOT_STEP_CARD.md](HARDWARE_FIRST_BOOT_STEP_CARD.md) - Live one-step bench card for first Jetson login and SSH handoff
 - [HARDWARE_V0_DEPLOYMENT_PLAN.md](HARDWARE_V0_DEPLOYMENT_PLAN.md) - Beginner-friendly hardware deployment and direct-access ladder
+- [HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md](HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md) - Offboard Chasecar stack through the JetBot factory bridge
 - [HARDWARE_BENCH_CONNECTION_RUNBOOK.md](HARDWARE_BENCH_CONNECTION_RUNBOOK.md) - Granular Jetson, D415, network, SSH, and Tailscale bench setup
 - [ACTIVE_WORKFLOW.md](ACTIVE_WORKFLOW.md) — Canonical bring-up, UAT execution, and GUI rehearsal sequencing
 - [FIRST_UAT_RUNBOOK.md](FIRST_UAT_RUNBOOK.md) — First operator UAT procedure and triage
@@ -42,4 +43,4 @@
 
 ## Archive
 
-Historical docs from the 2025 development cycle are in [archive/](archive/). These cover the original ROS Humble stack, pre-Docker workflows, and early vision/nav integration work. They are preserved for reference but do not reflect the current system.
+Use [archive/](archive/) for historical 2025 docs covering the original ROS Humble stack, pre-Docker workflows, and early vision/nav integration work.
