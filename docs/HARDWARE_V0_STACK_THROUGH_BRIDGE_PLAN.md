@@ -66,6 +66,13 @@ post-step relock and health check. The loop exits on target-too-close, stale
 camera, command mismatch, unsafe bridge state, or visual evidence that conflicts
 with the bridge telemetry.
 
+Live closed-loop runs also emit a progress scorecard. The scorecard compares
+the target observation after each bounded pulse with the previous observation.
+It passes when the target area increases, the centering error improves, or the
+target remains centered without meaningful area loss. It fails on target loss,
+stale camera, meaningful area regression, centering regression, unsafe bridge
+state, or command evidence that contradicts the bridge telemetry.
+
 ## Gate 1: Locked Stack-To-Bridge Command Path
 
 Claim: the offboard stack path can produce bounded velocity commands and route
@@ -151,9 +158,33 @@ Pass criteria:
 - Target-too-close becomes a safe terminal stop only after the required minimum
   completed step count.
 
+## Gate 5: Physical Progress Scorecard
+
+Claim: a bounded live loop can prove visual approach progress before the project
+allows contact-rich fetch tests.
+
+Representative live command:
+
+```powershell
+python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/<id>/closed_loop_progress --steps 3 --step-settle-s 1.0 --target-min-area-ratio 0.008 --execute-motion --confirm-operator-ready
+```
+
+Pass criteria:
+
+- `progress_scorecard.json` and `progress_scorecard.md` exist beside
+  `closed_loop_summary.json`.
+- Every scored live transition names area-ratio delta, absolute center-error
+  delta, evidence labels, and any issues.
+- The final post-loop observation scores the last live pulse.
+- The live run fails when the scorecard reports target loss, stale camera,
+  meaningful area regression, centering regression, visual contradiction, or an
+  unsafe final bridge state.
+- Final independent bridge health is locked, both motors are zero, and camera
+  frames are fresh.
+
 ## Stop Conditions
 
 Stop and report when the bridge is unreachable, camera frames are stale, command
 caps are missing, the relay produces unbounded commands, motion occurs while the
 bridge is locked, final health is unlocked, either motor remains nonzero, or
-the visual evidence conflicts with bridge telemetry.
+the visual evidence or progress scorecard conflicts with bridge telemetry.

@@ -13,7 +13,14 @@ import chasecar_bridge_stack_closed_loop_runner as runner  # noqa: E402
 import chasecar_bridge_stack_path_gate as gate  # noqa: E402
 
 
-def passing_gate_summary(artifact_dir: str) -> dict:
+def passing_gate_summary(
+    artifact_dir: str,
+    *,
+    area_ratio: float = 0.10,
+    center_error: float = 0.01,
+    motion_pass: bool = True,
+    visual_motion: bool = True,
+) -> dict:
     command = {"linear_x": 0.025, "angular_z": 0.03}
     relay = {
         "relay": {
@@ -37,20 +44,21 @@ def passing_gate_summary(artifact_dir: str) -> dict:
                 "target_profile": "blue",
                 "detected": True,
                 "centered": True,
-                "center_error": 0.01,
-                "area_ratio": 0.10,
+                "center_error": center_error,
+                "area_ratio": area_ratio,
                 "annotated_image_path": "annotated.jpg",
             },
             "stack_policy": {"stage": "plan", "preferred_intent": "plan_to_target"},
         },
         "relay_summary": relay,
         "motion_proof": {
-            "pass": True,
+            "pass": motion_pass,
             "relay_counters": {"cmd_vel_posts": 8},
             "nonzero_success_event_count": 8,
             "relay_summary": relay,
             "visual_motion": {
-                "movement_detected": True,
+                "movement_detected": visual_motion,
+                "issues": [] if visual_motion else ["visual_motion_not_confirmed"],
                 "contact_sheet_path": "before_after.jpg",
             },
         },
@@ -62,6 +70,23 @@ def passing_gate_summary(artifact_dir: str) -> dict:
             }
         },
         "final_camera_readiness_gate": {"pass": True},
+    }
+
+
+def final_progress_observation(*, area_ratio: float = 0.12, center_error: float = 0.0) -> dict:
+    return {
+        "pass": True,
+        "issues": [],
+        "policy_decision": {
+            "observation": {
+                "target_profile": "blue",
+                "detected": True,
+                "centered": True,
+                "center_error": center_error,
+                "area_ratio": area_ratio,
+                "annotated_image_path": "final_annotated.jpg",
+            }
+        },
     }
 
 
@@ -86,17 +111,24 @@ def test_parser_defaults_to_stack_adapter_blue_loop():
     assert args.target_profile == "blue"
     assert args.steps == 2
     assert args.stack_forward_stop_area_ratio == 0.20
+    assert args.require_progress_scorecard is True
+    assert args.score_final_progress_observation is True
 
 
 def test_closed_loop_runs_two_steps_and_writes_summary(tmp_path, monkeypatch):
     calls = []
+    gate_summaries = [
+        passing_gate_summary(str(tmp_path / "step_01"), area_ratio=0.10, center_error=0.02),
+        passing_gate_summary(str(tmp_path / "step_02"), area_ratio=0.11, center_error=0.01),
+    ]
 
     def fake_gate_run(args):
         calls.append(Path(args.artifact_dir).name)
-        return passing_gate_summary(str(args.artifact_dir))
+        return gate_summaries.pop(0)
 
     monkeypatch.setattr(runner.stack_gate, "run", fake_gate_run)
     monkeypatch.setattr(runner.bridge_client, "BridgeClient", FakeBridgeClient)
+    monkeypatch.setattr(runner, "capture_final_progress_observation", lambda _args, _root: final_progress_observation())
 
     args = runner.parse_args(["--artifact-dir", str(tmp_path), "--execute-motion", "--confirm-operator-ready"])
     summary = runner.run(args)
@@ -105,7 +137,11 @@ def test_closed_loop_runs_two_steps_and_writes_summary(tmp_path, monkeypatch):
     assert summary["completed_steps"] == 2
     assert calls == ["step_01", "step_02"]
     assert (tmp_path / "closed_loop_summary.json").exists()
+    assert (tmp_path / "progress_scorecard.json").exists()
+    assert (tmp_path / "progress_scorecard.md").exists()
     assert summary["steps"][0]["policy_preferred_intent"] == "plan_to_target"
+    assert summary["progress_scorecard"]["pass"] is True
+    assert len(summary["progress_scorecard"]["transitions"]) == 2
 
 
 def test_target_too_close_is_safe_terminal_after_completed_step(tmp_path, monkeypatch):
@@ -188,6 +224,60 @@ def test_target_too_close_skips_live_motion_requirement(tmp_path, monkeypatch):
     assert summary["pass"] is True
     assert summary["terminal_reason"] == "target_too_close"
     assert summary["steps"][0]["issues"] == []
+
+
+def test_progress_scorecard_failure_fails_live_loop(tmp_path, monkeypatch):
+    gate_summaries = [
+        passing_gate_summary(str(tmp_path / "step_01"), area_ratio=0.12, center_error=0.01),
+        passing_gate_summary(str(tmp_path / "step_02"), area_ratio=0.06, center_error=0.18),
+    ]
+
+    monkeypatch.setattr(runner.stack_gate, "run", lambda _args: gate_summaries.pop(0))
+    monkeypatch.setattr(runner.bridge_client, "BridgeClient", FakeBridgeClient)
+    monkeypatch.setattr(
+        runner,
+        "capture_final_progress_observation",
+        lambda _args, _root: final_progress_observation(area_ratio=0.05, center_error=0.18),
+    )
+
+    args = runner.parse_args(["--artifact-dir", str(tmp_path), "--execute-motion", "--confirm-operator-ready"])
+    summary = runner.run(args)
+
+    assert summary["pass"] is False
+    assert "progress_scorecard_failed" in summary["issues"]
+    assert summary["progress_scorecard"]["pass"] is False
+    assert any("target_area_regressed" in issue for issue in summary["progress_scorecard"]["issues"])
+
+
+def test_progress_scorecard_can_resolve_pending_visual_motion(tmp_path, monkeypatch):
+    gate_summaries = [
+        passing_gate_summary(
+            str(tmp_path / "step_01"),
+            area_ratio=0.10,
+            center_error=0.02,
+            motion_pass=False,
+            visual_motion=False,
+        ),
+        passing_gate_summary(
+            str(tmp_path / "step_02"),
+            area_ratio=0.12,
+            center_error=0.01,
+            motion_pass=False,
+            visual_motion=False,
+        ),
+    ]
+
+    monkeypatch.setattr(runner.stack_gate, "run", lambda _args: gate_summaries.pop(0))
+    monkeypatch.setattr(runner.bridge_client, "BridgeClient", FakeBridgeClient)
+    monkeypatch.setattr(runner, "capture_final_progress_observation", lambda _args, _root: final_progress_observation())
+
+    args = runner.parse_args(["--artifact-dir", str(tmp_path), "--execute-motion", "--confirm-operator-ready"])
+    summary = runner.run(args)
+
+    assert summary["pass"] is True
+    assert summary["completed_steps"] == 2
+    assert summary["steps"][0]["motion_proof_pending_progress_scorecard"] is True
+    assert summary["progress_scorecard"]["pass"] is True
 
 
 def test_command_mismatch_fails_loop(tmp_path, monkeypatch):

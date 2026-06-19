@@ -86,6 +86,17 @@ live run adds `--execute-motion --confirm-operator-ready` after the locked run
 passes. The runner stops on target-too-close, stale camera, command mismatch,
 unsafe bridge state, or visual evidence that conflicts with telemetry.
 
+Progress-scorecard rung:
+
+```powershell
+python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/<id>/closed_loop_progress --steps 3 --step-settle-s 1.0 --target-min-area-ratio 0.008 --execute-motion --confirm-operator-ready
+```
+
+The scorecard compares target area and centering across live steps, captures a
+final post-loop observation for the last pulse, and fails the run when the visual
+evidence shows target loss, meaningful regression, stale camera, visual
+contradiction, or unsafe final bridge state.
+
 ## Codex Direct Hardware Access
 
 Fastest useful milestone: Codex can run no-motion commands on the robot through
@@ -567,7 +578,6 @@ Stop conditions still open:
 
 ## Next Safe Action
 
-Run the stack-through-bridge closed-loop locked gate from this worktree. If it
-passes, advance to the bounded live closed-loop gate with the same relay path
-and final relock checks. Use the direct-access ladder when robot-side inspection
-or onboard install work becomes the active blocker.
+Run the stack-through-bridge progress-scorecard gate from this worktree after
+the closed-loop locked and live gates pass. Use the direct-access ladder when
+robot-side inspection or onboard install work becomes the active blocker.
