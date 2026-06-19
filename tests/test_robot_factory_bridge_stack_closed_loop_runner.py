@@ -113,6 +113,9 @@ def test_parser_defaults_to_stack_adapter_blue_loop():
     assert args.stack_forward_stop_area_ratio == 0.20
     assert args.require_progress_scorecard is True
     assert args.score_final_progress_observation is True
+    assert args.require_nav_target_success is False
+    assert args.nav_target_success_area_ratio == 0.0
+    assert args.step_retries == 1
 
 
 def test_real_stack_boot_report_is_written_for_dry_run(tmp_path):
@@ -154,10 +157,102 @@ def test_closed_loop_runs_two_steps_and_writes_summary(tmp_path, monkeypatch):
     assert (tmp_path / "closed_loop_summary.json").exists()
     assert (tmp_path / "progress_scorecard.json").exists()
     assert (tmp_path / "progress_scorecard.md").exists()
+    assert (tmp_path / "nav_target_success.json").exists()
+    assert (tmp_path / "nav_target_success.md").exists()
     assert (tmp_path / "real_stack_boot_report.json").exists()
     assert summary["steps"][0]["policy_preferred_intent"] == "plan_to_target"
     assert summary["progress_scorecard"]["pass"] is True
     assert len(summary["progress_scorecard"]["transitions"]) == 2
+
+
+def test_closed_loop_retries_safe_policy_timeout(tmp_path, monkeypatch):
+    calls = []
+    timeout_summary = {
+        "artifact_dir": str(tmp_path / "step_01"),
+        "pass": False,
+        "issues": ["runner_exception:TimeoutError('timed out')"],
+        "policy_entrypoint": gate.POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0,
+        "command": {},
+        "final_locked_health": {
+            "response": {
+                "motion_enabled": False,
+                "left_motor": 0.0,
+                "right_motor": 0.0,
+            }
+        },
+        "final_camera_readiness_gate": {"pass": True},
+    }
+    gate_summaries = [
+        timeout_summary,
+        passing_gate_summary(str(tmp_path / "step_01_retry_01"), area_ratio=0.10, center_error=0.02),
+    ]
+
+    def fake_gate_run(args):
+        calls.append(Path(args.artifact_dir).name)
+        return gate_summaries.pop(0)
+
+    monkeypatch.setattr(runner.stack_gate, "run", fake_gate_run)
+    monkeypatch.setattr(runner.bridge_client, "BridgeClient", FakeBridgeClient)
+    monkeypatch.setattr(runner, "capture_final_progress_observation", lambda _args, _root: final_progress_observation())
+
+    args = runner.parse_args(
+        [
+            "--artifact-dir",
+            str(tmp_path),
+            "--steps",
+            "1",
+            "--execute-motion",
+            "--confirm-operator-ready",
+        ]
+    )
+    summary = runner.run(args)
+
+    assert summary["pass"] is True
+    assert calls == ["step_01", "step_01_retry_01"]
+    assert summary["steps"][0]["artifact_dir"].endswith("step_01_retry_01")
+    assert summary["steps"][0]["attempts"][0]["retry_reason"] == "policy_observation_timeout"
+    assert summary["steps"][0]["attempts"][0]["final_safe"] is True
+    assert summary["completed_steps"] == 1
+
+
+def test_closed_loop_retries_safe_motion_camera_timeout(tmp_path, monkeypatch):
+    calls = []
+    motion_timeout = passing_gate_summary(str(tmp_path / "step_01"), area_ratio=0.10, center_error=0.02)
+    motion_timeout["pass"] = False
+    motion_timeout["motion_proof"] = {
+        "pass": False,
+        "issues": ["motion_camera_readiness_gate_not_pass"],
+        "visual_motion": {"movement_detected": False, "issues": ["visual_motion_not_confirmed"]},
+    }
+    gate_summaries = [
+        motion_timeout,
+        passing_gate_summary(str(tmp_path / "step_01_retry_01"), area_ratio=0.11, center_error=0.01),
+    ]
+
+    def fake_gate_run(args):
+        calls.append(Path(args.artifact_dir).name)
+        return gate_summaries.pop(0)
+
+    monkeypatch.setattr(runner.stack_gate, "run", fake_gate_run)
+    monkeypatch.setattr(runner.bridge_client, "BridgeClient", FakeBridgeClient)
+    monkeypatch.setattr(runner, "capture_final_progress_observation", lambda _args, _root: final_progress_observation())
+
+    args = runner.parse_args(
+        [
+            "--artifact-dir",
+            str(tmp_path),
+            "--steps",
+            "1",
+            "--execute-motion",
+            "--confirm-operator-ready",
+        ]
+    )
+    summary = runner.run(args)
+
+    assert summary["pass"] is True
+    assert calls == ["step_01", "step_01_retry_01"]
+    assert summary["steps"][0]["attempts"][0]["retry_reason"] == "motion_camera_readiness_timeout"
+    assert "live_relay_command_mismatch" not in summary["steps"][0]["attempts"][0]["issues"]
 
 
 def test_target_too_close_is_safe_terminal_after_completed_step(tmp_path, monkeypatch):
@@ -240,6 +335,174 @@ def test_target_too_close_skips_live_motion_requirement(tmp_path, monkeypatch):
     assert summary["pass"] is True
     assert summary["terminal_reason"] == "target_too_close"
     assert summary["steps"][0]["issues"] == []
+
+
+def test_nav_target_success_required_passes_from_final_observation(tmp_path, monkeypatch):
+    gate_summaries = [
+        passing_gate_summary(str(tmp_path / "step_01"), area_ratio=0.10, center_error=0.02),
+        passing_gate_summary(str(tmp_path / "step_02"), area_ratio=0.14, center_error=0.01),
+    ]
+
+    monkeypatch.setattr(runner.stack_gate, "run", lambda _args: gate_summaries.pop(0))
+    monkeypatch.setattr(runner.bridge_client, "BridgeClient", FakeBridgeClient)
+    monkeypatch.setattr(
+        runner,
+        "capture_final_progress_observation",
+        lambda _args, _root: final_progress_observation(area_ratio=0.22, center_error=0.0),
+    )
+
+    args = runner.parse_args(
+        [
+            "--artifact-dir",
+            str(tmp_path),
+            "--execute-motion",
+            "--confirm-operator-ready",
+            "--require-nav-target-success",
+        ]
+    )
+    summary = runner.run(args)
+
+    assert summary["pass"] is True
+    assert summary["nav_target_success"]["pass"] is True
+    assert "target_area_success_threshold_met" in summary["nav_target_success"]["evidence"]
+
+
+def test_nav_target_success_required_fails_without_target_reached(tmp_path, monkeypatch):
+    gate_summaries = [
+        passing_gate_summary(str(tmp_path / "step_01"), area_ratio=0.10, center_error=0.02),
+        passing_gate_summary(str(tmp_path / "step_02"), area_ratio=0.12, center_error=0.01),
+    ]
+
+    monkeypatch.setattr(runner.stack_gate, "run", lambda _args: gate_summaries.pop(0))
+    monkeypatch.setattr(runner.bridge_client, "BridgeClient", FakeBridgeClient)
+    monkeypatch.setattr(
+        runner,
+        "capture_final_progress_observation",
+        lambda _args, _root: final_progress_observation(area_ratio=0.13, center_error=0.0),
+    )
+
+    args = runner.parse_args(
+        [
+            "--artifact-dir",
+            str(tmp_path),
+            "--execute-motion",
+            "--confirm-operator-ready",
+            "--require-nav-target-success",
+        ]
+    )
+    summary = runner.run(args)
+
+    assert summary["pass"] is False
+    assert "nav_target_success_failed" in summary["issues"]
+    assert summary["nav_target_success"]["pass"] is False
+    assert "target_area_below_success_threshold" in summary["nav_target_success"]["issues"]
+
+
+def test_nav_target_success_required_accepts_terminal_target_too_close(tmp_path, monkeypatch):
+    terminal = {
+        **passing_gate_summary(str(tmp_path / "step_01")),
+        "pass": False,
+        "issues": ["policy_decision_not_pass"],
+        "command": {"linear_x": 0.0, "angular_z": 0.0},
+        "policy_decision": {
+            "pass": False,
+            "stop_reason": "target_inside_stack_forward_stop_area",
+            "issues": ["target_inside_stack_forward_stop_area"],
+            "observation": {
+                "target_profile": "blue",
+                "detected": True,
+                "centered": True,
+                "center_error": 0.0,
+                "area_ratio": 0.24,
+                "annotated_image_path": "terminal.jpg",
+            },
+            "stack_policy": {"stage": "plan", "preferred_intent": "plan_to_target"},
+        },
+        "relay_summary": {},
+        "motion_proof": {},
+    }
+
+    monkeypatch.setattr(runner.stack_gate, "run", lambda _args: terminal)
+    monkeypatch.setattr(runner.bridge_client, "BridgeClient", FakeBridgeClient)
+
+    args = runner.parse_args(
+        [
+            "--artifact-dir",
+            str(tmp_path),
+            "--min-completed-steps",
+            "0",
+            "--require-nav-target-success",
+        ]
+    )
+    summary = runner.run(args)
+
+    assert summary["pass"] is True
+    assert summary["nav_target_success"]["pass"] is True
+    assert "target_too_close_terminal_stop" in summary["nav_target_success"]["evidence"]
+
+
+def test_progress_scorecard_allows_search_reacquire_step():
+    previous = {
+        "label": "step_01",
+        "target_detected": True,
+        "target_centered": True,
+        "target_area_ratio": 0.08,
+        "target_abs_center_error": 0.01,
+        "policy_preferred_intent": "plan_to_target",
+    }
+    current = {
+        "label": "step_02",
+        "target_detected": False,
+        "target_centered": False,
+        "target_area_ratio": 0.0,
+        "target_abs_center_error": None,
+        "policy_preferred_intent": "search_for_target",
+    }
+    args = runner.parse_args([])
+
+    transition = runner.score_target_progress_transition(
+        previous,
+        current,
+        args,
+        transition_id="step_01_to_step_02",
+        motion_step_index=1,
+    )
+
+    assert transition["pass"] is True
+    assert transition["skipped"] is True
+    assert transition["evidence"] == ["search_reacquire_step_unscored"]
+
+
+def test_progress_scorecard_accepts_target_reacquired_after_search():
+    previous = {
+        "label": "step_01",
+        "target_detected": False,
+        "target_centered": False,
+        "target_area_ratio": 0.0,
+        "target_abs_center_error": None,
+        "policy_preferred_intent": "search_for_target",
+    }
+    current = {
+        "label": "step_02",
+        "target_detected": True,
+        "target_centered": True,
+        "target_area_ratio": 0.07,
+        "target_abs_center_error": 0.02,
+        "policy_preferred_intent": "plan_to_target",
+    }
+    args = runner.parse_args([])
+
+    transition = runner.score_target_progress_transition(
+        previous,
+        current,
+        args,
+        transition_id="step_01_to_step_02",
+        motion_step_index=1,
+    )
+
+    assert transition["pass"] is True
+    assert transition["skipped"] is False
+    assert transition["evidence"] == ["target_reacquired_after_search"]
 
 
 def test_progress_scorecard_failure_fails_live_loop(tmp_path, monkeypatch):

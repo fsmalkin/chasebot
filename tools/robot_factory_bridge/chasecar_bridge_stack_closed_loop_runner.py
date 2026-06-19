@@ -18,6 +18,8 @@ DEFAULT_ARTIFACT_STEM = "factory_bridge_stack_closed_loop"
 SAFE_TERMINAL_POLICY_STOPS = {"target_inside_stack_forward_stop_area"}
 REAL_STACK_BOOT_REPORT_FILENAME = "real_stack_boot_report.json"
 REAL_STACK_BOOT_REPORT_MD_FILENAME = "real_stack_boot_report.md"
+NAV_TARGET_SUCCESS_FILENAME = "nav_target_success.json"
+NAV_TARGET_SUCCESS_MD_FILENAME = "nav_target_success.md"
 
 
 def utc_now() -> str:
@@ -328,7 +330,8 @@ def command_mismatch_reasons(summary: dict[str, Any]) -> list[str]:
     if not commands_match(command, relay_raw_command(summary.get("relay_summary", {}))):
         reasons.append("locked_relay_command_mismatch")
     motion = summary.get("motion_proof") if isinstance(summary.get("motion_proof"), dict) else {}
-    if motion and not commands_match(command, relay_raw_command(motion.get("relay_summary", {}))):
+    motion_relay = motion.get("relay_summary") if isinstance(motion.get("relay_summary"), dict) else {}
+    if motion_relay and not commands_match(command, relay_raw_command(motion_relay)):
         reasons.append("live_relay_command_mismatch")
     return reasons
 
@@ -353,6 +356,8 @@ def target_snapshot_from_record(record: dict[str, Any], *, label: str) -> dict[s
     return {
         "label": label,
         "step_index": record.get("index"),
+        "policy_stage": record.get("policy_stage", ""),
+        "policy_preferred_intent": record.get("policy_preferred_intent", ""),
         "target_detected": bool(record.get("target_detected", False)),
         "target_centered": bool(record.get("target_centered", False)),
         "target_center_error": center_error,
@@ -364,16 +369,35 @@ def target_snapshot_from_record(record: dict[str, Any], *, label: str) -> dict[s
 
 def target_snapshot_from_policy_decision(decision: dict[str, Any], *, label: str) -> dict[str, Any]:
     observation = decision.get("observation") if isinstance(decision.get("observation"), dict) else {}
+    policy = decision.get("stack_policy") if isinstance(decision.get("stack_policy"), dict) else {}
     center_error = as_float_or_none(observation.get("center_error"))
     return {
         "label": label,
         "step_index": None,
+        "policy_stage": policy.get("stage", ""),
+        "policy_preferred_intent": policy.get("preferred_intent", ""),
         "target_detected": bool(observation.get("detected", False)),
         "target_centered": bool(observation.get("centered", False)),
         "target_center_error": center_error,
         "target_abs_center_error": abs(center_error) if center_error is not None else None,
         "target_area_ratio": as_float_or_none(observation.get("area_ratio")),
         "annotated_image_path": observation.get("annotated_image_path", ""),
+    }
+
+
+def target_snapshot_from_step_record(record: dict[str, Any], *, label: str) -> dict[str, Any]:
+    center_error = as_float_or_none(record.get("target_center_error"))
+    return {
+        "label": label,
+        "step_index": record.get("index"),
+        "policy_stage": record.get("policy_stage", ""),
+        "policy_preferred_intent": record.get("policy_preferred_intent", ""),
+        "target_detected": bool(record.get("target_detected", False)),
+        "target_centered": bool(record.get("target_centered", False)),
+        "target_center_error": center_error,
+        "target_abs_center_error": abs(center_error) if center_error is not None else None,
+        "target_area_ratio": as_float_or_none(record.get("target_area_ratio")),
+        "annotated_image_path": record.get("annotated_image_path", ""),
     }
 
 
@@ -399,10 +423,45 @@ def score_target_progress_transition(
     thresholds = progress_thresholds(args)
     issues: list[str] = []
     evidence: list[str] = []
+    previous_detected = bool(previous.get("target_detected", False))
+    current_detected = bool(current.get("target_detected", False))
+    current_intent = str(current.get("policy_preferred_intent", "") or "")
+    if not current_detected and current_intent == "search_for_target":
+        return {
+            "transition_id": transition_id,
+            "motion_step_index": motion_step_index,
+            "pass": True,
+            "skipped": True,
+            "issues": [],
+            "evidence": ["search_reacquire_step_unscored"],
+            "previous": previous,
+            "current": current,
+            "deltas": {
+                "area_ratio": None,
+                "abs_center_error": None,
+            },
+            "motion_contact_sheet_path": motion_contact_sheet_path,
+        }
+    if not previous_detected and current_detected:
+        return {
+            "transition_id": transition_id,
+            "motion_step_index": motion_step_index,
+            "pass": True,
+            "skipped": False,
+            "issues": [],
+            "evidence": ["target_reacquired_after_search"],
+            "previous": previous,
+            "current": current,
+            "deltas": {
+                "area_ratio": None,
+                "abs_center_error": None,
+            },
+            "motion_contact_sheet_path": motion_contact_sheet_path,
+        }
 
-    if not bool(previous.get("target_detected", False)):
+    if not previous_detected:
         issues.append("previous_target_not_detected")
-    if not bool(current.get("target_detected", False)):
+    if not current_detected:
         issues.append("current_target_not_detected")
 
     previous_area = as_float_or_none(previous.get("target_area_ratio"))
@@ -560,6 +619,7 @@ def build_progress_scorecard(
         positive_progress = any(
             "target_area_increased" in (transition.get("evidence") or [])
             or "target_centering_improved" in (transition.get("evidence") or [])
+            or "target_reacquired_after_search" in (transition.get("evidence") or [])
             for transition in scorecard["transitions"]
         )
         if not positive_progress:
@@ -571,6 +631,126 @@ def build_progress_scorecard(
 
     scorecard["pass"] = bool((not required) or (not scorecard["issues"] and scorecard["transitions"]))
     return scorecard
+
+
+def nav_target_success_thresholds(args: argparse.Namespace) -> dict[str, float]:
+    area_ratio = float(args.nav_target_success_area_ratio)
+    if area_ratio <= 0.0:
+        area_ratio = float(args.stack_forward_stop_area_ratio)
+    return {
+        "min_area_ratio": area_ratio,
+        "max_center_error": float(args.nav_target_success_max_center_error),
+    }
+
+
+def latest_nav_target_observation(
+    summary: dict[str, Any],
+    final_observation: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if isinstance(final_observation, dict) and isinstance(final_observation.get("policy_decision"), dict):
+        return target_snapshot_from_policy_decision(final_observation["policy_decision"], label="final_progress_observation")
+    steps = summary.get("steps") if isinstance(summary.get("steps"), list) else []
+    if steps:
+        latest = steps[-1]
+        return target_snapshot_from_step_record(latest, label="step_%02d" % int(latest.get("index", len(steps))))
+    return {
+        "label": "none",
+        "step_index": None,
+        "target_detected": False,
+        "target_centered": False,
+        "target_center_error": None,
+        "target_abs_center_error": None,
+        "target_area_ratio": None,
+        "annotated_image_path": "",
+    }
+
+
+def build_nav_target_success_gate(
+    summary: dict[str, Any],
+    args: argparse.Namespace,
+    final_observation: dict[str, Any] | None,
+    progress_scorecard: dict[str, Any],
+) -> dict[str, Any]:
+    thresholds = nav_target_success_thresholds(args)
+    observation = latest_nav_target_observation(summary, final_observation)
+    issues: list[str] = []
+    evidence: list[str] = []
+    terminal_reached = str(summary.get("terminal_reason", "")) == "target_too_close"
+    progress_required = bool(args.execute_motion and args.require_progress_scorecard)
+
+    if terminal_reached:
+        evidence.append("target_too_close_terminal_stop")
+
+    if not bool(observation.get("target_detected", False)):
+        issues.append("target_not_detected")
+    area_ratio = as_float_or_none(observation.get("target_area_ratio"))
+    if area_ratio is None:
+        issues.append("target_area_missing")
+    elif area_ratio >= thresholds["min_area_ratio"]:
+        evidence.append("target_area_success_threshold_met")
+    else:
+        issues.append("target_area_below_success_threshold")
+
+    center_abs = as_float_or_none(observation.get("target_abs_center_error"))
+    centered = bool(observation.get("target_centered", False)) or (
+        center_abs is not None and center_abs <= thresholds["max_center_error"]
+    )
+    if centered:
+        evidence.append("target_centered_for_success")
+    else:
+        issues.append("target_not_centered_for_success")
+
+    if not stack_gate.safe_final_state(summary.get("final_independent_health", {})):
+        issues.append("final_bridge_state_not_locked_safe")
+    else:
+        evidence.append("final_bridge_locked_safe")
+
+    if progress_required:
+        if bool(progress_scorecard.get("pass", False)):
+            evidence.append("progress_scorecard_passed")
+        else:
+            issues.append("progress_scorecard_not_passed")
+
+    passed = bool(not issues and (terminal_reached or "target_area_success_threshold_met" in evidence))
+    return {
+        "generated_utc": utc_now(),
+        "required": bool(args.require_nav_target_success),
+        "pass": passed,
+        "terminal_reached": terminal_reached,
+        "thresholds": thresholds,
+        "latest_observation": observation,
+        "evidence": evidence,
+        "issues": issues,
+    }
+
+
+def nav_target_success_markdown(gate: dict[str, Any]) -> str:
+    thresholds = gate.get("thresholds") if isinstance(gate.get("thresholds"), dict) else {}
+    observation = gate.get("latest_observation") if isinstance(gate.get("latest_observation"), dict) else {}
+    return "\n".join(
+        [
+            "# Nav Target Success Gate",
+            "",
+            "- Pass: `%s`" % bool(gate.get("pass", False)),
+            "- Required: `%s`" % bool(gate.get("required", False)),
+            "- Terminal reached: `%s`" % bool(gate.get("terminal_reached", False)),
+            "- Min area ratio: `%s`" % thresholds.get("min_area_ratio", ""),
+            "- Max center error: `%s`" % thresholds.get("max_center_error", ""),
+            "- Latest observation: `%s`" % observation.get("label", ""),
+            "- Target detected: `%s`" % bool(observation.get("target_detected", False)),
+            "- Target area ratio: `%s`" % observation.get("target_area_ratio", ""),
+            "- Target abs-center error: `%s`" % observation.get("target_abs_center_error", ""),
+            "",
+            "## Evidence",
+            "",
+            *("- `%s`" % item for item in gate.get("evidence", [])),
+            "",
+            "## Issues",
+            "",
+            *("- `%s`" % item for item in gate.get("issues", [])),
+            "",
+        ]
+    )
 
 
 def progress_scorecard_markdown(scorecard: dict[str, Any]) -> str:
@@ -723,6 +903,49 @@ def independent_health(args: argparse.Namespace) -> dict[str, Any]:
     return {"http_status": status, "response": payload, "checked_utc": utc_now()}
 
 
+def transient_step_issue(summary: dict[str, Any]) -> str:
+    issues = list(summary.get("issues", [])) if isinstance(summary.get("issues"), list) else []
+    motion = summary.get("motion_proof") if isinstance(summary.get("motion_proof"), dict) else {}
+    if isinstance(motion.get("issues"), list):
+        issues.extend(str(issue) for issue in motion.get("issues", []))
+    if isinstance(summary.get("policy_decision"), dict):
+        if "motion_camera_readiness_gate_not_pass" in issues:
+            return "motion_camera_readiness_timeout"
+        return ""
+    text = " ".join(str(issue) for issue in issues)
+    if "TimeoutError" in text or "timed out" in text:
+        return "policy_observation_timeout"
+    if "bridge_unreachable" in text:
+        return "bridge_unreachable"
+    return ""
+
+
+def step_attempt_summary(step_summary: dict[str, Any], *, attempt: int, artifact_dir: Path) -> dict[str, Any]:
+    return {
+        "attempt": int(attempt),
+        "artifact_dir": str(artifact_dir),
+        "pass": bool(step_summary.get("pass", False)),
+        "issues": list(step_summary.get("issues", [])) if isinstance(step_summary.get("issues"), list) else [],
+        "retry_reason": transient_step_issue(step_summary),
+        "final_safe": final_state_safe(step_summary),
+    }
+
+
+def run_step_with_retries(args: argparse.Namespace, artifact_root: Path, index: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    attempts: list[dict[str, Any]] = []
+    retries = max(0, int(args.step_retries))
+    for attempt in range(retries + 1):
+        step_dir = artifact_root / ("step_%02d" % index if attempt == 0 else "step_%02d_retry_%02d" % (index, attempt))
+        step_summary = stack_gate.run(copy_step_args(args, step_dir))
+        write_json(step_dir / "closed_loop_step_source_summary.json", step_summary)
+        attempts.append(step_attempt_summary(step_summary, attempt=attempt + 1, artifact_dir=step_dir))
+        retry_reason = attempts[-1]["retry_reason"]
+        if attempt >= retries or not retry_reason or not attempts[-1]["final_safe"]:
+            return step_summary, attempts
+        time.sleep(max(float(args.step_retry_settle_s), 0.0))
+    return step_summary, attempts
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     artifact_root = ensure_dir(args.artifact_dir or default_artifact_dir())
     real_stack_report = build_real_stack_boot_report(args)
@@ -759,15 +982,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     completed_steps = 0
     terminal_reason = "max_steps_completed"
     for index in range(1, int(args.steps) + 1):
-        step_dir = artifact_root / ("step_%02d" % index)
-        step_summary = stack_gate.run(copy_step_args(args, step_dir))
-        write_json(step_dir / "closed_loop_step_source_summary.json", step_summary)
+        step_summary, attempts = run_step_with_retries(args, artifact_root, index)
         record = step_record(
             index,
             step_summary,
             execute_motion=bool(args.execute_motion),
             allow_scorecard_motion_proof=bool(args.require_progress_scorecard),
         )
+        record["attempts"] = attempts
         summary["steps"].append(record)
 
         if record["safe_terminal_stop"]:
@@ -818,6 +1040,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if bool(args.execute_motion) and bool(args.require_progress_scorecard) and not progress_scorecard.get("pass", False):
         summary["issues"].append("progress_scorecard_failed")
 
+    nav_target_success = build_nav_target_success_gate(summary, args, final_progress_observation, progress_scorecard)
+    nav_success_path = artifact_root / NAV_TARGET_SUCCESS_FILENAME
+    nav_success_md_path = artifact_root / NAV_TARGET_SUCCESS_MD_FILENAME
+    nav_target_success["json_path"] = str(nav_success_path)
+    nav_target_success["markdown_path"] = str(nav_success_md_path)
+    write_json(nav_success_path, nav_target_success)
+    write_text(nav_success_md_path, nav_target_success_markdown(nav_target_success))
+    summary["nav_target_success"] = nav_target_success
+    if bool(args.require_nav_target_success) and not bool(nav_target_success.get("pass", False)):
+        summary["issues"].append("nav_target_success_failed")
+
     enough_steps = completed_steps >= int(args.min_completed_steps)
     safe_terminal = terminal_reason == "target_too_close" and enough_steps
     summary["pass"] = bool((not summary["issues"]) and (enough_steps or safe_terminal))
@@ -839,11 +1072,37 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--steps", type=int, default=2)
     parser.add_argument("--min-completed-steps", type=int, default=1)
     parser.add_argument("--step-settle-s", type=float, default=0.5)
+    parser.add_argument(
+        "--step-retries",
+        type=int,
+        default=1,
+        help="Retry a step after a safe bridge timeout before scoring it as failed.",
+    )
+    parser.add_argument("--step-retry-settle-s", type=float, default=1.0)
     parser.add_argument("--min-progress-area-gain-ratio", type=float, default=0.0005)
     parser.add_argument("--max-progress-area-regression-ratio", type=float, default=0.04)
     parser.add_argument("--min-progress-center-gain", type=float, default=0.01)
     parser.add_argument("--max-progress-center-regression", type=float, default=0.04)
     parser.add_argument("--max-progress-center-error", type=float, default=0.16)
+    parser.add_argument(
+        "--require-nav-target-success",
+        dest="require_nav_target_success",
+        action="store_true",
+        help="Require target-reached evidence before the closed-loop run can pass.",
+    )
+    parser.add_argument(
+        "--no-require-nav-target-success",
+        dest="require_nav_target_success",
+        action="store_false",
+        help="Record nav target evidence without making it a pass/fail requirement.",
+    )
+    parser.add_argument(
+        "--nav-target-success-area-ratio",
+        type=float,
+        default=0.0,
+        help="Minimum target area ratio for nav success. Defaults to stack forward stop area ratio when <= 0.",
+    )
+    parser.add_argument("--nav-target-success-max-center-error", type=float, default=0.16)
     parser.add_argument("--require-progress-scorecard", dest="require_progress_scorecard", action="store_true")
     parser.add_argument("--no-require-progress-scorecard", dest="require_progress_scorecard", action="store_false")
     parser.add_argument(
@@ -856,7 +1115,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="score_final_progress_observation",
         action="store_false",
     )
-    parser.set_defaults(require_progress_scorecard=True, score_final_progress_observation=True)
+    parser.set_defaults(
+        require_progress_scorecard=True,
+        score_final_progress_observation=True,
+        require_nav_target_success=False,
+    )
     return parser
 
 

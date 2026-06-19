@@ -321,18 +321,39 @@ def stack_command_from_policy(
     issues: list[str] = []
     stop_reason = "stack_policy_noop"
 
-    if not detected:
-        issues.append("target_not_detected")
-        return {"linear_x": 0.0, "angular_z": 0.0}, issues, "target_not_detected"
-
     if stage in ("blocked", "stop") or preferred_intent in ("safe_stop", "abort", ""):
         issues.append("stack_policy_safe_stop")
         return {"linear_x": 0.0, "angular_z": 0.0}, issues, "stack_policy_safe_stop"
 
+    if not detected:
+        if preferred_intent == "search_for_target":
+            command = {
+                "linear_x": 0.0,
+                "angular_z": float(args.stack_search_angular_z) * (1.0 if float(args.visual_turn_sign) >= 0.0 else -1.0),
+            }
+            command = bound_policy_command(command, args)
+            if not command_nonzero(command):
+                issues.append("policy_command_zero")
+            return command, issues, "search_for_target_turn_command"
+        issues.append("target_not_detected")
+        return {"linear_x": 0.0, "angular_z": 0.0}, issues, "target_not_detected"
+
     if preferred_intent == "acquire_target":
         command["linear_x"] = 0.0
+        center_error = analysis.get("center_error")
+        if center_error is not None:
+            max_acquire_angular_z = float(args.stack_acquire_max_angular_z)
+            if max_acquire_angular_z <= 0.0:
+                max_acquire_angular_z = float(args.max_policy_angular_z)
+            command["angular_z"] = clamp(
+                -float(args.stack_acquire_turn_sign) * float(center_error) * float(args.visual_angular_gain),
+                -max_acquire_angular_z,
+                max_acquire_angular_z,
+            )
         stop_reason = "acquire_target_turn_command"
     elif preferred_intent == "plan_to_target":
+        if bool(analysis.get("centered", False)):
+            command["angular_z"] = 0.0
         area_ratio = float(analysis.get("area_ratio", 0.0) or 0.0)
         if area_ratio >= float(args.stack_forward_stop_area_ratio):
             issues.append("target_inside_stack_forward_stop_area")
@@ -416,7 +437,11 @@ def run_chasecar_stack_fetch_adapter_policy(
     policy_snapshot = supervisor_policy.build_policy_snapshot(stack_state, sim_gate_ready=True)
     command, command_issues, stop_reason = stack_command_from_policy(analysis, policy_snapshot, args)
     analysis_issues = list(analysis.get("issues", [])) if isinstance(analysis.get("issues"), list) else []
-    issues = analysis_issues if not bool(analysis.get("detected", False)) else []
+    issues = (
+        analysis_issues
+        if not bool(analysis.get("detected", False)) and stop_reason != "search_for_target_turn_command"
+        else []
+    )
     for issue in command_issues:
         if issue not in issues:
             issues.append(issue)
@@ -496,6 +521,10 @@ def deploy_bridge(args: argparse.Namespace, artifact_dir: Path, *, enable_motion
         args.robot_user,
         "-Port",
         str(args.port),
+        "-MaxLinearX",
+        str(args.max_bridge_linear_x),
+        "-MaxAngularZ",
+        str(args.max_bridge_angular_z),
         "-Start",
         "-Camera",
     ]
@@ -994,6 +1023,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--visual-angular-gain", type=float, default=4.0)
     parser.add_argument("--max-policy-angular-z", type=float, default=0.4)
     parser.add_argument("--stack-forward-x", type=float, default=0.025)
+    parser.add_argument("--stack-search-angular-z", type=float, default=0.18)
+    parser.add_argument("--stack-acquire-turn-sign", type=float, default=1.0)
+    parser.add_argument("--stack-acquire-max-angular-z", type=float, default=0.0)
     parser.add_argument("--max-stack-linear-x", type=float, default=0.04)
     parser.add_argument("--stack-forward-stop-area-ratio", type=float, default=0.48)
     parser.add_argument("--stack-policy-checkpoint", default="")

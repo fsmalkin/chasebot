@@ -83,6 +83,12 @@ factory-bridge adapter, while the ROS/Nav2 executor loop and object-centric
 fetch-to-pose contact policy still require bridge-backed object pose, dashboard
 state, and executor shims before full stack onboarding.
 
+The nav-target success gate is stricter than the progress scorecard. The
+scorecard proves each bounded pulse remains visually coherent. The nav gate
+requires the target to reach the configured area threshold while centered, or
+requires the stack adapter to produce the safe target-too-close terminal stop.
+Use this gate for hardware claims that say the robot navigated to the target.
+
 ## Gate 1: Locked Stack-To-Bridge Command Path
 
 Claim: the offboard stack path can produce bounded velocity commands and route
@@ -220,6 +226,34 @@ Pass criteria:
   source-present bridge gaps, with a code path or missing adapter named for each.
 - The sim-to-hardware section lists perception, state, execution, and success
   evidence differences before any run claims full stack onboarding.
+
+## Gate 7: Nav-To-Target Success
+
+Claim: the robot reached the visible target through the Chasecar stack bridge
+path, rather than only completing a safe motion budget.
+
+Representative live command:
+
+```powershell
+python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/<id>/nav_target_success --steps 14 --step-settle-s 1.0 --target-min-area-ratio 0.008 --max-bridge-linear-x 0.14 --max-bridge-angular-z 0.8 --max-motor-speed 1.0 --stack-search-angular-z 0.25 --stack-acquire-max-angular-z 0.12 --command-duration-s 0.35 --require-nav-target-success --execute-motion --confirm-operator-ready
+```
+
+Pass criteria:
+
+- `nav_target_success.json` and `nav_target_success.md` exist beside the
+  progress scorecard and real-stack boot report.
+- The run keeps the same bridge safety contract: camera readiness before
+  command, locked refusal proof, bounded live motion, relock after each slice,
+  final locked health, and motors at zero.
+- The progress scorecard passes.
+- The nav gate passes through either `target_too_close_terminal_stop` or
+  `target_area_success_threshold_met` with `target_centered_for_success`.
+- The deployed bridge uses the same linear and angular caps as the relay, so
+  the factory bridge normalizes commands against the intended hardware limits.
+- Search can use a stronger bounded turn while acquire uses
+  `--stack-acquire-max-angular-z` for gentle centering after target reacquire.
+- A run that only completes `--steps` while the target remains below the success
+  threshold fails when `--require-nav-target-success` is set.
 
 ## Stop Conditions
 

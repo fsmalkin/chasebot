@@ -22,6 +22,15 @@ def make_blue_target_jpeg(path: Path, width=320, height=240, center_x=80):
     image.save(path, format="JPEG", quality=92)
 
 
+def make_no_target_jpeg(path: Path, width=320, height=240):
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (width, height), (42, 40, 36))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, height - 42, width, height), fill=(92, 78, 62))
+    image.save(path, format="JPEG", quality=92)
+
+
 class FakeSnapshotClient:
     def __init__(self, image_path: Path):
         self.image_bytes = image_path.read_bytes()
@@ -98,6 +107,94 @@ def test_chasecar_stack_adapter_emits_forward_fetch_approach_when_centered(tmp_p
     assert decision["stack_lineage"]["learned_low_level_fetch_policy_loaded"] is False
 
 
+def test_chasecar_stack_adapter_searches_when_target_missing(tmp_path):
+    image_path = tmp_path / "no_target.jpg"
+    make_no_target_jpeg(image_path)
+    args = gate.parse_args(["--policy-entrypoint", gate.POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0, "--stack-search-angular-z", "0.16"])
+
+    decision = gate.run_policy_entrypoint(FakeSnapshotClient(image_path), args, tmp_path / "policy")
+
+    assert decision["pass"] is True
+    assert decision["stack_policy"]["preferred_intent"] == "search_for_target"
+    assert decision["stop_reason"] == "search_for_target_turn_command"
+    assert decision["observation"]["detected"] is False
+    assert decision["command"]["linear_x"] == 0.0
+    assert decision["command"]["angular_z"] == 0.16
+
+
+def test_stack_plan_to_target_zeroes_angular_when_target_centered():
+    args = gate.parse_args(["--stack-forward-x", "0.035", "--max-stack-linear-x", "0.05"])
+    analysis = {
+        "detected": True,
+        "centered": True,
+        "area_ratio": 0.08,
+        "recommendation": {"linear_x": 0.0, "angular_z": 0.4},
+    }
+    policy = {"stage": "plan", "preferred_intent": "plan_to_target"}
+
+    command, issues, stop_reason = gate.stack_command_from_policy(analysis, policy, args)
+
+    assert issues == []
+    assert stop_reason == "fetch_to_pose_approach_command"
+    assert command["linear_x"] == 0.035
+    assert command["angular_z"] == 0.0
+
+
+def test_stack_search_for_target_emits_bounded_turn_when_target_missing():
+    args = gate.parse_args(["--stack-search-angular-z", "0.16", "--max-policy-angular-z", "0.3"])
+    analysis = {
+        "detected": False,
+        "centered": False,
+        "area_ratio": 0.0,
+        "recommendation": {"linear_x": 0.0, "angular_z": 0.0},
+    }
+    policy = {"stage": "search", "preferred_intent": "search_for_target"}
+
+    command, issues, stop_reason = gate.stack_command_from_policy(analysis, policy, args)
+
+    assert issues == []
+    assert stop_reason == "search_for_target_turn_command"
+    assert command["linear_x"] == 0.0
+    assert command["angular_z"] == 0.16
+
+
+def test_stack_acquire_turn_sign_can_be_reversed_for_hardware():
+    args = gate.parse_args(["--stack-acquire-turn-sign", "-1", "--visual-angular-gain", "4.0"])
+    analysis = {
+        "detected": True,
+        "centered": False,
+        "center_error": -0.20,
+        "area_ratio": 0.08,
+        "recommendation": {"linear_x": 0.0, "angular_z": 0.4},
+    }
+    policy = {"stage": "acquire", "preferred_intent": "acquire_target"}
+
+    command, issues, stop_reason = gate.stack_command_from_policy(analysis, policy, args)
+
+    assert issues == []
+    assert stop_reason == "acquire_target_turn_command"
+    assert command["linear_x"] == 0.0
+    assert command["angular_z"] < 0.0
+
+
+def test_stack_acquire_turn_uses_separate_angular_cap():
+    args = gate.parse_args(["--stack-acquire-max-angular-z", "0.12", "--visual-angular-gain", "4.0"])
+    analysis = {
+        "detected": True,
+        "centered": False,
+        "center_error": 0.80,
+        "area_ratio": 0.08,
+        "recommendation": {"linear_x": 0.0, "angular_z": -0.4},
+    }
+    policy = {"stage": "acquire", "preferred_intent": "acquire_target"}
+
+    command, issues, stop_reason = gate.stack_command_from_policy(analysis, policy, args)
+
+    assert issues == []
+    assert stop_reason == "acquire_target_turn_command"
+    assert command["angular_z"] == -0.12
+
+
 def test_compute_pass_requires_locked_refusal_and_final_camera():
     summary = {
         "issues": [],
@@ -148,3 +245,28 @@ def test_relay_nonzero_success_events_requires_motor_response():
     }
 
     assert len(gate.relay_nonzero_success_events(summary)) == 1
+
+
+def test_deploy_bridge_uses_relay_linear_and_angular_caps(tmp_path, monkeypatch):
+    captured = {}
+
+    class Result:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return Result()
+
+    monkeypatch.setattr(gate.subprocess, "run", fake_run)
+    args = gate.parse_args(["--max-bridge-linear-x", "0.14", "--max-bridge-angular-z", "0.8"])
+
+    payload = gate.deploy_bridge(args, tmp_path, enable_motion=True)
+
+    assert payload["returncode"] == 0
+    command = captured["command"]
+    assert command[command.index("-MaxLinearX") + 1] == "0.14"
+    assert command[command.index("-MaxAngularZ") + 1] == "0.8"
+    assert command[command.index("-MaxMotorSpeed") + 1] == str(args.max_motor_speed)

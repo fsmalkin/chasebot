@@ -93,10 +93,10 @@ turning camera setup into an operator ritual.
 ## Next Milestone
 
 Load the Chasecar stack slice through the factory bridge, prove the no-motion
-command path, then run bounded live policy motion behind the progress scorecard.
-Each closed-loop run must also emit the real-stack boot report so unattended
-proof can distinguish the routed supervisor-policy path from the remaining
-ROS/Nav2 executor and object-pose adapter work.
+command path, then run bounded live policy motion until the nav-target success
+gate passes. Each closed-loop run must also emit the real-stack boot report so
+unattended proof can distinguish the routed supervisor-policy path from the
+remaining ROS/Nav2 executor and object-pose adapter work.
 
 Success criteria:
 
@@ -108,6 +108,9 @@ Success criteria:
   refusals, proving transport without motion.
 - A live motion attempt starts only after the no-motion gate produces bounded
   commands, usable camera evidence, and final locked health.
+- The live nav-to-target run records `nav_target_success.pass=true` from either
+  a centered target at the configured success area or the safe target-too-close
+  terminal stop.
 - The artifact bundle includes health, command log, frame sequence, contact
   sheet, relock evidence, real-stack boot report, progress scorecard, and
   pass/fail summary.
