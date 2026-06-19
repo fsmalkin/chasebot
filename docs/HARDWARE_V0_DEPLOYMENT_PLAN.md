@@ -74,6 +74,18 @@ contract. The artifact records whether a learned low-level fetch checkpoint was
 loaded; the current fast-track path uses the deterministic/planner stack contract
 until a checkpoint is explicitly supplied.
 
+Next rung:
+
+```powershell
+python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/<id>/closed_loop_locked --steps 2
+```
+
+The closed-loop runner repeats the same observation, stack policy decision,
+relay handoff, bridge response, and relock check for a small number of steps. A
+live run adds `--execute-motion --confirm-operator-ready` after the locked run
+passes. The runner stops on target-too-close, stale camera, command mismatch,
+unsafe bridge state, or visual evidence that conflicts with telemetry.
+
 ## Codex Direct Hardware Access
 
 Fastest useful milestone: Codex can run no-motion commands on the robot through
@@ -555,7 +567,7 @@ Stop conditions still open:
 
 ## Next Safe Action
 
-Run the stack-through-bridge locked command-path gate from this worktree. If it
-passes, advance to the bounded live stack-motion gate with the same relay path
+Run the stack-through-bridge closed-loop locked gate from this worktree. If it
+passes, advance to the bounded live closed-loop gate with the same relay path
 and final relock checks. Use the direct-access ladder when robot-side inspection
 or onboard install work becomes the active blocker.

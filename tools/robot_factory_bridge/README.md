@@ -95,24 +95,40 @@ Basic flow:
 10. Run one bounded live stack-path motion proof after the locked gate passes:
 
     ```powershell
-   python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_live --policy-entrypoint chasecar_stack_fetch_adapter_v0 --target-profile blue --execute-motion --confirm-operator-ready --max-bridge-linear-x 0.08 --max-bridge-angular-z 0.8 --max-motor-speed 0.7
-   ```
+    python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_live --policy-entrypoint chasecar_stack_fetch_adapter_v0 --target-profile blue --execute-motion --confirm-operator-ready --max-bridge-linear-x 0.08 --max-bridge-angular-z 0.8 --max-motor-speed 0.7
+    ```
 
    The live gate uses the same runtime JSON, ROS `/cmd_vel`, relay, and bridge path. It enables motion only for the bounded stack-adapter slice, records before/after camera evidence, and restores locked bridge health before returning success.
 
-11. Restart with motion enabled for lifted-wheel tests:
+11. Run the bounded closed-loop stack adapter while motion stays locked:
+
+    ```powershell
+    python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_closed_loop_locked --steps 2
+    ```
+
+    The loop repeats fresh observation, stack policy decision, relay handoff, bridge refusal, and final relock checks for each step. It stops on target-too-close, stale camera, command mismatch, unsafe bridge state, or conflicting visual evidence.
+
+12. Run the bounded live closed-loop proof after the locked loop passes:
+
+    ```powershell
+    python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_closed_loop_live --steps 2 --execute-motion --confirm-operator-ready
+    ```
+
+    Defaults for the current blue target setup are `--target-profile blue`, `--max-bridge-linear-x 0.08`, `--max-bridge-angular-z 0.8`, `--max-motor-speed 0.7`, and `--stack-forward-stop-area-ratio 0.20`.
+
+13. Restart with motion enabled for lifted-wheel tests:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start -EnableMotion
    ```
 
-12. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
+14. Run the lifted-wheel test only while the operator holds the robot clear of the floor:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/test_robot_factory_bridge_lifted_wheels.ps1 -RobotHost 192.168.1.11 -ConfirmHeldInAir
    ```
 
-13. Run the bounded camera-gated turn behavior after the operator confirms the setup:
+15. Run the bounded camera-gated turn behavior after the operator confirms the setup:
 
    ```powershell
    python tools/robot_factory_bridge/chasecar_bridge_behavior_runner.py --pretty --mode tiny-turn --execute-motion --confirm-operator-ready --artifact-dir artifacts/session/manual_factory_bridge_tiny_turn
@@ -120,7 +136,7 @@ Basic flow:
 
    The runner captures camera evidence, sends the bounded `linear_x` / `angular_z` command plan, sends a final stop, and writes `behavior_summary.json`.
 
-14. Run a floor-clear 90-degree camera proof:
+16. Run a floor-clear 90-degree camera proof:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/run_robot_factory_bridge_motion_rehearsal.ps1 -RobotHost 192.168.1.11 -Turn90Proof -ExecuteMotion -ConfirmFloorClear -MaxMotorSpeed 0.20
@@ -128,7 +144,7 @@ Basic flow:
 
    The rehearsal runs the safe preflight, proves the turn plan is refused while motion is locked, restarts with motion enabled, runs the bounded multi-pulse turn plan, writes before/after camera evidence, and returns the bridge to health mode. Floor-turn proof also requires saved frames to show visual movement; static before/after frames fail with `visual_motion_not_confirmed` even when the bridge accepted motor commands.
 
-15. Stop the bridge:
+17. Stop the bridge:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/stop_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson

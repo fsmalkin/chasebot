@@ -59,6 +59,13 @@ detector asset; it records a learned low-level fetch checkpoint only when one is
 explicitly supplied. `jetbot_visual_target_turn_v0` and `fixed_command_v0`
 remain diagnostic fallbacks.
 
+The closed-loop runner repeats the same stack path for a small fixed number of
+steps. Each step captures a fresh observation, computes the Chasecar stack
+adapter decision, routes the bounded command through the relay, and records a
+post-step relock and health check. The loop exits on target-too-close, stale
+camera, command mismatch, unsafe bridge state, or visual evidence that conflicts
+with the bridge telemetry.
+
 ## Gate 1: Locked Stack-To-Bridge Command Path
 
 Claim: the offboard stack path can produce bounded velocity commands and route
@@ -99,8 +106,8 @@ Pass criteria:
 
 ## Gate 3: Stack-Owned Policy Slice
 
-Claim: Chasecar policy, rather than the color-target command-path probe,
-produces the command that reaches the bridge.
+Claim: Chasecar policy produces the command that reaches the bridge through the
+same adapter path.
 
 Pass criteria:
 
@@ -110,6 +117,39 @@ Pass criteria:
   reason.
 - The same relay and relock evidence from Gate 1 and Gate 2 is present.
 - The run stays within the bridge safety contract.
+
+## Gate 4: Bounded Closed-Loop Stack Adapter
+
+Claim: the workstation can run repeated observe-policy-command-relock steps
+through the same Chasecar stack adapter while preserving the bridge safety
+contract.
+
+Representative locked command:
+
+```powershell
+python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/<id>/closed_loop_locked --steps 2
+```
+
+Representative live command:
+
+```powershell
+python tools/robot_factory_bridge/chasecar_bridge_stack_closed_loop_runner.py --pretty --artifact-dir artifacts/session/<id>/closed_loop_live --steps 2 --execute-motion --confirm-operator-ready
+```
+
+Defaults for the current blue target setup are `--target-profile blue`,
+`--max-bridge-linear-x 0.08`, `--max-bridge-angular-z 0.8`,
+`--max-motor-speed 0.7`, and `--stack-forward-stop-area-ratio 0.20`.
+
+Pass criteria:
+
+- Each step records observation, stack supervisor snapshot, command,
+  locked-refusal proof, live motion proof when enabled, and final relock health.
+- The loop writes one source summary per step plus a top-level
+  `closed_loop_summary.json`.
+- Command mismatch, stale camera, unsafe final health, visual contradiction, or
+  unexpected bridge motion fails the loop.
+- Target-too-close becomes a safe terminal stop only after the required minimum
+  completed step count.
 
 ## Stop Conditions
 
