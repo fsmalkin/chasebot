@@ -87,18 +87,18 @@ Basic flow:
 9. Prove the offboard stack-through-bridge command path while motion stays locked:
 
    ```powershell
-   python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_locked --policy-entrypoint jetbot_visual_target_turn_v0
+   python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_locked --policy-entrypoint chasecar_stack_fetch_adapter_v0 --target-profile blue --max-bridge-linear-x 0.08 --max-bridge-angular-z 0.8
    ```
 
-   The gate captures a bridge camera frame, runs the `jetbot_visual_target_turn_v0` policy entry point, writes the policy command to the Chasecar runtime handoff, publishes it through ROS `/cmd_vel`, forwards it through the factory bridge relay, and requires the locked bridge to refuse motion with HTTP `423`. A passing run proves the workstation policy path reaches the robot bridge without moving the robot.
+   The gate captures a bridge camera frame, runs the `chasecar_stack_fetch_adapter_v0` policy entry point, writes the policy command to the Chasecar runtime handoff, publishes it through ROS `/cmd_vel`, forwards it through the factory bridge relay, and requires the locked bridge to refuse motion with HTTP `423`. A passing run proves the workstation policy path reaches the robot bridge while the robot stays physically locked. The artifact records the Chasecar supervisor snapshot, command provenance, and whether a learned low-level fetch checkpoint was loaded.
 
 10. Run one bounded live stack-path motion proof after the locked gate passes:
 
-   ```powershell
-   python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_live --policy-entrypoint jetbot_visual_target_turn_v0 --execute-motion --confirm-operator-ready --max-bridge-linear-x 0 --max-bridge-angular-z 0.8 --max-motor-speed 0.7
+    ```powershell
+   python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --pretty --artifact-dir artifacts/session/manual_factory_bridge_stack_path_live --policy-entrypoint chasecar_stack_fetch_adapter_v0 --target-profile blue --execute-motion --confirm-operator-ready --max-bridge-linear-x 0.08 --max-bridge-angular-z 0.8 --max-motor-speed 0.7
    ```
 
-   The live gate uses the same runtime JSON, ROS `/cmd_vel`, relay, and bridge path. It enables motion only for the bounded turn-only slice, records before/after camera evidence, and restores locked bridge health before returning success.
+   The live gate uses the same runtime JSON, ROS `/cmd_vel`, relay, and bridge path. It enables motion only for the bounded stack-adapter slice, records before/after camera evidence, and restores locked bridge health before returning success.
 
 11. Restart with motion enabled for lifted-wheel tests:
 

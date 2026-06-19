@@ -48,6 +48,12 @@ def test_validate_args_accepts_conservative_turn_only_command():
     assert gate.validate_args(args) == []
 
 
+def test_default_policy_is_chasecar_stack_adapter():
+    args = gate.parse_args([])
+
+    assert args.policy_entrypoint == gate.POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0
+
+
 def test_visual_target_turn_policy_emits_bounded_turn(tmp_path):
     image_path = tmp_path / "blue_target.jpg"
     make_blue_target_jpeg(image_path)
@@ -60,6 +66,36 @@ def test_visual_target_turn_policy_emits_bounded_turn(tmp_path):
     assert decision["command"]["linear_x"] == 0.0
     assert decision["command"]["angular_z"] > 0.0
     assert Path(decision["observation"]["annotated_image_path"]).exists()
+
+
+def test_chasecar_stack_adapter_turns_to_acquire_off_center_target(tmp_path):
+    image_path = tmp_path / "blue_target.jpg"
+    make_blue_target_jpeg(image_path, center_x=80)
+    args = gate.parse_args(["--policy-entrypoint", gate.POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0])
+    decision = gate.run_policy_entrypoint(FakeSnapshotClient(image_path), args, tmp_path / "policy")
+
+    assert decision["pass"] is True
+    assert decision["entrypoint"] == gate.POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0
+    assert decision["stack_policy"]["preferred_intent"] == "acquire_target"
+    assert decision["command"]["linear_x"] == 0.0
+    assert decision["command"]["angular_z"] > 0.0
+    assert decision["stack_lineage"]["stack_family"] == "planner_routed_fetch_to_pose"
+    assert Path(decision["observation"]["annotated_image_path"]).exists()
+
+
+def test_chasecar_stack_adapter_emits_forward_fetch_approach_when_centered(tmp_path):
+    image_path = tmp_path / "blue_target.jpg"
+    make_blue_target_jpeg(image_path, center_x=160)
+    args = gate.parse_args(["--policy-entrypoint", gate.POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0])
+    decision = gate.run_policy_entrypoint(FakeSnapshotClient(image_path), args, tmp_path / "policy")
+
+    assert decision["pass"] is True
+    assert decision["stack_policy"]["preferred_intent"] == "plan_to_target"
+    assert decision["stop_reason"] == "fetch_to_pose_approach_command"
+    assert decision["observation"]["centered"] is True
+    assert decision["command"]["linear_x"] > 0.0
+    assert abs(decision["command"]["angular_z"]) < 0.02
+    assert decision["stack_lineage"]["learned_low_level_fetch_policy_loaded"] is False
 
 
 def test_compute_pass_requires_locked_refusal_and_final_camera():

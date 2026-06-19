@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 import subprocess
+import sys
 import time
 from types import SimpleNamespace
 from typing import Any
@@ -16,11 +17,23 @@ import chasecar_bridge_client as bridge_client
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+import brain_supervisor_policy as supervisor_policy  # noqa: E402
+
 DEFAULT_RUNTIME_SOURCE_PATH = "$HOME/ros2_ws/src/chasecar_runtime"
 DEFAULT_ARTIFACT_STEM = "factory_bridge_stack_path_gate"
 POLICY_FIXED_COMMAND_V0 = "fixed_command_v0"
 POLICY_JETBOT_VISUAL_TARGET_TURN_V0 = "jetbot_visual_target_turn_v0"
-POLICY_ENTRYPOINTS = (POLICY_FIXED_COMMAND_V0, POLICY_JETBOT_VISUAL_TARGET_TURN_V0)
+POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0 = "chasecar_stack_fetch_adapter_v0"
+POLICY_ENTRYPOINTS = (
+    POLICY_FIXED_COMMAND_V0,
+    POLICY_JETBOT_VISUAL_TARGET_TURN_V0,
+    POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0,
+)
+DEFAULT_POLICY_ENTRYPOINT = POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0
 
 
 def utc_now() -> str:
@@ -58,6 +71,14 @@ def windows_path_to_wsl(path: Path | str) -> str:
         return resolved.as_posix()
     parts = [part for part in resolved.parts[1:]]
     return "/mnt/%s/%s" % (drive, "/".join(parts))
+
+
+def repo_display_path(path: Path | str) -> str:
+    resolved = Path(path).resolve()
+    try:
+        return str(resolved.relative_to(REPO_ROOT.resolve())).replace("\\", "/")
+    except ValueError:
+        return str(resolved)
 
 
 def command_nonzero(command: dict[str, float]) -> bool:
@@ -176,6 +197,163 @@ def build_visual_policy_args(args: argparse.Namespace) -> argparse.Namespace:
     return behavior_runner.build_parser().parse_args(argv)
 
 
+def build_stack_fetch_policy_args(args: argparse.Namespace) -> argparse.Namespace:
+    argv = [
+        "--mode",
+        "visual-advisor",
+        "--target-profile",
+        args.target_profile,
+        "--target-min-luma",
+        str(args.target_min_luma),
+        "--target-min-saturation",
+        str(args.target_min_saturation),
+        "--target-min-value",
+        str(args.target_min_value),
+        "--target-min-area-ratio",
+        str(args.target_min_area_ratio),
+        "--target-max-area-ratio",
+        str(args.target_max_area_ratio),
+        "--target-max-bbox-width-ratio",
+        str(args.target_max_bbox_width_ratio),
+        "--target-max-bbox-height-ratio",
+        str(args.target_max_bbox_height_ratio),
+        "--target-border-margin-ratio",
+        str(args.target_border_margin_ratio),
+        "--target-min-bbox-aspect-ratio",
+        str(args.target_min_bbox_aspect_ratio),
+        "--target-max-bbox-aspect-ratio",
+        str(args.target_max_bbox_aspect_ratio),
+        "--visual-center-deadband",
+        str(args.visual_center_deadband),
+        "--visual-turn-sign",
+        str(args.visual_turn_sign),
+        "--visual-angular-gain",
+        str(args.visual_angular_gain),
+        "--max-visual-angular-z",
+        str(args.max_policy_angular_z),
+        "--visual-command-duration-s",
+        str(args.command_duration_s),
+        "--allow-forward",
+        "--visual-forward-x",
+        str(args.stack_forward_x),
+        "--max-visual-linear-x",
+        str(args.max_stack_linear_x),
+        "--forward-stop-area-ratio",
+        str(args.stack_forward_stop_area_ratio),
+    ]
+    return behavior_runner.build_parser().parse_args(argv)
+
+
+def chasecar_stack_lineage(args: argparse.Namespace) -> dict[str, Any]:
+    detector_weights = REPO_ROOT / "yolov8m.pt"
+    checkpoint = str(args.stack_policy_checkpoint or "").strip()
+    return {
+        "adapter": POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0,
+        "upstream_policy": "scripts/brain_supervisor_policy.py:build_policy_snapshot",
+        "stack_family": "planner_routed_fetch_to_pose",
+        "control_contract": "runtime_json_to_ros_cmd_vel_to_factory_bridge",
+        "runtime_target_reference": "robot_fidelity_orin",
+        "inference_backend_reference": "tensorrt_int8",
+        "detector_weights": repo_display_path(detector_weights) if detector_weights.is_file() else "",
+        "detector_weights_present": detector_weights.is_file(),
+        "stack_policy_checkpoint": checkpoint,
+        "stack_policy_checkpoint_present": bool(checkpoint and Path(checkpoint).is_file()),
+        "learned_low_level_fetch_policy_loaded": bool(checkpoint and Path(checkpoint).is_file()),
+        "claim_boundary": (
+            "Bridge adapter uses the current deterministic/planner Chasecar policy contract. "
+            "No learned low-level fetch controller checkpoint is loaded unless stack_policy_checkpoint_present=true."
+        ),
+    }
+
+
+def stack_state_from_analysis(analysis: dict[str, Any], *, decision_id: str) -> dict[str, Any]:
+    detected = bool(analysis.get("detected", False))
+    centered = bool(analysis.get("centered", False))
+    return {
+        "control_plane_ready": True,
+        "environment_state": "environment_ready",
+        "session_id": decision_id,
+        "sim_gate_ready": True,
+        "belief": {
+            "robot_pose_available": True,
+            "latest_robot_pose": {
+                "source": "factory_bridge_camera_relative",
+                "frame": "base_link",
+                "pose_kind": "bridge_adapter_placeholder_pose",
+            },
+        },
+        "perception": {
+            "detection_topic_seen": True,
+            "target_visible_now": detected,
+            "target_profile": analysis.get("target_profile"),
+            "target_center_error": analysis.get("center_error"),
+            "target_area_ratio": analysis.get("area_ratio"),
+            "target_bbox": analysis.get("bbox"),
+            "camera_source": "factory_bridge_csi_snapshot",
+        },
+        "brain": {
+            "target_locked": bool(detected and centered),
+            "target_visible_recent": detected,
+            "goal_in_progress": False,
+            "track_active": False,
+            "search_active": False,
+        },
+        "mission": {
+            "route_planning_active": False,
+            "objective": "fetch_to_pose",
+        },
+    }
+
+
+def stack_command_from_policy(
+    analysis: dict[str, Any],
+    policy_snapshot: dict[str, Any],
+    args: argparse.Namespace,
+) -> tuple[dict[str, float], list[str], str]:
+    detected = bool(analysis.get("detected", False))
+    preferred_intent = str(policy_snapshot.get("preferred_intent", "") or "")
+    stage = str(policy_snapshot.get("stage", "") or "")
+    raw_recommendation = analysis.get("recommendation") if isinstance(analysis.get("recommendation"), dict) else {}
+    command = {
+        "linear_x": float(raw_recommendation.get("linear_x", 0.0) or 0.0),
+        "angular_z": float(raw_recommendation.get("angular_z", 0.0) or 0.0),
+    }
+    issues: list[str] = []
+    stop_reason = "stack_policy_noop"
+
+    if not detected:
+        issues.append("target_not_detected")
+        return {"linear_x": 0.0, "angular_z": 0.0}, issues, "target_not_detected"
+
+    if stage in ("blocked", "stop") or preferred_intent in ("safe_stop", "abort", ""):
+        issues.append("stack_policy_safe_stop")
+        return {"linear_x": 0.0, "angular_z": 0.0}, issues, "stack_policy_safe_stop"
+
+    if preferred_intent == "acquire_target":
+        command["linear_x"] = 0.0
+        stop_reason = "acquire_target_turn_command"
+    elif preferred_intent == "plan_to_target":
+        area_ratio = float(analysis.get("area_ratio", 0.0) or 0.0)
+        if area_ratio >= float(args.stack_forward_stop_area_ratio):
+            issues.append("target_inside_stack_forward_stop_area")
+            command = {"linear_x": 0.0, "angular_z": 0.0}
+            stop_reason = "target_inside_stack_forward_stop_area"
+        else:
+            command["linear_x"] = max(float(command.get("linear_x", 0.0) or 0.0), float(args.stack_forward_x))
+            stop_reason = "fetch_to_pose_approach_command"
+    elif preferred_intent == "track_target":
+        stop_reason = "track_target_bridge_command"
+    else:
+        issues.append("unsupported_stack_intent:%s" % preferred_intent)
+        command = {"linear_x": 0.0, "angular_z": 0.0}
+        stop_reason = "unsupported_stack_intent"
+
+    command = bound_policy_command(command, args)
+    if not command_nonzero(command):
+        issues.append("policy_command_zero")
+    return command, issues, stop_reason
+
+
 def run_visual_target_turn_policy(
     client: bridge_client.BridgeClient,
     args: argparse.Namespace,
@@ -222,6 +400,54 @@ def run_visual_target_turn_policy(
     return decision
 
 
+def run_chasecar_stack_fetch_adapter_policy(
+    client: bridge_client.BridgeClient,
+    args: argparse.Namespace,
+    artifact_dir: Path,
+) -> dict[str, Any]:
+    ensure_dir(artifact_dir)
+    frame_path = artifact_dir / "policy_observation.jpg"
+    annotated_path = artifact_dir / "policy_observation_annotated.jpg"
+    snapshot = save_snapshot(client, frame_path, args)
+    behavior_args = build_stack_fetch_policy_args(args)
+    analysis = behavior_runner.analyze_target_image(frame_path, behavior_args, annotated_path=annotated_path)
+    decision_id = "%s:%s" % (POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0, utc_stamp())
+    stack_state = stack_state_from_analysis(analysis, decision_id=decision_id)
+    policy_snapshot = supervisor_policy.build_policy_snapshot(stack_state, sim_gate_ready=True)
+    command, command_issues, stop_reason = stack_command_from_policy(analysis, policy_snapshot, args)
+    analysis_issues = list(analysis.get("issues", [])) if isinstance(analysis.get("issues"), list) else []
+    issues = analysis_issues if not bool(analysis.get("detected", False)) else []
+    for issue in command_issues:
+        if issue not in issues:
+            issues.append(issue)
+    decision = {
+        "entrypoint": POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0,
+        "decision_id": decision_id,
+        "pass": bool(not issues and command_nonzero(command)),
+        "issues": issues,
+        "stop_reason": stop_reason,
+        "observation": {
+            "snapshot": snapshot,
+            "target_profile": args.target_profile,
+            "detected": bool(analysis.get("detected", False)),
+            "centered": bool(analysis.get("centered", False)),
+            "center_error": analysis.get("center_error"),
+            "area_ratio": analysis.get("area_ratio"),
+            "bbox": analysis.get("bbox"),
+            "annotated_image_path": str(annotated_path),
+        },
+        "stack_state": stack_state,
+        "stack_policy": policy_snapshot,
+        "stack_lineage": chasecar_stack_lineage(args),
+        "raw_recommendation": analysis.get("recommendation", {}),
+        "command": command,
+        "command_bounds": command_bounds(args),
+        "analysis": analysis,
+    }
+    write_json(artifact_dir / "policy_decision.json", decision)
+    return decision
+
+
 def run_policy_entrypoint(
     client: bridge_client.BridgeClient,
     args: argparse.Namespace,
@@ -248,6 +474,8 @@ def run_policy_entrypoint(
         return decision
     if args.policy_entrypoint == POLICY_JETBOT_VISUAL_TARGET_TURN_V0:
         return run_visual_target_turn_policy(client, args, artifact_dir)
+    if args.policy_entrypoint == POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0:
+        return run_chasecar_stack_fetch_adapter_policy(client, args, artifact_dir)
     raise RuntimeError("unsupported_policy_entrypoint:%s" % args.policy_entrypoint)
 
 
@@ -553,6 +781,11 @@ def validate_args(args: argparse.Namespace) -> list[str]:
         issues.append("max_motor_speed_above_1")
     if float(args.max_policy_angular_z) > float(args.max_runtime_angular_z):
         issues.append("max_policy_angular_z_above_runtime_limit")
+    if args.policy_entrypoint == POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0:
+        if float(args.max_stack_linear_x) > float(args.max_runtime_linear_x):
+            issues.append("max_stack_linear_x_above_runtime_limit")
+        if float(args.stack_forward_x) > float(args.max_stack_linear_x):
+            issues.append("stack_forward_x_above_stack_limit")
     return issues
 
 
@@ -706,7 +939,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pretty", action="store_true")
     parser.add_argument("--execute-motion", action="store_true")
     parser.add_argument("--confirm-operator-ready", action="store_true")
-    parser.add_argument("--policy-entrypoint", choices=POLICY_ENTRYPOINTS, default=POLICY_JETBOT_VISUAL_TARGET_TURN_V0)
+    parser.add_argument("--policy-entrypoint", choices=POLICY_ENTRYPOINTS, default=DEFAULT_POLICY_ENTRYPOINT)
 
     parser.add_argument("--distro", default="Ubuntu-24.04")
     parser.add_argument("--ros-distro", default="jazzy")
@@ -745,12 +978,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-visual-shift-px", type=float, default=2.0)
     parser.add_argument("--min-visual-shift-score-gain", type=float, default=0.03)
     parser.add_argument("--max-static-visual-similarity", type=float, default=0.975)
-    parser.add_argument("--target-profile", choices=behavior_runner.DEFAULT_VISUAL_SCAN_PROFILES, default="any-saturated")
+    parser.add_argument("--target-profile", choices=behavior_runner.DEFAULT_VISUAL_SCAN_PROFILES, default="blue")
     parser.add_argument("--target-min-luma", type=float, default=180.0)
     parser.add_argument("--target-min-saturation", type=float, default=0.25)
     parser.add_argument("--target-min-value", type=float, default=0.20)
     parser.add_argument("--target-min-area-ratio", type=float, default=0.05)
-    parser.add_argument("--target-max-area-ratio", type=float, default=0.45)
+    parser.add_argument("--target-max-area-ratio", type=float, default=0.55)
     parser.add_argument("--target-max-bbox-width-ratio", type=float, default=1.0)
     parser.add_argument("--target-max-bbox-height-ratio", type=float, default=1.0)
     parser.add_argument("--target-border-margin-ratio", type=float, default=0.0)
@@ -760,6 +993,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--visual-turn-sign", type=float, default=1.0)
     parser.add_argument("--visual-angular-gain", type=float, default=4.0)
     parser.add_argument("--max-policy-angular-z", type=float, default=0.4)
+    parser.add_argument("--stack-forward-x", type=float, default=0.025)
+    parser.add_argument("--max-stack-linear-x", type=float, default=0.04)
+    parser.add_argument("--stack-forward-stop-area-ratio", type=float, default=0.48)
+    parser.add_argument("--stack-policy-checkpoint", default="")
     return parser
 
 

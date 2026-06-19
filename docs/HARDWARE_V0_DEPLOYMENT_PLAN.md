@@ -63,13 +63,16 @@ Evidence:
 Representative command:
 
 ```powershell
-python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --artifact-dir artifacts/session/<id>/locked_policy_path --policy-entrypoint jetbot_visual_target_turn_v0
+python tools/robot_factory_bridge/chasecar_bridge_stack_path_gate.py --artifact-dir artifacts/session/<id>/locked_policy_path --policy-entrypoint chasecar_stack_fetch_adapter_v0 --target-profile blue --max-bridge-linear-x 0.08 --max-bridge-angular-z 0.8
 ```
 
 This command captures a bridge camera frame, runs the
-`jetbot_visual_target_turn_v0` policy entry point, and proves that the policy
+`chasecar_stack_fetch_adapter_v0` policy entry point, records the Chasecar
+supervisor policy snapshot and command provenance, and proves that the policy
 decision reaches the locked bridge through the same relay and artifact
-contract.
+contract. The artifact records whether a learned low-level fetch checkpoint was
+loaded; the current fast-track path uses the deterministic/planner stack contract
+until a checkpoint is explicitly supplied.
 
 ## Codex Direct Hardware Access
 
