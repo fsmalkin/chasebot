@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 
 
-VERSION = "0.1.2"
+VERSION = "0.1.4"
 
 
 DASHBOARD_HTML = r"""<!doctype html>
@@ -425,6 +425,22 @@ def finite_float(value, default=0.0):
     return number
 
 
+def strict_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if value in (0, 1):
+            return bool(value)
+        raise ValueError("boolean_value_must_be_0_or_1")
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes", "on"):
+            return True
+        if lowered in ("false", "0", "no", "off"):
+            return False
+    raise ValueError("boolean_value_required")
+
+
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
@@ -544,6 +560,10 @@ class CameraAdapter(object):
         jpeg_fps=5.0,
         backend="gstreamer",
         gstreamer_sensor_id=0,
+        v4l2_device="/dev/video0",
+        v4l2_raw_width=3264,
+        v4l2_raw_height=2464,
+        v4l2_pixelformat="RG10",
     ):
         self.enabled = bool(enabled)
         self.dry_run = bool(dry_run)
@@ -553,6 +573,10 @@ class CameraAdapter(object):
         self.jpeg_fps = max(0.2, float(jpeg_fps))
         self.backend = str(backend or "gstreamer")
         self.gstreamer_sensor_id = int(gstreamer_sensor_id)
+        self.v4l2_device = str(v4l2_device or "/dev/video0")
+        self.v4l2_raw_width = int(v4l2_raw_width)
+        self.v4l2_raw_height = int(v4l2_raw_height)
+        self.v4l2_pixelformat = str(v4l2_pixelformat or "RG10")
         self.camera = None
         self.gstreamer_dir = "/tmp/chasecar_bridge_camera_%s" % os.getpid()
         self.gstreamer_last_path = None
@@ -624,6 +648,9 @@ class CameraAdapter(object):
         if self.backend == "jetbotmini":
             self._capture_loop_jetbotmini()
             return
+        if self.backend == "v4l2_bayer":
+            self._capture_loop_v4l2_bayer()
+            return
         with self.lock:
             self.error = "unsupported_camera_backend:%s" % self.backend
 
@@ -639,6 +666,103 @@ class CameraAdapter(object):
                     self.camera = Camera.instance(width=self.width, height=self.height)
                     time.sleep(0.4)
                 jpeg = self._bgr8_to_jpeg(self.camera.value, quality=self.jpeg_quality)
+                with self.lock:
+                    self.latest_jpeg = jpeg
+                    self.latest_jpeg_monotonic = time.monotonic()
+                    self.frame_count += 1
+                    self.encode_count += 1
+                    self.error = None
+            except Exception as exc:
+                with self.lock:
+                    self.error = repr(exc)
+                time.sleep(0.5)
+            elapsed = time.monotonic() - started
+            time.sleep(max(0.01, interval_s - elapsed))
+
+    def build_v4l2_set_format_command(self):
+        return [
+            "v4l2-ctl",
+            "--device=%s" % self.v4l2_device,
+            "--set-fmt-video=width=%s,height=%s,pixelformat=%s"
+            % (self.v4l2_raw_width, self.v4l2_raw_height, self.v4l2_pixelformat),
+        ]
+
+    def build_v4l2_stream_command(self, raw_path):
+        return [
+            "v4l2-ctl",
+            "--device=%s" % self.v4l2_device,
+            "--stream-mmap",
+            "--stream-count=1",
+            "--stream-to=%s" % raw_path,
+        ]
+
+    def v4l2_bayer_bytes_to_jpeg(self, raw_bytes):
+        try:
+            import numpy as np
+            from PIL import Image
+            import io
+        except Exception as exc:
+            raise RuntimeError("v4l2_bayer_dependencies_unavailable:%r" % (exc,))
+
+        width = int(self.v4l2_raw_width)
+        height = int(self.v4l2_raw_height)
+        expected_samples = width * height
+        raw = np.frombuffer(raw_bytes, dtype="<u2")
+        if raw.size < expected_samples:
+            raise RuntimeError(
+                "v4l2_bayer_short_frame:%s<%s" % (raw.size, expected_samples)
+            )
+        raw = raw[:expected_samples].reshape((height, width)).astype(np.float32)
+
+        lo = float(np.percentile(raw, 1.0))
+        hi = float(np.percentile(raw, 99.9))
+        scale = 255.0 / max(hi - lo, 1.0)
+        raw = np.clip((raw - lo) * scale, 0, 255).astype(np.uint8)
+
+        red = raw[0::2, 0::2]
+        green = (
+            (raw[0::2, 1::2].astype(np.uint16) + raw[1::2, 0::2].astype(np.uint16))
+            // 2
+        ).astype(np.uint8)
+        blue = raw[1::2, 1::2]
+        rgb = np.dstack([red, green, blue])
+
+        image = Image.fromarray(rgb, "RGB")
+        if image.size != (int(self.width), int(self.height)):
+            image = image.resize((int(self.width), int(self.height)))
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=int(self.jpeg_quality))
+        return buffer.getvalue()
+
+    def capture_v4l2_bayer_jpeg_once(self):
+        raw_path = "/tmp/chasecar_bridge_v4l2_%s.raw" % os.getpid()
+        subprocess.check_call(
+            self.build_v4l2_set_format_command(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.check_call(
+            self.build_v4l2_stream_command(raw_path),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            with open(raw_path, "rb") as handle:
+                return self.v4l2_bayer_bytes_to_jpeg(handle.read())
+        finally:
+            try:
+                os.unlink(raw_path)
+            except Exception:
+                pass
+
+    def _capture_loop_v4l2_bayer(self):
+        interval_s = 1.0 / max(0.2, self.jpeg_fps)
+        while not self.stop_event.is_set():
+            started = time.monotonic()
+            try:
+                jpeg = self.capture_v4l2_bayer_jpeg_once()
                 with self.lock:
                     self.latest_jpeg = jpeg
                     self.latest_jpeg_monotonic = time.monotonic()
@@ -767,6 +891,8 @@ class CameraAdapter(object):
             return True
         if self.backend == "gstreamer":
             return self.camera is not None and self.camera.poll() is None
+        if self.backend == "v4l2_bayer":
+            return os.path.exists(self.v4l2_device)
         return self.camera is not None
 
     def stop(self):
@@ -799,6 +925,10 @@ class CameraAdapter(object):
             "height": self.height,
             "jpeg_quality": self.jpeg_quality,
             "target_fps": self.jpeg_fps,
+            "v4l2_device": self.v4l2_device if self.backend == "v4l2_bayer" else None,
+            "v4l2_raw_width": self.v4l2_raw_width if self.backend == "v4l2_bayer" else None,
+            "v4l2_raw_height": self.v4l2_raw_height if self.backend == "v4l2_bayer" else None,
+            "v4l2_pixelformat": self.v4l2_pixelformat if self.backend == "v4l2_bayer" else None,
             "cached_fps": round(cached_fps, 3),
             "frame_count": frame_count,
             "encode_count": encode_count,
@@ -826,6 +956,10 @@ class BridgeState(object):
             jpeg_fps=args.camera_fps,
             backend=args.camera_backend,
             gstreamer_sensor_id=args.camera_gstreamer_sensor_id,
+            v4l2_device=args.camera_v4l2_device,
+            v4l2_raw_width=args.camera_v4l2_raw_width,
+            v4l2_raw_height=args.camera_v4l2_raw_height,
+            v4l2_pixelformat=args.camera_v4l2_pixelformat,
         )
         self.started_monotonic = time.monotonic()
         self.event_log_path = args.event_log_path
@@ -908,6 +1042,19 @@ class BridgeState(object):
             self.command_deadline_monotonic = 0.0
             self.last_stop_reason = str(reason)
             self._record_event_locked("stop", {"reason": str(reason)})
+
+    def set_motion_enabled(self, enabled, source):
+        enabled = bool(enabled)
+        source = str(source)
+        with self.lock:
+            self.args.enable_motion = enabled
+            self._record_event_locked(
+                "motion_control",
+                {"source": source, "motion_enabled": enabled},
+            )
+        if not enabled:
+            self.stop("motion_control_disabled:%s" % source)
+        return self.status()
 
     def close(self):
         try:
@@ -1027,6 +1174,16 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def write_binary(self, data, content_type, status=200, chunk_size=1024):
+        self.send_response(status)
+        self.send_header("Content-Type", str(content_type))
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        for index in range(0, len(data), int(chunk_size)):
+            self.wfile.write(data[index : index + int(chunk_size)])
+            self.wfile.flush()
+
     def read_json(self):
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
@@ -1058,12 +1215,22 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/camera.jpg":
             try:
                 jpeg = self.bridge.camera.snapshot_jpeg()
-                self.send_response(200)
-                self.send_header("Content-Type", "image/jpeg")
-                self.send_header("Cache-Control", "no-store, max-age=0")
-                self.send_header("Content-Length", str(len(jpeg)))
-                self.end_headers()
-                self.wfile.write(jpeg)
+                self.write_binary(jpeg, "image/jpeg")
+            except Exception as exc:
+                self.write_json({"ok": False, "error": repr(exc)}, status=503)
+            return
+        if parsed.path == "/camera.json":
+            try:
+                jpeg = self.bridge.camera.snapshot_jpeg()
+                self.write_json(
+                    {
+                        "ok": True,
+                        "content_type": "image/jpeg",
+                        "encoding": "base64",
+                        "bytes": len(jpeg),
+                        "image_base64": base64.b64encode(jpeg).decode("ascii"),
+                    }
+                )
             except Exception as exc:
                 self.write_json({"ok": False, "error": repr(exc)}, status=503)
             return
@@ -1084,6 +1251,16 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                     payload,
                 )
                 self.write_json({"ok": True, "event": event, "state": self.bridge.status()})
+                return
+            if parsed.path in ("/motion", "/motion_enabled"):
+                if "enabled" in payload:
+                    enabled = strict_bool(payload.get("enabled"))
+                elif "motion_enabled" in payload:
+                    enabled = strict_bool(payload.get("motion_enabled"))
+                else:
+                    raise ValueError("enabled_required")
+                source = payload.get("source", "api_motion_control")
+                self.write_json(self.bridge.set_motion_enabled(enabled, source))
                 return
             if parsed.path == "/motors":
                 status = self.bridge.apply_motors(
@@ -1127,8 +1304,12 @@ def parse_args(argv):
     parser.add_argument("--camera-height", type=int, default=240)
     parser.add_argument("--camera-fps", type=float, default=5.0)
     parser.add_argument("--camera-jpeg-quality", type=int, default=55)
-    parser.add_argument("--camera-backend", choices=["gstreamer", "jetbotmini"], default="gstreamer")
+    parser.add_argument("--camera-backend", choices=["gstreamer", "jetbotmini", "v4l2_bayer"], default="gstreamer")
     parser.add_argument("--camera-gstreamer-sensor-id", type=int, default=0)
+    parser.add_argument("--camera-v4l2-device", default="/dev/video0")
+    parser.add_argument("--camera-v4l2-raw-width", type=int, default=3264)
+    parser.add_argument("--camera-v4l2-raw-height", type=int, default=2464)
+    parser.add_argument("--camera-v4l2-pixelformat", default="RG10")
     parser.add_argument("--deadman-timeout-s", type=float, default=0.5)
     parser.add_argument("--max-command-duration-s", type=float, default=1.0)
     parser.add_argument("--max-motor-speed", type=float, default=0.35)

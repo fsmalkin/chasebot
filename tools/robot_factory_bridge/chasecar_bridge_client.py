@@ -117,6 +117,16 @@ class BridgeClient:
     def stop(self, source):
         return self.request("POST", "/stop", {"source": str(source)})
 
+    def set_motion_enabled(self, enabled, source):
+        return self.request(
+            "POST",
+            "/motion",
+            {
+                "enabled": bool(enabled),
+                "source": str(source),
+            },
+        )
+
     def cmd_vel(self, linear_x, angular_z, duration_s, source):
         payload = {
             "linear_x": float(linear_x),
