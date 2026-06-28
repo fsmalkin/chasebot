@@ -454,12 +454,34 @@ def relay_bash(args: argparse.Namespace, artifact_dir: Path, runtime_path: Path,
     artifact_wsl = windows_path_to_wsl(artifact_dir)
     runtime_wsl = windows_path_to_wsl(runtime_path)
     require_flag = " \\\n  --require-motion-enabled" if require_motion_enabled else ""
+    relay_start_poll_count = max(1, int(float(args.relay_start_timeout_s) * 2.0 + 0.999))
     return f"""set -eo pipefail
 source /opt/ros/{args.ros_distro}/setup.bash
 cd "{args.runtime_source_path}"
 ART="{artifact_wsl}"
 RUNTIME="{runtime_wsl}"
 mkdir -p "$ART"
+stop_child() {{
+  child_pid="$1"
+  if ! kill -0 "$child_pid" 2>/dev/null; then
+    return 0
+  fi
+  kill -INT "$child_pid" 2>/dev/null || true
+  for _ in 1 2 3 4 5; do
+    if ! kill -0 "$child_pid" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.2
+  done
+  kill -TERM "$child_pid" 2>/dev/null || true
+  for _ in 1 2 3 4 5; do
+    if ! kill -0 "$child_pid" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.2
+  done
+  kill -KILL "$child_pid" 2>/dev/null || true
+}}
 python3 scripts/gather_motion_bridge.py \\
   --runtime-json "$RUNTIME" \\
   --loop-rate-hz {args.gather_loop_rate_hz} \\
@@ -482,9 +504,18 @@ python3 ros2_scripts/factory_bridge_cmd_vel_relay.py \\
   --stale-stop-s {args.stale_stop_s}{require_flag} \\
   > "$ART/relay_stdout.log" 2> "$ART/relay_stderr.log" &
 relay_pid=$!
+for _ in $(seq 1 {relay_start_poll_count}); do
+  if [ -s "$ART/relay_summary.json" ]; then
+    break
+  fi
+  if ! kill -0 "$relay_pid" 2>/dev/null; then
+    break
+  fi
+  sleep 0.5
+done
 sleep {args.relay_window_s}
-kill -INT "$gather_pid" 2>/dev/null || true
-kill -INT "$relay_pid" 2>/dev/null || true
+stop_child "$gather_pid"
+stop_child "$relay_pid"
 wait "$gather_pid" 2>/dev/null || true
 wait "$relay_pid" 2>/dev/null || true
 """
@@ -564,6 +595,20 @@ def deploy_bridge(args: argparse.Namespace, artifact_dir: Path, *, enable_motion
         str(args.port),
         "-Start",
         "-Camera",
+        "-CameraBackend",
+        args.camera_backend,
+        "-CameraFps",
+        str(args.camera_fps),
+        "-CameraJpegQuality",
+        str(args.camera_jpeg_quality),
+        "-CameraV4l2Device",
+        args.camera_v4l2_device,
+        "-CameraV4l2RawWidth",
+        str(args.camera_v4l2_raw_width),
+        "-CameraV4l2RawHeight",
+        str(args.camera_v4l2_raw_height),
+        "-CameraV4l2Pixelformat",
+        args.camera_v4l2_pixelformat,
     ]
     if enable_motion:
         command.extend(["-EnableMotion", "-MaxMotorSpeed", str(args.max_motor_speed)])
@@ -797,6 +842,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--skip-deploy", action="store_true")
     parser.add_argument("--deploy-timeout-s", type=float, default=45.0)
+    parser.add_argument("--camera-backend", choices=["gstreamer", "jetbotmini", "v4l2_bayer"], default="gstreamer")
+    parser.add_argument("--camera-fps", type=float, default=5.0)
+    parser.add_argument("--camera-jpeg-quality", type=int, default=55)
+    parser.add_argument("--camera-v4l2-device", default="/dev/video0")
+    parser.add_argument("--camera-v4l2-raw-width", type=int, default=3264)
+    parser.add_argument("--camera-v4l2-raw-height", type=int, default=2464)
+    parser.add_argument("--camera-v4l2-pixelformat", default="RG10")
 
     parser.add_argument("--loop-frames", type=int, default=4)
     parser.add_argument("--loop-interval-s", type=float, default=0.32)

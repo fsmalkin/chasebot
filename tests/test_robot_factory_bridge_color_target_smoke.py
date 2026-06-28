@@ -91,6 +91,19 @@ def test_camera_loop_writes_runtime_commands_and_contact_sheet(tmp_path):
     assert final_runtime["manual_drive"]["command"] == {"angular_z": 0.0, "linear_x": 0.0}
 
 
+def test_relay_bash_waits_for_summary_before_proof_window(tmp_path):
+    args = smoke.parse_args(["--relay-start-timeout-s", "1.0", "--relay-window-s", "1.25"])
+
+    script = smoke.relay_bash(args, tmp_path / "relay", tmp_path / "runtime.json", require_motion_enabled=False)
+
+    assert "stop_child()" in script
+    assert 'if [ -s "$ART/relay_summary.json" ]; then' in script
+    assert "for _ in $(seq 1 2); do" in script
+    assert "sleep 1.25" in script
+    assert 'kill -TERM "$child_pid"' in script
+    assert 'kill -KILL "$child_pid"' in script
+
+
 def test_unconfirmed_motion_is_refused_before_hardware_steps():
     args = smoke.parse_args(["--execute-motion"])
 

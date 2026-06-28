@@ -409,7 +409,10 @@ def component_summary(area, sum_x, sum_y, min_x, min_y, max_x, max_y, width, hei
         "bbox_height_ratio": ((max_y - min_y + 1) / height) if area else 0.0,
         "bbox_aspect_ratio": ((max_x - min_x + 1) / max((max_y - min_y + 1), 1)) if area else 0.0,
         "centroid": {"x": centroid_x, "y": centroid_y} if area else None,
+        "centroid_y_ratio": (centroid_y / height) if area else None,
         "bbox": {"x0": min_x, "y0": min_y, "x1": max_x, "y1": max_y} if area else None,
+        "bbox_center_y_ratio": (((min_y + max_y) / 2.0) / height) if area else None,
+        "bbox_bottom_ratio": (max_y / height) if area else None,
         "center_error": ((centroid_x - (width / 2.0)) / (width / 2.0)) if area else None,
         "touches_border": touches_border,
     }
@@ -521,6 +524,9 @@ def component_issues(summary, args):
     bbox_width_ratio = float(summary.get("bbox_width_ratio", 0.0) or 0.0)
     bbox_height_ratio = float(summary.get("bbox_height_ratio", 0.0) or 0.0)
     bbox_aspect_ratio = float(summary.get("bbox_aspect_ratio", 0.0) or 0.0)
+    centroid_y_ratio = summary.get("centroid_y_ratio")
+    min_centroid_y_ratio = float(getattr(args, "target_min_centroid_y_ratio", 0.0) or 0.0)
+    max_centroid_y_ratio = float(getattr(args, "target_max_centroid_y_ratio", 1.0) or 1.0)
     if matched <= 0:
         issues.append("target_not_detected")
     if area_ratio < args.target_min_area_ratio:
@@ -537,6 +543,10 @@ def component_issues(summary, args):
         issues.append("target_bbox_aspect_below_threshold")
     if float(args.target_max_bbox_aspect_ratio) > 0.0 and bbox_aspect_ratio > float(args.target_max_bbox_aspect_ratio):
         issues.append("target_bbox_aspect_above_threshold")
+    if centroid_y_ratio is not None and centroid_y_ratio < min_centroid_y_ratio:
+        issues.append("target_centroid_y_below_threshold")
+    if centroid_y_ratio is not None and centroid_y_ratio > max_centroid_y_ratio:
+        issues.append("target_centroid_y_above_threshold")
     return issues
 
 
@@ -1091,6 +1101,8 @@ def build_parser():
     parser.add_argument("--target-border-margin-ratio", type=float, default=0.0)
     parser.add_argument("--target-min-bbox-aspect-ratio", type=float, default=0.0)
     parser.add_argument("--target-max-bbox-aspect-ratio", type=float, default=0.0)
+    parser.add_argument("--target-min-centroid-y-ratio", type=float, default=0.0)
+    parser.add_argument("--target-max-centroid-y-ratio", type=float, default=1.0)
     parser.add_argument("--visual-scan-profiles", default=",".join(DEFAULT_VISUAL_SCAN_PROFILES))
     parser.add_argument("--require-target", action="store_true")
     parser.add_argument("--visual-center-deadband", type=float, default=0.16)
