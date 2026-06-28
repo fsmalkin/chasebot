@@ -15,7 +15,11 @@ import chasecar_bridge_stack_path_gate as stack_gate
 
 
 DEFAULT_ARTIFACT_STEM = "factory_bridge_stack_closed_loop"
-SAFE_TERMINAL_POLICY_STOPS = {"target_inside_stack_forward_stop_area"}
+SAFE_TERMINAL_POLICY_STOPS = {
+    "target_inside_stack_forward_stop_area",
+    "target_inside_stack_forward_stop_bbox_height",
+}
+LEGACY_SAFE_TERMINAL_POLICY_STOPS = {"target_too_close"}
 REAL_STACK_BOOT_REPORT_FILENAME = "real_stack_boot_report.json"
 REAL_STACK_BOOT_REPORT_MD_FILENAME = "real_stack_boot_report.md"
 NAV_TARGET_SUCCESS_FILENAME = "nav_target_success.json"
@@ -50,6 +54,18 @@ def write_text(path: Path | str, payload: str) -> None:
 
 def default_artifact_dir() -> Path:
     return Path("artifacts") / "session" / ("%s_%s" % (DEFAULT_ARTIFACT_STEM, utc_stamp()))
+
+
+def is_safe_terminal_reason(reason: str) -> bool:
+    return str(reason or "") in (SAFE_TERMINAL_POLICY_STOPS | LEGACY_SAFE_TERMINAL_POLICY_STOPS)
+
+
+def summary_safe_terminal_stop(summary: dict[str, Any]) -> bool:
+    terminal_reason = str(summary.get("terminal_reason", "") or "")
+    if is_safe_terminal_reason(terminal_reason):
+        return True
+    steps = summary.get("steps") if isinstance(summary.get("steps"), list) else []
+    return bool(steps and steps[-1].get("safe_terminal_stop", False))
 
 
 def read_source_text(relative_path: str) -> tuple[Path, str]:
@@ -311,6 +327,19 @@ def copy_step_args(args: argparse.Namespace, artifact_dir: Path) -> argparse.Nam
 def relay_raw_command(relay_summary: dict[str, Any]) -> dict[str, float]:
     relay = relay_summary.get("relay") if isinstance(relay_summary.get("relay"), dict) else {}
     latest = relay.get("last_input") if isinstance(relay.get("last_input"), dict) else {}
+    if not latest:
+        events = relay.get("events") if isinstance(relay.get("events"), list) else []
+        for event in reversed(events):
+            if not isinstance(event, dict):
+                continue
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            raw = payload.get("raw") if isinstance(payload.get("raw"), dict) else payload
+            if "linear_x" in raw or "angular_z" in raw:
+                latest = {
+                    "raw_linear_x": raw.get("linear_x", 0.0),
+                    "raw_angular_z": raw.get("angular_z", 0.0),
+                }
+                break
     return {
         "linear_x": float(latest.get("raw_linear_x", 0.0) or 0.0),
         "angular_z": float(latest.get("raw_angular_z", 0.0) or 0.0),
@@ -351,59 +380,139 @@ def as_float_or_none(value: Any) -> float | None:
         return None
 
 
+def progress_geometry_from_policy_decision(decision: dict[str, Any]) -> dict[str, Any]:
+    observation = decision.get("observation") if isinstance(decision.get("observation"), dict) else {}
+    analysis = decision.get("analysis") if isinstance(decision.get("analysis"), dict) else {}
+    detector_backend = str(analysis.get("detector_backend", "") or "")
+    fallback_area = as_float_or_none(analysis.get("color_fallback_area_ratio"))
+    fallback_center = as_float_or_none(analysis.get("color_fallback_center_error"))
+    if (
+        detector_backend == "yolo_onnx_or_color:yolo_onnx"
+        and bool(analysis.get("color_fallback_detected", False))
+        and fallback_area is not None
+        and fallback_center is not None
+    ):
+        return {
+            "detector_backend": "color_fallback",
+            "target_detected": True,
+            "target_centered": bool(observation.get("centered", False)),
+            "target_center_error": fallback_center,
+            "target_area_ratio": fallback_area,
+            "target_bbox_height_ratio": as_float_or_none(analysis.get("color_fallback_bbox_height_ratio")),
+            "annotated_image_path": observation.get("annotated_image_path", ""),
+        }
+    center_error = as_float_or_none(observation.get("center_error"))
+    return {
+        "detector_backend": detector_backend,
+        "target_detected": bool(observation.get("detected", False)),
+        "target_centered": bool(observation.get("centered", False)),
+        "target_center_error": center_error,
+        "target_area_ratio": as_float_or_none(observation.get("area_ratio")),
+        "target_bbox_height_ratio": as_float_or_none(analysis.get("bbox_height_ratio")),
+        "annotated_image_path": observation.get("annotated_image_path", ""),
+    }
+
+
 def target_snapshot_from_record(record: dict[str, Any], *, label: str) -> dict[str, Any]:
-    center_error = as_float_or_none(record.get("target_center_error"))
+    progress_area = as_float_or_none(record.get("progress_target_area_ratio"))
+    progress_center = as_float_or_none(record.get("progress_target_center_error"))
+    use_progress_geometry = progress_area is not None and progress_center is not None
+    center_error = progress_center if use_progress_geometry else as_float_or_none(record.get("target_center_error"))
+    bbox_height = (
+        as_float_or_none(record.get("progress_target_bbox_height_ratio"))
+        if use_progress_geometry
+        else as_float_or_none(record.get("target_bbox_height_ratio"))
+    )
     return {
         "label": label,
         "step_index": record.get("index"),
         "policy_stage": record.get("policy_stage", ""),
         "policy_preferred_intent": record.get("policy_preferred_intent", ""),
-        "target_detected": bool(record.get("target_detected", False)),
-        "target_centered": bool(record.get("target_centered", False)),
+        "progress_detector_backend": record.get("progress_detector_backend", "") if use_progress_geometry else "",
+        "target_detected": bool(
+            record.get("progress_target_detected", False)
+            if use_progress_geometry
+            else record.get("target_detected", False)
+        ),
+        "target_centered": bool(
+            record.get("progress_target_centered", False)
+            if use_progress_geometry
+            else record.get("target_centered", False)
+        ),
         "target_center_error": center_error,
         "target_abs_center_error": abs(center_error) if center_error is not None else None,
-        "target_area_ratio": as_float_or_none(record.get("target_area_ratio")),
-        "annotated_image_path": record.get("annotated_image_path", ""),
+        "target_area_ratio": progress_area if use_progress_geometry else as_float_or_none(record.get("target_area_ratio")),
+        "target_bbox_height_ratio": bbox_height,
+        "annotated_image_path": (
+            record.get("progress_annotated_image_path", "")
+            if use_progress_geometry
+            else record.get("annotated_image_path", "")
+        ),
     }
 
 
 def target_snapshot_from_policy_decision(decision: dict[str, Any], *, label: str) -> dict[str, Any]:
-    observation = decision.get("observation") if isinstance(decision.get("observation"), dict) else {}
     policy = decision.get("stack_policy") if isinstance(decision.get("stack_policy"), dict) else {}
-    center_error = as_float_or_none(observation.get("center_error"))
+    progress = progress_geometry_from_policy_decision(decision)
+    center_error = as_float_or_none(progress.get("target_center_error"))
     return {
         "label": label,
         "step_index": None,
         "policy_stage": policy.get("stage", ""),
         "policy_preferred_intent": policy.get("preferred_intent", ""),
-        "target_detected": bool(observation.get("detected", False)),
-        "target_centered": bool(observation.get("centered", False)),
+        "progress_detector_backend": progress.get("detector_backend", ""),
+        "target_detected": bool(progress.get("target_detected", False)),
+        "target_centered": bool(progress.get("target_centered", False)),
         "target_center_error": center_error,
         "target_abs_center_error": abs(center_error) if center_error is not None else None,
-        "target_area_ratio": as_float_or_none(observation.get("area_ratio")),
-        "annotated_image_path": observation.get("annotated_image_path", ""),
+        "target_area_ratio": as_float_or_none(progress.get("target_area_ratio")),
+        "target_bbox_height_ratio": as_float_or_none(progress.get("target_bbox_height_ratio")),
+        "annotated_image_path": progress.get("annotated_image_path", ""),
     }
 
 
 def target_snapshot_from_step_record(record: dict[str, Any], *, label: str) -> dict[str, Any]:
-    center_error = as_float_or_none(record.get("target_center_error"))
+    progress_area = as_float_or_none(record.get("progress_target_area_ratio"))
+    progress_center = as_float_or_none(record.get("progress_target_center_error"))
+    use_progress_geometry = progress_area is not None and progress_center is not None
+    center_error = progress_center if use_progress_geometry else as_float_or_none(record.get("target_center_error"))
+    bbox_height = (
+        as_float_or_none(record.get("progress_target_bbox_height_ratio"))
+        if use_progress_geometry
+        else as_float_or_none(record.get("target_bbox_height_ratio"))
+    )
     return {
         "label": label,
         "step_index": record.get("index"),
         "policy_stage": record.get("policy_stage", ""),
         "policy_preferred_intent": record.get("policy_preferred_intent", ""),
-        "target_detected": bool(record.get("target_detected", False)),
-        "target_centered": bool(record.get("target_centered", False)),
+        "progress_detector_backend": record.get("progress_detector_backend", "") if use_progress_geometry else "",
+        "target_detected": bool(
+            record.get("progress_target_detected", False)
+            if use_progress_geometry
+            else record.get("target_detected", False)
+        ),
+        "target_centered": bool(
+            record.get("progress_target_centered", False)
+            if use_progress_geometry
+            else record.get("target_centered", False)
+        ),
         "target_center_error": center_error,
         "target_abs_center_error": abs(center_error) if center_error is not None else None,
-        "target_area_ratio": as_float_or_none(record.get("target_area_ratio")),
-        "annotated_image_path": record.get("annotated_image_path", ""),
+        "target_area_ratio": progress_area if use_progress_geometry else as_float_or_none(record.get("target_area_ratio")),
+        "target_bbox_height_ratio": bbox_height,
+        "annotated_image_path": (
+            record.get("progress_annotated_image_path", "")
+            if use_progress_geometry
+            else record.get("annotated_image_path", "")
+        ),
     }
 
 
 def progress_thresholds(args: argparse.Namespace) -> dict[str, float]:
     return {
         "min_area_gain_ratio": float(args.min_progress_area_gain_ratio),
+        "min_bbox_height_gain_ratio": float(args.min_progress_bbox_height_gain_ratio),
         "max_area_regression_ratio": float(args.max_progress_area_regression_ratio),
         "min_center_gain": float(args.min_progress_center_gain),
         "max_center_regression": float(args.max_progress_center_regression),
@@ -466,20 +575,29 @@ def score_target_progress_transition(
 
     previous_area = as_float_or_none(previous.get("target_area_ratio"))
     current_area = as_float_or_none(current.get("target_area_ratio"))
+    previous_bbox_height = as_float_or_none(previous.get("target_bbox_height_ratio"))
+    current_bbox_height = as_float_or_none(current.get("target_bbox_height_ratio"))
     previous_center_abs = as_float_or_none(previous.get("target_abs_center_error"))
     current_center_abs = as_float_or_none(current.get("target_abs_center_error"))
     area_delta = None
+    bbox_height_delta = None
     center_abs_delta = None
     if previous_area is None or current_area is None:
         issues.append("target_area_missing")
     else:
         area_delta = current_area - previous_area
+    if previous_bbox_height is not None and current_bbox_height is not None:
+        bbox_height_delta = current_bbox_height - previous_bbox_height
     if previous_center_abs is None or current_center_abs is None:
         issues.append("target_center_error_missing")
     else:
         center_abs_delta = previous_center_abs - current_center_abs
 
     area_gain = area_delta is not None and area_delta >= thresholds["min_area_gain_ratio"]
+    bbox_height_gain = (
+        bbox_height_delta is not None
+        and bbox_height_delta >= thresholds["min_bbox_height_gain_ratio"]
+    )
     area_preserved = area_delta is not None and area_delta >= -thresholds["max_area_regression_ratio"]
     center_gain = center_abs_delta is not None and center_abs_delta >= thresholds["min_center_gain"]
     center_preserved = bool(current.get("target_centered", False)) or (
@@ -494,6 +612,8 @@ def score_target_progress_transition(
 
     if area_gain:
         evidence.append("target_area_increased")
+    if bbox_height_gain:
+        evidence.append("target_bbox_height_increased")
     if center_gain:
         evidence.append("target_centering_improved")
     if area_preserved and center_preserved:
@@ -516,6 +636,7 @@ def score_target_progress_transition(
         "current": current,
         "deltas": {
             "area_ratio": area_delta,
+            "bbox_height_ratio": bbox_height_delta,
             "abs_center_error": center_abs_delta,
         },
         "motion_contact_sheet_path": motion_contact_sheet_path,
@@ -554,7 +675,7 @@ def build_progress_scorecard(
     final_observation: dict[str, Any] | None,
 ) -> dict[str, Any]:
     terminal_without_motion = (
-        summary.get("terminal_reason") == "target_too_close"
+        summary_safe_terminal_stop(summary)
         and int(summary.get("completed_steps", 0) or 0) == 0
     )
     required = bool(args.execute_motion and args.require_progress_scorecard and not terminal_without_motion)
@@ -618,8 +739,10 @@ def build_progress_scorecard(
     if required and scorecard["transitions"]:
         positive_progress = any(
             "target_area_increased" in (transition.get("evidence") or [])
+            or "target_bbox_height_increased" in (transition.get("evidence") or [])
             or "target_centering_improved" in (transition.get("evidence") or [])
             or "target_reacquired_after_search" in (transition.get("evidence") or [])
+            or "target_centered_without_area_regression" in (transition.get("evidence") or [])
             for transition in scorecard["transitions"]
         )
         if not positive_progress:
@@ -637,8 +760,12 @@ def nav_target_success_thresholds(args: argparse.Namespace) -> dict[str, float]:
     area_ratio = float(args.nav_target_success_area_ratio)
     if area_ratio <= 0.0:
         area_ratio = float(args.stack_forward_stop_area_ratio)
+    bbox_height_ratio = float(args.nav_target_success_bbox_height_ratio)
+    if bbox_height_ratio <= 0.0:
+        bbox_height_ratio = float(args.stack_forward_stop_bbox_height_ratio)
     return {
         "min_area_ratio": area_ratio,
+        "min_bbox_height_ratio": bbox_height_ratio,
         "max_center_error": float(args.nav_target_success_max_center_error),
     }
 
@@ -661,6 +788,7 @@ def latest_nav_target_observation(
         "target_center_error": None,
         "target_abs_center_error": None,
         "target_area_ratio": None,
+        "target_bbox_height_ratio": None,
         "annotated_image_path": "",
     }
 
@@ -675,21 +803,42 @@ def build_nav_target_success_gate(
     observation = latest_nav_target_observation(summary, final_observation)
     issues: list[str] = []
     evidence: list[str] = []
-    terminal_reached = str(summary.get("terminal_reason", "")) == "target_too_close"
+    terminal_reason = str(summary.get("terminal_reason", "") or "")
+    terminal_reached = summary_safe_terminal_stop(summary)
     progress_required = bool(args.execute_motion and args.require_progress_scorecard)
 
     if terminal_reached:
-        evidence.append("target_too_close_terminal_stop")
+        evidence.append("safe_terminal_stop")
+        if terminal_reason:
+            evidence.append("terminal_reason_%s" % terminal_reason)
 
     if not bool(observation.get("target_detected", False)):
         issues.append("target_not_detected")
-    area_ratio = as_float_or_none(observation.get("target_area_ratio"))
-    if area_ratio is None:
-        issues.append("target_area_missing")
-    elif area_ratio >= thresholds["min_area_ratio"]:
-        evidence.append("target_area_success_threshold_met")
-    else:
-        issues.append("target_area_below_success_threshold")
+    distance_success = bool(terminal_reached)
+    distance_issues: list[str] = []
+    if not terminal_reached:
+        area_ratio = as_float_or_none(observation.get("target_area_ratio"))
+        if thresholds["min_area_ratio"] > 0.0:
+            if area_ratio is None:
+                distance_issues.append("target_area_missing")
+            elif area_ratio >= thresholds["min_area_ratio"]:
+                evidence.append("target_area_success_threshold_met")
+                distance_success = True
+            else:
+                distance_issues.append("target_area_below_success_threshold")
+
+        bbox_height_ratio = as_float_or_none(observation.get("target_bbox_height_ratio"))
+        if thresholds["min_bbox_height_ratio"] > 0.0:
+            if bbox_height_ratio is None:
+                distance_issues.append("target_bbox_height_missing")
+            elif bbox_height_ratio >= thresholds["min_bbox_height_ratio"]:
+                evidence.append("target_bbox_height_success_threshold_met")
+                distance_success = True
+            else:
+                distance_issues.append("target_bbox_height_below_success_threshold")
+
+        if not distance_success:
+            issues.extend(distance_issues or ["target_distance_success_threshold_missing"])
 
     center_abs = as_float_or_none(observation.get("target_abs_center_error"))
     centered = bool(observation.get("target_centered", False)) or (
@@ -711,7 +860,7 @@ def build_nav_target_success_gate(
         else:
             issues.append("progress_scorecard_not_passed")
 
-    passed = bool(not issues and (terminal_reached or "target_area_success_threshold_met" in evidence))
+    passed = bool(not issues and distance_success)
     return {
         "generated_utc": utc_now(),
         "required": bool(args.require_nav_target_success),
@@ -735,10 +884,12 @@ def nav_target_success_markdown(gate: dict[str, Any]) -> str:
             "- Required: `%s`" % bool(gate.get("required", False)),
             "- Terminal reached: `%s`" % bool(gate.get("terminal_reached", False)),
             "- Min area ratio: `%s`" % thresholds.get("min_area_ratio", ""),
+            "- Min bbox height ratio: `%s`" % thresholds.get("min_bbox_height_ratio", ""),
             "- Max center error: `%s`" % thresholds.get("max_center_error", ""),
             "- Latest observation: `%s`" % observation.get("label", ""),
             "- Target detected: `%s`" % bool(observation.get("target_detected", False)),
             "- Target area ratio: `%s`" % observation.get("target_area_ratio", ""),
+            "- Target bbox height ratio: `%s`" % observation.get("target_bbox_height_ratio", ""),
             "- Target abs-center error: `%s`" % observation.get("target_abs_center_error", ""),
             "",
             "## Evidence",
@@ -794,7 +945,9 @@ def classify_step(
 ) -> tuple[str, bool, list[str]]:
     policy = summary.get("policy_decision") if isinstance(summary.get("policy_decision"), dict) else {}
     stop_reason = str(policy.get("stop_reason", "") or "")
-    safe_terminal = stop_reason in SAFE_TERMINAL_POLICY_STOPS and final_state_safe(summary)
+    safe_terminal = (
+        bool(summary.get("safe_terminal_stop", False)) or is_safe_terminal_reason(stop_reason)
+    ) and final_state_safe(summary)
     issues = list(summary.get("issues", [])) if isinstance(summary.get("issues"), list) else []
     reasons = command_mismatch_reasons(summary)
     if reasons:
@@ -804,7 +957,7 @@ def classify_step(
         issues.append("unsafe_final_bridge_state")
         return "unsafe_bridge_state", False, issues
     if safe_terminal:
-        return "target_too_close", True, []
+        return stop_reason or "safe_terminal_stop", True, []
     if execute_motion:
         motion = summary.get("motion_proof") if isinstance(summary.get("motion_proof"), dict) else {}
         visual_motion = motion.get("visual_motion") if isinstance(motion.get("visual_motion"), dict) else {}
@@ -835,9 +988,17 @@ def step_record(
     allow_scorecard_motion_proof: bool,
 ) -> dict[str, Any]:
     policy = summary.get("policy_decision") if isinstance(summary.get("policy_decision"), dict) else {}
+    analysis = policy.get("analysis") if isinstance(policy.get("analysis"), dict) else {}
     observation = policy.get("observation") if isinstance(policy.get("observation"), dict) else {}
     motion = summary.get("motion_proof") if isinstance(summary.get("motion_proof"), dict) else {}
     visual_motion = motion.get("visual_motion") if isinstance(motion.get("visual_motion"), dict) else {}
+    detector_arbitration = analysis.get("detector_arbitration") if isinstance(analysis.get("detector_arbitration"), dict) else {}
+    detector_backend = str(analysis.get("detector_backend", "") or "")
+    yolo_onnx_primary_detected = bool(
+        analysis.get("yolo_onnx_primary_detected", False)
+        or detector_backend in ("yolo_onnx", "yolo_onnx_or_color:yolo_onnx")
+    )
+    progress_geometry = progress_geometry_from_policy_decision(policy)
     stop_reason, safe_terminal, issues = classify_step(
         summary,
         execute_motion=execute_motion,
@@ -865,6 +1026,20 @@ def step_record(
         "target_centered": bool(observation.get("centered", False)),
         "target_center_error": observation.get("center_error"),
         "target_area_ratio": observation.get("area_ratio"),
+        "target_bbox_height_ratio": analysis.get("bbox_height_ratio"),
+        "progress_detector_backend": progress_geometry.get("detector_backend", ""),
+        "progress_target_detected": bool(progress_geometry.get("target_detected", False)),
+        "progress_target_centered": bool(progress_geometry.get("target_centered", False)),
+        "progress_target_center_error": progress_geometry.get("target_center_error"),
+        "progress_target_area_ratio": progress_geometry.get("target_area_ratio"),
+        "progress_target_bbox_height_ratio": progress_geometry.get("target_bbox_height_ratio"),
+        "progress_annotated_image_path": progress_geometry.get("annotated_image_path", ""),
+        "detector_backend": detector_backend,
+        "detector_arbitration_selected": detector_arbitration.get("selected", ""),
+        "detector_arbitration_reason": detector_arbitration.get("reason", ""),
+        "yolo_onnx_primary_detected": yolo_onnx_primary_detected,
+        "yolo_onnx_primary_area_ratio": analysis.get("yolo_onnx_primary_area_ratio"),
+        "yolo_onnx_primary_center_error": analysis.get("yolo_onnx_primary_center_error"),
         "command": summary.get("command", {}),
         "locked_refusals": (
             summary.get("relay_summary", {}).get("relay", {}).get("counters", {}).get("http_refusals", 0)
@@ -908,6 +1083,8 @@ def transient_step_issue(summary: dict[str, Any]) -> str:
     motion = summary.get("motion_proof") if isinstance(summary.get("motion_proof"), dict) else {}
     if isinstance(motion.get("issues"), list):
         issues.extend(str(issue) for issue in motion.get("issues", []))
+    if any("motion_runner_exception:TimeoutError" in str(issue) for issue in issues):
+        return "motion_runner_timeout"
     if isinstance(summary.get("policy_decision"), dict):
         if "motion_camera_readiness_gate_not_pass" in issues:
             return "motion_camera_readiness_timeout"
@@ -1008,6 +1185,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     summary["completed_steps"] = completed_steps
     summary["terminal_reason"] = terminal_reason
+    summary["safe_terminal_stop"] = summary_safe_terminal_stop(summary)
     try:
         final_health = independent_health(args)
         summary["final_independent_health"] = final_health
@@ -1052,7 +1230,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         summary["issues"].append("nav_target_success_failed")
 
     enough_steps = completed_steps >= int(args.min_completed_steps)
-    safe_terminal = terminal_reason == "target_too_close" and enough_steps
+    safe_terminal = summary_safe_terminal_stop(summary)
     summary["pass"] = bool((not summary["issues"]) and (enough_steps or safe_terminal))
     write_json(artifact_root / "closed_loop_summary.json", summary)
     return summary
@@ -1080,6 +1258,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--step-retry-settle-s", type=float, default=1.0)
     parser.add_argument("--min-progress-area-gain-ratio", type=float, default=0.0005)
+    parser.add_argument("--min-progress-bbox-height-gain-ratio", type=float, default=0.002)
     parser.add_argument("--max-progress-area-regression-ratio", type=float, default=0.04)
     parser.add_argument("--min-progress-center-gain", type=float, default=0.01)
     parser.add_argument("--max-progress-center-regression", type=float, default=0.04)
@@ -1101,6 +1280,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help="Minimum target area ratio for nav success. Defaults to stack forward stop area ratio when <= 0.",
+    )
+    parser.add_argument(
+        "--nav-target-success-bbox-height-ratio",
+        type=float,
+        default=0.0,
+        help=(
+            "Minimum target bbox height ratio for nav success. Defaults to stack forward stop bbox height ratio when <= 0; "
+            "disabled when both are <= 0."
+        ),
     )
     parser.add_argument("--nav-target-success-max-center-error", type=float, default=0.16)
     parser.add_argument("--require-progress-scorecard", dest="require_progress_scorecard", action="store_true")
