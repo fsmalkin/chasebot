@@ -28,10 +28,18 @@ param(
 
     [int]$CameraJpegQuality = 55,
 
-    [ValidateSet("gstreamer", "jetbotmini")]
+    [ValidateSet("gstreamer", "jetbotmini", "v4l2_bayer")]
     [string]$CameraBackend = "gstreamer",
 
     [int]$CameraGstreamerSensorId = 0,
+
+    [string]$CameraV4l2Device = "/dev/video0",
+
+    [int]$CameraV4l2RawWidth = 3264,
+
+    [int]$CameraV4l2RawHeight = 2464,
+
+    [string]$CameraV4l2Pixelformat = "RG10",
 
     [switch]$Start,
 
@@ -76,11 +84,14 @@ if (-not $Start) {
 }
 
 $motionArg = if ($EnableMotion) { "--enable-motion" } else { "" }
-$cameraArg = if ($Camera) { "--camera --camera-width $CameraWidth --camera-height $CameraHeight --camera-fps $CameraFps --camera-jpeg-quality $CameraJpegQuality --camera-backend $CameraBackend --camera-gstreamer-sensor-id $CameraGstreamerSensorId" } else { "" }
+$cameraArg = if ($Camera) { "--camera --camera-width $CameraWidth --camera-height $CameraHeight --camera-fps $CameraFps --camera-jpeg-quality $CameraJpegQuality --camera-backend $CameraBackend --camera-gstreamer-sensor-id $CameraGstreamerSensorId --camera-v4l2-device '$CameraV4l2Device' --camera-v4l2-raw-width $CameraV4l2RawWidth --camera-v4l2-raw-height $CameraV4l2RawHeight --camera-v4l2-pixelformat $CameraV4l2Pixelformat" } else { "" }
 $startCommand = @(
     "set -e",
     "cd '$RemoteDir'",
     "if [ -f bridge.pid ]; then old_pid=`$(cat bridge.pid 2>/dev/null || true); if [ -n `"`$old_pid`" ]; then pkill -TERM -P `"`$old_pid`" 2>/dev/null || true; kill `"`$old_pid`" 2>/dev/null || true; sleep 0.3; pkill -KILL -P `"`$old_pid`" 2>/dev/null || true; kill -KILL `"`$old_pid`" 2>/dev/null || true; fi; rm -f bridge.pid; fi",
+    "pkill -TERM -f '^python3 .*/chasecar_factory_bridge.py' 2>/dev/null || true",
+    "sleep 0.3",
+    "pkill -KILL -f '^python3 .*/chasecar_factory_bridge.py' 2>/dev/null || true",
     "pkill -TERM -f '[g]st-launch-1.0 .*chasecar_bridge_camera_' 2>/dev/null || true",
     "sleep 0.2",
     "pkill -KILL -f '[g]st-launch-1.0 .*chasecar_bridge_camera_' 2>/dev/null || true",
@@ -97,18 +108,22 @@ if ($LASTEXITCODE -ne 0) {
 
 $healthUri = "http://${RobotHost}:$Port/health"
 $health = $null
+$expectedMotionEnabled = [bool]$EnableMotion
 for ($i = 0; $i -lt 10; $i++) {
     try {
         $health = Invoke-RestMethod -Uri $healthUri -TimeoutSec 2
-        break
+        if ([bool]$health.motion_enabled -eq $expectedMotionEnabled) {
+            break
+        }
     } catch {
-        Start-Sleep -Milliseconds 500
     }
+    Start-Sleep -Milliseconds 500
 }
 
-if ($null -eq $health) {
+if (($null -eq $health) -or ([bool]$health.motion_enabled -ne $expectedMotionEnabled)) {
     & ssh -o BatchMode=yes -o ConnectTimeout=8 $target "tail -80 '$RemoteDir/bridge.log' 2>/dev/null || true"
-    throw "Bridge did not answer health check at $healthUri"
+    $actualMotionEnabled = if ($null -eq $health) { "<no-health>" } else { [bool]$health.motion_enabled }
+    throw "Bridge did not reach expected health at $healthUri. expected motion_enabled=$expectedMotionEnabled actual motion_enabled=$actualMotionEnabled"
 }
 
 Write-Host "ROBOT_FACTORY_BRIDGE_PID=$($pidOutput | Select-Object -Last 1)"

@@ -12,13 +12,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 function Get-DefaultSubnets {
-    $configs = Get-NetIPConfiguration | Where-Object {
-        $_.IPv4Address -and $_.NetAdapter.Status -eq "Up"
-    }
+    $configs = Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "IPEnabled = True"
     $results = New-Object System.Collections.Generic.List[string]
     foreach ($config in $configs) {
-        foreach ($addr in $config.IPv4Address) {
-            $ip = [string]$addr.IPAddress
+        foreach ($ip in @($config.IPAddress)) {
+            if ($ip -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+                continue
+            }
             if ($ip -match '^(127|169\.254)\.') {
                 continue
             }
