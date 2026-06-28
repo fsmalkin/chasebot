@@ -62,7 +62,7 @@ Next serial gates:
 | Gate | Current status | Promotion requirement |
 | --- | --- | --- |
 | `sim_stack_offboard_policy_routing` | Passed (live 2026-06-25) | Met: the Chasecar sim-stack policy loaded and routed offboard through `chasecar_stack_fetch_adapter_v0` into the locked bridge, recording stack state, supervisor policy snapshot, command provenance, relay/bridge response, a real-stack boot report, and final relock. See Evidence Boundary. |
-| `yolo_object_pose_observation_adapter` | Active next gate | Convert bridge camera observations into the object state the sim stack needs: target class, freshness, 2D bbox, distance or pose estimate, and delivery-target geometry with explicit confidence and limitation fields. |
+| `yolo_object_pose_observation_adapter` | In progress (2026-06-28) | Convert bridge camera observations into the object state the sim stack needs: target class, freshness, 2D bbox, distance or pose estimate, and delivery-target geometry with explicit confidence and limitation fields. Detector + calibrated distance/pose + uncertainty built and offline-validated; remaining: delivery geometry (D3), base_link frame (D4), policy wiring. See Evidence Boundary. |
 | `terminal_fetch_to_pose_proof` | Pending | Prove fetch-to-pose with object trajectory, delivery radius, bounded command evidence, contact or no-contact classification, and final locked bridge health. |
 | `endurance_loop` | Pending | Repeat the terminal fetch-to-pose loop across cycles while preserving bridge lock, camera readiness, observation confidence, motor budget, reset safety, and final relock. |
 
@@ -99,6 +99,30 @@ the remaining gaps that define the next gate: a `bridge_adapter_placeholder_pose
 for robot pose and color-target bbox-only perception, with no calibrated object
 pose or delivery geometry yet. (These artifacts live on disk only; `artifacts/`
 is gitignored.)
+
+### Object-pose observation adapter (in progress, 2026-06-28)
+
+YOLO is the hardware detector of record: it cleanly isolates the golf ball
+(`sports ball`, conf ~0.7) where color/bright segmentation fails in the dim,
+reflective bench scene; color stays a safety fallback. Monocular distance uses
+the calibrated apparent-size law `z = K / size_px` — the modern, calibrated form
+of the legacy `ros2_scripts/ros2_ball_to_nav_goal.py` estimator (the D415 depth
+path is unavailable on the mono CSI hardware). A 3-point bench calibration (golf
+ball at 12/22/36 in) fit `K = 9.62 px·m` on the YOLO bbox equivalent diameter
+(implied focal ~225 px, effective HFOV ~71 deg), `sigma_s = 1.72 px`, usable
+range ~0.25-0.9 m (6 in clips the frame bottom; >36 in the ball is <9 px and
+detection drops). The adapter emits class, bbox, confidence, freshness, `z`,
+bearing, `sigma_d`, and a `pose_status` (`metric` / `bearing_only` /
+`unavailable`) limitation field. Offline validation on the saved 12 in frame
+estimated `0.294 m` vs `0.305 m` true (1.1 cm error). Remaining before promotion:
+delivery-target geometry (D3), base_link frame transform (D4), and wiring the
+observation into the sim-stack policy state. Tools (16 offline unit tests):
+`tools/robot_factory_bridge/chasecar_bridge_mono_distance_calibration.py`,
+`chasecar_bridge_object_pose_observation.py`,
+`chasecar_bridge_object_pose_adapter.py`. Calibration artifact (on disk;
+`artifacts/` gitignored): `artifacts/session/mono_distance_calibration_bench01/`.
+Workstation `onnxruntime` now installed via pip wheel (the vendored copy in
+`.codex_yolo_deps/` failed to load — DLL/VC++ runtime).
 
 Representative evidence:
 
