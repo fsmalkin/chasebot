@@ -36,3 +36,8 @@ test-results/
 .env
 operator_events.jsonl
 .playwright-mcp/
+
+# hw-v0 bringup: vendored YOLO weights + codex deps (do not commit)
+runtime/yolo/
+.codex_yolo_deps/
+.codex-remote-attachments/
