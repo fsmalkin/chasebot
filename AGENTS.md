@@ -60,6 +60,18 @@ with `topdown_telemetry`, `world_stream`, and telemetry keyframes. Treat any
 telemetry pass that conflicts with the visual sequence as suspect until the
 geometry, delivery metric, and artifact provenance are reconciled.
 
+## Operator Physical Motion Assumption
+
+For Chasebot/JetBot hardware threads, treat the operator's instruction as
+physical motion clearance unless the operator says the setup is unsafe, asks to
+stop, or current evidence contradicts the assumption. This removes repeated
+physical-clearance prompts during active hardware work.
+
+Robot-side technical gates still apply before every live-motion slice: bridge
+reachability, tool-controlled motion lock, verified stop path, fresh camera,
+coherent target/detector state, bounded command limits, and final motors zero
+with the bridge locked.
+
 ## Baseline
 
 1. Runtime substrate: Docker-first (`docker compose` profiles).

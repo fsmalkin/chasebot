@@ -6,11 +6,13 @@ Yahboom/JetBot Mini factory bridge robot with its onboard CSI camera. The later
 hardware-transfer lane is the Jetson Orin Nano plus Intel RealSense D415 depth
 camera target.
 
-The current acceleration target is stack-through-bridge operation: run the
-Chasecar stack offboard, route its bounded velocity output through the factory
-bridge, prove the locked no-motion command path, and then execute tiny live
-motion only through the same adapter. Direct SSH access remains useful for
-robot inspection and future onboard install work.
+The current acceleration target is sim-stack-through-bridge operation: route
+the Chasecar sim-stack policy offboard through `chasecar_stack_fetch_adapter_v0`
+and the factory bridge, prove the locked no-motion command path, then execute
+tiny live motion only through that same adapter. Bright/color bbox probes are
+calibration and safety-stop fallback while the object-pose observation adapter
+comes online. Direct SSH access remains useful for robot inspection and future
+onboard install work.
 
 Detailed stack-through-bridge gates live in
 `docs/HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md`.
@@ -20,7 +22,7 @@ Detailed stack-through-bridge gates live in
 Use the hardware worktree for this effort:
 
 ```powershell
-cd D:\dev\chasecar-hw-v0
+cd D:\dev\chasebot-hw-v0
 git status -sb
 ```
 
@@ -47,10 +49,10 @@ stop the run and write the failure down before changing code.
 
 ## Fast Track: Stack Through The Factory Bridge
 
-Fastest useful milestone: Codex can run the offboard Chasecar command path into
-the factory bridge while the robot remains locked. This proves the adapter path
-from host/runtime code to ROS `cmd_vel` to bridge HTTP without spending time on
-an onboard install first.
+Fastest useful milestone: Codex can run the offboard Chasecar sim-stack policy
+through `chasecar_stack_fetch_adapter_v0` into the factory bridge while the
+robot remains locked. This proves the adapter path from host/runtime code to
+ROS `cmd_vel` to bridge HTTP before onboard install work.
 
 Evidence:
 
@@ -84,7 +86,9 @@ The closed-loop runner repeats the same observation, stack policy decision,
 relay handoff, bridge response, and relock check for a small number of steps. A
 live run adds `--execute-motion --confirm-operator-ready` after the locked run
 passes. The runner stops on target-too-close, stale camera, command mismatch,
-unsafe bridge state, or visual evidence that conflicts with telemetry.
+unsafe bridge state, or visual evidence that conflicts with telemetry. Treat
+bright/color bbox output as calibration or fallback stop evidence until the
+YOLO/object-pose observation adapter feeds the stack policy.
 
 Progress-scorecard rung:
 
@@ -195,7 +199,7 @@ Claim: the operator and Codex know which folder and branch are active.
 Commands:
 
 ```powershell
-cd D:\dev\chasecar-hw-v0
+cd D:\dev\chasebot-hw-v0
 git status -sb
 git remote -v
 git branch --show-current
@@ -203,7 +207,7 @@ git branch --show-current
 
 Evidence:
 
-- Worktree path is `D:\dev\chasecar-hw-v0`.
+- Worktree path is `D:\dev\chasebot-hw-v0`.
 - Branch is `codex/hw-irl-v0-bringup`.
 - Remote is the Chasecar GitHub repo.
 - Working tree is clean before the next rung starts.
@@ -259,7 +263,7 @@ Evidence:
 
 - The command prints `RUNTIME_SYNC_OK=1`.
 - The runtime source path resolves to `~/ros2_ws/src/chasecar_runtime`.
-- `git status --short` in `D:\dev\chasecar-hw-v0` is still understood after
+- `git status --short` in `D:\dev\chasebot-hw-v0` is still understood after
   the sync because artifacts are excluded from the mirror.
 
 Next sync with build:
@@ -578,6 +582,9 @@ Stop conditions still open:
 
 ## Next Safe Action
 
-Run the stack-through-bridge progress-scorecard gate from this worktree after
-the closed-loop locked and live gates pass. Use the direct-access ladder when
-robot-side inspection or onboard install work becomes the active blocker.
+Promote `sim_stack_offboard_policy_routing` from this worktree next. The proof
+must load `chasecar_stack_fetch_adapter_v0`, route the Chasecar sim-stack policy
+through the runtime handoff, relay, and factory bridge, record command
+provenance and policy state, and finish with the bridge locked and both motors
+at `0.0`. The following gates are YOLO/object-pose observation adapter,
+terminal fetch-to-pose proof, and endurance.

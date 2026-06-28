@@ -2,115 +2,143 @@
 
 ## Decision
 
-The hardware lane optimizes for unattended operation. The robot must start,
-diagnose its sensing path, run bounded control, and fail locked without a human
-recovering camera state, moving cables, or swapping ad hoc viewers during a run.
+The hardware v0 unattended lane advances through one serial behavior gate at a
+time after bridge safety is proven. The active robot path is the JetBot factory
+bridge at `http://192.168.1.11:8765`; the bridge stays locked by default and
+must return to `motion_enabled=false` with both motors at `0.0` between tests.
 
-Current hardware v0 is the Yahboom/JetBot Mini factory bridge lane. The next
-milestone loads the Chasecar stack offboard and routes its bounded velocity
-commands through the HTTP factory bridge. The bridge remains the reversible
-hardware adapter for the robot's onboard CSI camera, motion enablement, motor
-limits, deadman timeout, health, and locked default state.
-
-The Orin Nano plus RealSense D415 depth-camera lane remains the later
-hardware-transfer target. D415-specific depth/ROS/TensorRT proof starts after
-the JetBot lane proves that the Chasecar stack can perceive, choose bounded
-commands, and recover to a locked state through the bridge.
+The current direction routes the Chasecar sim-stack policy offboard through
+`chasecar_stack_fetch_adapter_v0` and the factory bridge. PC-side YOLO,
+object-pose estimation, and bridge camera frames provide observations for that
+policy route. Bright/color bbox handling remains calibration and safety-stop
+fallback.
 
 ## Operating Model
 
 The factory bridge remains the safety and actuator layer. It owns motion
-enablement, deadman timeout, motor limits, health, and the locked default state.
-Chasecar policy code runs outside that layer first, using the bridge as an
-adapter rather than a replacement runtime.
+enablement, deadman timeout, motor limits, health, camera serving, and locked
+default state. PC-side tools own detector execution, gate evaluation, command
+selection, artifact capture, and promotion decisions.
 
-The first deployable stack loop runs offboard control through the bridge:
+Each unattended or semi-unattended run follows the same sequence:
 
-1. Start the bridge locked with camera enabled.
-2. Require fresh nonempty camera frames before relay or motion starts.
-3. Run Chasecar perception, policy, or a named stack adapter on the host.
-4. Route the stack's `linear_x` / `angular_z` output through the existing ROS
-   `cmd_vel` relay.
-5. Send bounded commands through the bridge only after the locked no-motion gate
-   proves the command path.
-6. Stop and restore the locked bridge after every proof run.
-7. Save health, command, frame, and contact-sheet evidence for audit.
+1. Start from bridge health at `http://192.168.1.11:8765`.
+2. Confirm locked state, zero motors, and fresh camera frames.
+3. Run the next unpassed behavior gate only.
+4. Enable motion only for the bounded primitive or policy slice under test.
+5. Relock after the slice and write final health evidence.
+6. Promote exactly the gate whose pass criteria were tested.
 
-## Camera Policy
+This sequence keeps the robot safe while making the evidence ladder easy to
+resume after a reboot, lighting change, or operator reset.
 
-The current preferred camera is the onboard CSI camera because it is already
-mounted, powered with the robot, and available to the Jetson camera stack. The
-bridge camera backend should serve fresh JPEG frames without importing the
-crashing `jetbotmini`/`cv2` Python camera path. GStreamer/Argus is the current
-recovery path because a robot-side still-frame probe produced a valid image from
-the sensor.
+## Current Gate State
 
-A fallback camera is acceptable only when it is fixed to the robot or bench,
-powered with the robot, auto-started by the run command, and covered by the same
-readiness gate.
-
-Manual camera recovery, phone repositioning, laptop webcam aiming, and
-interactive viewer setup are debugging tools. They can explain a failure.
-Qualification requires a fixed, powered, auto-starting camera path.
-
-## Current Evidence
-
-The bridge has proven the useful safety surface:
-
-- Motion stays locked by default.
-- Commands are refused while locked.
-- The onboard CSI camera serves fresh bridge frames through the GStreamer
-  backend.
-- Bounded live turn commands can move the robot.
-- Cleanup restores `motion_enabled=false` with both motors at `0.0`.
-- The reusable color-target runner stops before relay or motion when the camera
-  readiness gate is red.
-- A stronger turn-only proof moved the robot visibly through the bridge while
-  preserving final relock and live camera health.
-
-Reference artifact:
+Current foundation evidence has passed:
 
 ```text
-artifacts/session/live_factory_blue_bottle_camera_gate_block_20260618/goal_summary.json
-artifacts/session/jetbot_reconnect_20260619T1505Z/camera_probe.jpg
-artifacts/session/factory_bridge_ipad_motion_campaign_20260619T1612Z/campaign_summary.json
+access_safety -> camera_freshness -> lock_relock ->
+motor_direction_and_stiction -> visual_acquisition_and_approach ->
+bridge_visual_terminal_stop
 ```
 
-## Acceleration Path
+The behavior ladder now runs in this order:
 
-Advance in three layers:
+```text
+sim_stack_offboard_policy_routing -> yolo_object_pose_observation_adapter ->
+terminal_fetch_to_pose_proof -> endurance_loop
+```
 
-1. Safety layer: keep the factory bridge small, locked by default, and
-   artifact-heavy.
-2. Readiness layer: make camera, command, and health gates explicit and
-   machine-checkable before motion.
-3. Stack layer: connect Chasecar perception/control to the bridge command
-   contract, first with no-motion relay evidence and then with bounded motion.
+The latest saved gate report is stale relative to the current live bridge
+session. Current live evidence has recovered bridge access, camera freshness,
+lock/relock, motor direction, acquire-turn stiction floor, visual acquisition,
+bounded forward approach, and a bridge-visual bbox-height terminal stop. The
+next operator-gated behavior proof is `sim_stack_offboard_policy_routing`.
 
-This lets the project test trained Chasecar behavior on the real robot without
-turning camera setup into an operator ritual.
+Latest report:
 
-## Next Milestone
+```text
+artifacts/session/manual_sim_stack_irl_gate_ladder_current_20260625_003/gate_ladder_report.md
+```
 
-Load the Chasecar stack slice through the factory bridge, prove the no-motion
-command path, then run bounded live policy motion until the nav-target success
-gate passes. Each closed-loop run must also emit the real-stack boot report so
-unattended proof can distinguish the routed supervisor-policy path from the
-remaining ROS/Nav2 executor and object-pose adapter work.
+## Evidence Boundary
 
-Success criteria:
+Representative evidence:
 
-- Bridge starts locked and reports fresh onboard CSI frames through the
-  GStreamer backend.
-- The offboard Chasecar runtime workspace can publish a bounded command through
-  the existing ROS `cmd_vel` surface.
-- The bridge relay observes the command while locked and records expected HTTP
-  refusals, proving transport without motion.
-- A live motion attempt starts only after the no-motion gate produces bounded
-  commands, usable camera evidence, and final locked health.
-- The live nav-to-target run records `nav_target_success.pass=true` from either
-  a centered target at the configured success area or the safe target-too-close
-  terminal stop.
-- The artifact bundle includes health, command log, frame sequence, contact
-  sheet, relock evidence, real-stack boot report, progress scorecard, and
-  pass/fail summary.
+```text
+artifacts/session/manual_sim_stack_irl_basement_live_five_step_20260625_002/overnight_loop_summary.json
+artifacts/session/manual_sim_stack_irl_basement_live_yolo_only_slow_scan_20260625_001/overnight_loop_summary.json
+artifacts/session/manual_sim_stack_irl_basement_turn_response_probe_20260625_001/turn_response_summary.json
+artifacts/session/manual_sim_stack_irl_upstairs_yolo_snapshot_20260625_002/yolo_detection_summary.json
+artifacts/session/manual_sim_stack_irl_upstairs_yolo_snapshot_low_conf_20260625_001/yolo_detection_summary.json
+artifacts/session/manual_sim_stack_irl_upstairs_yolo5m_probe_20260625_001/yolo_detection_summary.json
+artifacts/session/manual_sim_stack_irl_upstairs_yolo_reacquire_scan_20260625_002/overnight_loop_summary.json
+artifacts/session/manual_sim_stack_irl_gate_ladder_current_20260625_003/gate_ladder_report.md
+artifacts/session/manual_sim_stack_irl_back_up_yolo5s_live_repeat_20260625_001/yolo_detection_summary.json
+artifacts/session/manual_sim_stack_irl_back_up_locked_stack_path_gate_yolo5s_http_20260625_001/gate_summary.json
+artifacts/session/manual_sim_stack_irl_back_up_locked_closed_loop_yolo5s_http_lowconf_20260625_001/closed_loop_summary.json
+artifacts/session/manual_sim_stack_irl_back_up_live_bright_bbox_terminal_approach_20260625_002/closed_loop_summary.json
+```
+
+The latest bridge-visual terminal run supports access, safety, command routing,
+bounded forward approach, and terminal safety-stop behavior. It passed with
+`terminal_reason=target_inside_stack_forward_stop_bbox_height`,
+`target_bbox_height_ratio=0.300`, centered target error about `-0.111`, final
+`motion_enabled=false`, and left/right motors at `0.0`. Its observation was
+bright bbox geometry, so it remains outside full 3D/object-pose fetch-to-pose
+scope.
+
+The earlier YOLO ONNX evidence supports the next observation adapter. The
+current Prime-bottle setup uses direct HTTP camera fetch with
+`runtime/yolo/yolov5s.onnx`, confidence threshold `0.001`, YOLO target area
+floor `0.001`, camera FPS floor `1.0`, and a 60-second relay-start budget for
+WSL/ROS cold starts. The next promotion artifact must connect that detector
+output to the object state consumed by the sim-stack policy.
+
+The turn-response probe proves the strong bounded turn primitive and reverse
+reset are available for later observation-adapter framing tests. Use them as
+bounded setup and recovery primitives after the policy-routing gate passes.
+
+Bright/color bbox evidence remains diagnostic. It can explain lighting, target
+placement, geometry, stiction floors, and conservative terminal stops. Behavior
+promotion requires the routed sim-stack policy, an explicit observation
+contract, and a fetch-to-pose success metric.
+
+## Promotion Rule
+
+Promote one gate at a time. A later gate may run only after the current gate has
+passed in the latest ladder report or in a clearly cited replacement artifact.
+The next serial goals are:
+
+1. Promote `sim_stack_offboard_policy_routing` with
+   `chasecar_stack_fetch_adapter_v0`, command provenance, relay/bridge response,
+   policy state, and final locked health.
+2. Promote `yolo_object_pose_observation_adapter` with target class, bbox,
+   confidence, freshness, distance or pose estimate, delivery target geometry,
+   and explicit estimate limits.
+3. Promote `terminal_fetch_to_pose_proof` with object trajectory, delivery
+   radius, bounded command evidence, and final locked health.
+4. Promote `endurance_loop` only after terminal fetch-to-pose passes.
+
+Each promoted artifact must show bridge health reachable, camera readiness,
+bounded command caps, final `motion_enabled=false`, and both motors at `0.0`.
+
+## Camera And Deployment Policy
+
+The active camera source is the JetBot bridge camera served by the factory
+bridge. The current evidence uses the `v4l2_bayer` path with fresh frames.
+PC-side YOLO ONNX and any object-pose estimator feed the observation adapter for
+the routed sim-stack policy. Onboard camera setup, onboard YOLO, TensorRT
+conversion, and Jetson runtime packaging belong to a later deploy/setup slice.
+
+Manual scene inspection, color-only target scans, and one-off frame checks can
+diagnose lighting, placement, and conservative stop thresholds. Promotion
+artifacts require the observation state needed by fetch-to-pose.
+
+## Stop Conditions
+
+Stop and report when bridge health is unreachable, camera frames are stale,
+motion occurs while locked, final health is unlocked, either motor remains
+nonzero, object-pose evidence is absent for a fetch-to-pose claim, bbox-only
+evidence is used as the behavior proof, or the only positive target evidence is
+color-only.

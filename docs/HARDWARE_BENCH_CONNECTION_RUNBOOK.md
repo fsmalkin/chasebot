@@ -177,8 +177,9 @@ Existing USB Wi-Fi dongle path:
 powershell -ExecutionPolicy Bypass -File scripts/find_robot_ssh_candidates.ps1
 ```
 
-If your network is not the Windows machine's default /24 subnet, pass it
-explicitly:
+The scanner uses active IP-enabled adapters from Windows CIM and checks TCP port
+`22`. It sends no credentials. If the robot AP or house LAN subnet differs from
+the Windows default route, pass the target `/24` explicitly:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/find_robot_ssh_candidates.ps1 -Subnets 192.168.1.0/24
@@ -193,6 +194,23 @@ ssh <user>@<candidate-ip> hostname
 
 The scanner only checks whether TCP port 22 is open. It does not identify the
 robot by itself, and it sends no credentials.
+
+For a complete transport checkpoint, run the access gate. It records Wi-Fi AP
+visibility, known-host ping, bridge health, LAN SSH candidates, beacon status,
+serial ports, and USB hints in one artifact bundle:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_robot_access_gate.ps1 -ArtifactDir artifacts/session/manual_robot_access_gate_current
+```
+
+Treat `access_ready=false` as a hard stop for bridge, camera, YOLO, and motion
+work. The next physical action in the Markdown scorecard is the owner/operator
+hand-off for that state.
+
+If `netsh wlan` shows `jetbot-mini` but WLAN AutoConfig reports `The specific
+network is not available`, treat the AP association as unstable. Prefer the
+Ethernet/router path or a reversible admin Wi-Fi adapter reset before spending
+more time on the saved Wi-Fi profile.
 
 ## Step 4A: Login, Default Account, And Reset Decision
 
