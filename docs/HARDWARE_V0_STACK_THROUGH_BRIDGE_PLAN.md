@@ -1,5 +1,31 @@
 # Hardware V0 Stack-Through-Bridge Plan
 
+## Direction Pivot (2026-06-30)
+
+This branch is pivoting from IRL hardware bring-up to a **simulation proof of the
+object-centric fetch-to-pose stack** on the latest SIM stack + calibrated world
+physics.
+
+**Why.** The JetBot Mini hardware cannot feed the sim fetch policy's input
+contract. The policy consumes **world-frame metric state** — robot pose
+(x, y, yaw), ball world position + motion history, and delivery-zone geometry —
+but the hardware has a **mono camera (no depth → no 3D ball position)** and an
+**encoderless chassis (no odometry → no robot world pose)**. Closing that gap is
+a sensing investment (a depth sensor + wheel odometry / VIO-SLAM), not a software
+one. Rather than spend on sensors now, we prove the stack out in sim.
+
+**What was proven IRL (retained as evidence below).** Offboard supervisor-policy
+routing through the locked factory bridge; monocular distance calibration;
+closed-loop visual approach to a calibrated standoff; and contact — the
+minimum-viable IRL fetch on degraded sensors, with the bridge safety contract
+(lock + 0.5 s deadman + bounded commands, final relock) holding throughout.
+
+**New direction.** Prove the object-centric `fetch_to_pose` stack in the latest
+SIM stack with the calibrated golf-ball/surface physics, scored against the
+delivery-radius success metric. The IRL hardware path resumes only once the
+depth + odometry sensing gap is closed. The hardware bring-up content below is
+kept as the IRL evidence record.
+
 ## Decision
 
 The current hardware v0 path gets the sim stack working IRL through the JetBot
