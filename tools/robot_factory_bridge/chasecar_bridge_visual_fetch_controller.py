@@ -148,8 +148,19 @@ def run_trial(args) -> dict[str, Any]:
     stop_reason = "unset"
     try:
         while True:
-            obs = _observe(client, calib, args.model, args.target_class, args.confidence_threshold,
-                           args.iou_threshold, args.input_size, args.size_key, artifact_dir)
+            obs = None
+            observe_err = None
+            for _ot in range(3):  # read-only retry: a Wi-Fi blip must not abort the run
+                try:
+                    obs = _observe(client, calib, args.model, args.target_class, args.confidence_threshold,
+                                   args.iou_threshold, args.input_size, args.size_key, artifact_dir)
+                    break
+                except Exception as oe:
+                    observe_err = oe
+                    time.sleep(0.6)
+            if obs is None:
+                # persistent read failure -> treat as a miss (graceful), feeds lost_target guard
+                obs = {"detected": False, "observe_error": repr(observe_err)[:120]}
             d = decide_fetch_action(obs, state, cfg)
             state["step"] += 1
             state["lost_count"] = d.get("lost_count", 0 if obs.get("detected") else state["lost_count"])
@@ -173,6 +184,22 @@ def run_trial(args) -> dict[str, Any]:
                 except Exception: pass
                 client.set_motion_enabled(False, "visual_fetch:relock")
             time.sleep(0.4)
+        # bounded contact-push after a clean approach (open-loop; the ball is at the nose
+        # so detection is unreliable here). Hard-capped by --push-steps; relock per nudge.
+        if stop_reason == "standoff_reached" and int(getattr(args, "push_steps", 0)) > 0:
+            summary["push"] = {"requested": int(args.push_steps), "executed": 0, "linear_x": float(args.push_linear_x)}
+            for _pi in range(int(args.push_steps)):
+                client.set_motion_enabled(True, "visual_fetch:push")
+                try:
+                    client.cmd_vel(float(args.push_linear_x), 0.0, 0.25, "visual_fetch:push")
+                    summary["push"]["executed"] += 1
+                    time.sleep(0.25)
+                finally:
+                    try: client.stop("visual_fetch:push_stop")
+                    except Exception: pass
+                    client.set_motion_enabled(False, "visual_fetch:push_relock")
+                time.sleep(0.3)
+            stop_reason = "standoff_then_pushed"
     except Exception as exc:  # any error -> fall through to guaranteed relock
         stop_reason = "exception:%r" % (exc,)
         summary["issues"].append(stop_reason)
@@ -227,6 +254,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-steps", type=int, default=120)
     p.add_argument("--turn-angular-z", type=float, default=0.7)
     p.add_argument("--approach-linear-x", type=float, default=0.04)
+    p.add_argument("--push-steps", type=int, default=0,
+                   help="After standoff, push the ball forward this many bounded open-loop nudges (true-fetch delivery).")
+    p.add_argument("--push-linear-x", type=float, default=0.04)
     p.add_argument("--pretty", action="store_true")
     return p
 
