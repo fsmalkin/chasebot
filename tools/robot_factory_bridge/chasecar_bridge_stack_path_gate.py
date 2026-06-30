@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -14,6 +15,7 @@ from typing import Any
 
 import chasecar_bridge_behavior_runner as behavior_runner
 import chasecar_bridge_client as bridge_client
+import chasecar_bridge_object_pose_observation as object_pose
 import chasecar_bridge_yolo_onnx_probe as yolo_probe
 
 
@@ -32,6 +34,7 @@ POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0 = "chasecar_stack_fetch_adapter_v0"
 SAFE_TERMINAL_ZERO_STOP_REASONS = {
     "target_inside_stack_forward_stop_area",
     "target_inside_stack_forward_stop_bbox_height",
+    "target_inside_stack_forward_stop_distance",
 }
 MOTION_CONTROL_MODES = ("auto", "http", "deploy")
 CAMERA_FETCH_MODES = ("http", "ssh", "auto")
@@ -623,6 +626,58 @@ def chasecar_stack_lineage(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+_OBJECT_POSE_CALIB_CACHE: dict[tuple, dict[str, Any]] = {}
+
+
+def _load_object_pose_calibration(path: str, size_key: str = "equiv_diameter_px") -> dict[str, Any]:
+    key = (path, size_key)
+    if key not in _OBJECT_POSE_CALIB_CACHE:
+        _OBJECT_POSE_CALIB_CACHE[key] = object_pose.load_calibration(path, size_key=size_key)
+    return _OBJECT_POSE_CALIB_CACHE[key]
+
+
+def attach_object_pose(analysis: dict[str, Any], args: argparse.Namespace) -> None:
+    """Additively attach a calibrated object pose to ``analysis`` (opt-in, YOLO only).
+
+    No-op unless a calibration is configured AND a positive metric stop distance is
+    set, and only on a YOLO-sourced detection (the calibration is fit on the YOLO
+    bbox equivalent diameter). Any error is recorded but never raised, so the proven
+    area-ratio path is untouched when pose is unavailable.
+    """
+    cal_path = str(getattr(args, "calibration", "") or "")
+    stop_distance_m = float(getattr(args, "stack_forward_stop_distance_m", 0.0) or 0.0)
+    if not cal_path or stop_distance_m <= 0.0:
+        return
+    if not bool(analysis.get("detected", False)):
+        return
+    if not str(analysis.get("target_profile", "") or "").startswith("yolo"):
+        return
+    bbox = analysis.get("bbox") if isinstance(analysis.get("bbox"), dict) else {}
+    if not bbox:
+        return
+    try:
+        width_px = float(bbox.get("x1", 0.0)) - float(bbox.get("x0", 0.0))
+        height_px = float(bbox.get("y1", 0.0)) - float(bbox.get("y0", 0.0))
+        if width_px <= 0.0 or height_px <= 0.0:
+            return
+        equiv_diameter_px = math.sqrt(width_px * height_px)
+        cal = _load_object_pose_calibration(cal_path)
+        focal_px = (cal["k_px_m"] / cal["object_size_m"]) if cal["object_size_m"] > 0.0 else 0.0
+        image_width = float(analysis.get("image_width", 320) or 320)
+        hfov_deg = math.degrees(2.0 * math.atan((image_width / 2.0) / focal_px)) if focal_px > 0.0 else 62.2
+        analysis["object_pose"] = object_pose.estimate_object_pose(
+            equiv_diameter_px,
+            k_px_m=cal["k_px_m"],
+            sigma_s_px=cal["sigma_s_px"],
+            object_size_m=cal["object_size_m"],
+            center_error=float(analysis.get("center_error", 0.0) or 0.0),
+            horizontal_fov_deg=hfov_deg,
+            max_reliable_range_m=cal["max_reliable_range_m"],
+        )
+    except Exception as exc:  # never let pose wiring break the proven path
+        analysis["object_pose_error"] = repr(exc)[:200]
+
+
 def stack_state_from_analysis(analysis: dict[str, Any], *, decision_id: str) -> dict[str, Any]:
     detected = bool(analysis.get("detected", False))
     centered = bool(analysis.get("centered", False))
@@ -646,6 +701,10 @@ def stack_state_from_analysis(analysis: dict[str, Any], *, decision_id: str) -> 
             "target_center_error": analysis.get("center_error"),
             "target_area_ratio": analysis.get("area_ratio"),
             "target_bbox": analysis.get("bbox"),
+            "target_z_m_forward": (analysis.get("object_pose") or {}).get("z_m_forward"),
+            "target_bearing_rad": (analysis.get("object_pose") or {}).get("bearing_rad_right_positive"),
+            "target_sigma_d_m": (analysis.get("object_pose") or {}).get("sigma_d_m"),
+            "target_pose_status": (analysis.get("object_pose") or {}).get("pose_status"),
             "camera_source": "factory_bridge_csi_snapshot",
         },
         "brain": {
@@ -721,7 +780,19 @@ def stack_command_from_policy(
         area_ratio = float(analysis.get("area_ratio", 0.0) or 0.0)
         bbox_height_ratio = float(analysis.get("bbox_height_ratio", 0.0) or 0.0)
         stop_bbox_height_ratio = float(args.stack_forward_stop_bbox_height_ratio)
-        if area_ratio >= float(args.stack_forward_stop_area_ratio):
+        stop_distance_m = float(getattr(args, "stack_forward_stop_distance_m", 0.0) or 0.0)
+        object_pose_obs = analysis.get("object_pose") if isinstance(analysis.get("object_pose"), dict) else {}
+        metric_z = object_pose_obs.get("z_m_forward")
+        metric_stop = (
+            stop_distance_m > 0.0
+            and object_pose_obs.get("pose_status") == "metric"
+            and metric_z is not None
+            and float(metric_z) <= stop_distance_m
+        )
+        if metric_stop:
+            command = {"linear_x": 0.0, "angular_z": 0.0}
+            stop_reason = "target_inside_stack_forward_stop_distance"
+        elif area_ratio >= float(args.stack_forward_stop_area_ratio):
             command = {"linear_x": 0.0, "angular_z": 0.0}
             stop_reason = "target_inside_stack_forward_stop_area"
         elif stop_bbox_height_ratio > 0.0 and bbox_height_ratio >= stop_bbox_height_ratio:
@@ -812,6 +883,7 @@ def run_chasecar_stack_fetch_adapter_policy(
         annotated_path=annotated_path,
         allow_forward=True,
     )
+    attach_object_pose(analysis, args)
     decision_id = "%s:%s" % (POLICY_CHASECAR_STACK_FETCH_ADAPTER_V0, utc_stamp())
     stack_state = stack_state_from_analysis(analysis, decision_id=decision_id)
     policy_snapshot = supervisor_policy.build_policy_snapshot(stack_state, sim_gate_ready=True)
@@ -1877,6 +1949,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-stack-linear-x", type=float, default=0.04)
     parser.add_argument("--stack-forward-stop-area-ratio", type=float, default=0.48)
     parser.add_argument("--stack-forward-stop-bbox-height-ratio", type=float, default=0.0)
+    parser.add_argument("--stack-forward-stop-distance-m", type=float, default=0.0,
+                        help="If >0 and --calibration set, stop the forward approach when calibrated object distance <= this (metres).")
+    parser.add_argument("--calibration", default="",
+                        help="Path to a mono distance calibration_summary.json; enables the calibrated metric forward-stop.")
     parser.add_argument("--stack-policy-checkpoint", default="")
     return parser
 
