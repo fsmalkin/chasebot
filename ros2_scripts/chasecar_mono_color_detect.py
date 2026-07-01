@@ -14,9 +14,11 @@ from typing import Any
 from chasecar_mono_yolo_detect import detection_with_calibrated_size
 
 
-DEFAULT_HSV_LOWER = (20, 80, 80)
-DEFAULT_HSV_UPPER = (45, 255, 255)
-DEFAULT_MIN_AREA_PX = 20.0
+# White (emissive) sim golf ball: low saturation, very high value. The sky is
+# bright too but more saturated (S ~= 46), so the S<=40 cap excludes it.
+DEFAULT_HSV_LOWER = (0, 0, 205)
+DEFAULT_HSV_UPPER = (179, 40, 255)
+DEFAULT_MIN_AREA_PX = 30.0
 
 
 def _load_cv_dependencies() -> tuple[Any, Any]:

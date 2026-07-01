@@ -66,8 +66,10 @@ measure. A static ground-truth range sweep quantifies the calibrated distance
 ball: it localizes correctly but its "sports ball" confidence is starved
 (~0.04–0.13, flickering to 0.0), even with realistic golf / high-contrast soccer
 textures — far below the ~0.76 it scores on the real white golf ball. So the sim
-uses a **color detector** front-end (the ball's yellow hue is unique vs green turf
-/ blue sky; equiv-diameter matches the geometry, so `K` is unchanged). The real
+uses a **color detector** front-end: the sim ball is white (emissive, so it reads
+bright in the sim's flat lighting — matching the real golf ball), segmented by
+low-saturation/high-value with the more-saturated sky excluded; equiv-diameter
+matches the geometry, so `K` is unchanged. The real
 robot keeps YOLO (bench-proven); the geometry/control being validated is identical
 either way — detection-confidence stays validated on the real bench, the sim
 validates the calibrated geometry + control.
