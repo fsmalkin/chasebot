@@ -1,0 +1,19 @@
+{
+  "object_size_m": 0.042672,
+  "fits": {
+    "equiv_diameter_px": {
+      "pass": true,
+      "K_px_m": 19.73,
+      "sigma_s_px": 1.5,
+      "max_calibrated_range_m": 1.5,
+      "object_size_m": 0.042672
+    },
+    "bbox_height_px": {
+      "pass": true,
+      "K_px_m": 19.73,
+      "sigma_s_px": 1.5,
+      "max_calibrated_range_m": 1.5,
+      "object_size_m": 0.042672
+    }
+  }
+}

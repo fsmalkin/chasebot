@@ -2,17 +2,33 @@
 
 ## Direction Pivot (2026-06-30)
 
-This branch is pivoting from IRL hardware bring-up to a **simulation proof of the
-object-centric fetch-to-pose stack** on the latest SIM stack + calibrated world
-physics.
+This branch proves the **mono perception+control stack in simulation as a digital
+twin**, then deploys it onboard the robot. The north star is **the JetBot Mini
+working a fetch with the hardware we actually have** — one mono RGB camera, no
+depth, no wheel odometry. The sim is scaffolding, not the deliverable: it gives us
+the one thing the bench cannot — **ground truth** to measure the mono stack's
+error against — so we tune it where the error is visible, then redeploy to the
+robot.
 
-**Why.** The JetBot Mini hardware cannot feed the sim fetch policy's input
-contract. The policy consumes **world-frame metric state** — robot pose
-(x, y, yaw), ball world position + motion history, and delivery-zone geometry —
-but the hardware has a **mono camera (no depth → no 3D ball position)** and an
-**encoderless chassis (no odometry → no robot world pose)**. Closing that gap is
-a sensing investment (a depth sensor + wheel odometry / VIO-SLAM), not a software
-one. Rather than spend on sensors now, we prove the stack out in sim.
+**Why not the world-frame stack.** The sim's object-centric `fetch_to_pose`
+policy consumes **world-frame metric state** — robot pose (x, y, yaw), ball world
+position, delivery-zone geometry — which needs depth + odometry the hardware
+lacks. An earlier sim run of that world-frame stack passed (closest approach
+0.19 m inside the 0.30 m delivery radius, calibrated golf physics engaged) — but
+it read the ball pose from **Gazebo ground truth**, not from any camera. So it
+validated the *rich* stack, not the mono one. We do **not** wait to close the
+sensing gap; we prove the stack that runs on the sensors we already have.
+
+**The mono stack (what we are proving — "Option B").** A native ROS2 node drives
+the sim robot using **only the mono RGB camera**, robot-relative control, no world
+frame: `/d415/color/image_raw` → YOLOv5m → apparent-size distance
+(`z = K / size_px`, range + bearing) → `decide_fetch_action()` →
+`TwistStamped` on `/jetbot_base_controller/cmd_vel`. Gazebo ground truth is read
+**only by an external scorer**, never by the node — the "blinding" that keeps the
+sim honest to mono-only sensing. This is the literal robot-relative control core
+already demonstrated on the real robot; the sim swaps the perception inputs, not
+the brain. The world-frame gather policy (`decide_object_centric_gather_command`)
+is explicitly **excluded** — it needs odometry the hardware does not have.
 
 **What was proven IRL (retained as evidence below).** Offboard supervisor-policy
 routing through the locked factory bridge; monocular distance calibration;
@@ -20,11 +36,46 @@ closed-loop visual approach to a calibrated standoff; and contact — the
 minimum-viable IRL fetch on degraded sensors, with the bridge safety contract
 (lock + 0.5 s deadman + bounded commands, final relock) holding throughout.
 
-**New direction.** Prove the object-centric `fetch_to_pose` stack in the latest
-SIM stack with the calibrated golf-ball/surface physics, scored against the
-delivery-radius success metric. The IRL hardware path resumes only once the
-depth + odometry sensing gap is closed. The hardware bring-up content below is
-kept as the IRL evidence record.
+**Confirmed sim facts (2026-06-30).** Gate lane up (sim-gate + gate-stack);
+gate-stack has onnxruntime + the committed `runtime/yolo/yolov5m.onnx`; live D415
+RGB intrinsics `fx = fy = 462.27`, 640×480, zero distortion → sim apparent-size
+constant `K = f·H ≈ 19.7 px·m` (vs the real bench's 9.62 — the mono K **must be
+re-fit** for the sim camera before closed-loop drive); drive seam confirmed
+(`/jetbot_base_controller/cmd_vel`, `TwistStamped`, publish ≥20 Hz); ground truth
+read via `gz topic /world/yolo_test_world/dynamic_pose/info` for scoring only.
+
+**Onboard horizon.** Once the mono stack is green in sim against ground truth, it
+deploys onboard the Jetson (perception backend swappable: onnxruntime in sim →
+TensorRT on the Orin). The hardware bring-up content below is kept as the IRL
+evidence record.
+
+**Validation result (2026-06-30) — mono fetch-to-contact PROVEN in sim.** A
+closed-loop run scored against Gazebo ground truth: robot started at the world
+origin, ball at x=0.7 m. Using **only the mono RGB camera**, the node detected the
+ball every frame through the approach (color detector, confidence 0.89–0.92,
+`lost_count=0` — zero flicker), drove a calibrated closed-loop approach (mono `z`
+0.617 m → 0.391 m, straight to the 0.40 m standoff), then a bounded open-loop push
+**contacted the ball — ground truth shows it displaced from x=0.7 m to x=0.945 m
+(≈0.25 m), y≈0**. This validates the full mono perception → calibrated-distance →
+approach → contact pipeline against ground truth — the part the bench could not
+measure. A static ground-truth range sweep quantifies the calibrated distance
+(`z = K/size`, K=19.73): mono estimate accurate to **~2% (±0.008–0.015 m) across
+0.4–1.0 m** vs Gazebo truth.
+
+**Perception note (sim-to-real gap).** yolov5m has a domain gap on the synthetic
+ball: it localizes correctly but its "sports ball" confidence is starved
+(~0.04–0.13, flickering to 0.0), even with realistic golf / high-contrast soccer
+textures — far below the ~0.76 it scores on the real white golf ball. So the sim
+uses a **color detector** front-end (the ball's yellow hue is unique vs green turf
+/ blue sky; equiv-diameter matches the geometry, so `K` is unchanged). The real
+robot keeps YOLO (bench-proven); the geometry/control being validated is identical
+either way — detection-confidence stays validated on the real bench, the sim
+validates the calibrated geometry + control.
+
+**Artifacts:** `ros2_scripts/chasecar_mono_fetch_node.py` (+ `chasecar_mono_yolo_detect.py`,
+`chasecar_mono_color_detect.py`), `scripts/chasecar_mono_fetch_scorer.py`,
+`scripts/chasecar_mono_fetch_harness.py`, `tools/robot_factory_bridge/chasecar_bridge_sim_distance_calibration.py`;
+reproducible run via the harness with `--detector color`.
 
 ## Decision
 
