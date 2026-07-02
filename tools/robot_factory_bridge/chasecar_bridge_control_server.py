@@ -231,8 +231,8 @@ def start_approach():
         cmd = [
             "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "jetson@192.168.1.11",
             "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
-            "--detector", "remote", "--remote-det-url", "http://192.168.1.59:8791/status",
-            "--min-confidence", "0.2", "--search-scan", "26", "--lost-limit", "8",
+            "--detector", "trt",  # local GPU eyes (13.5ms/frame); remote feed stays for the dashboard view
+            "--min-confidence", "0.2", "--search-scan", "26", "--lost-limit", "12",
             "--standoff-m", "0.35", "--push-steps", "10",
             "--run-dir", "/home/jetson/chasecar_onboard/runs",
         ]

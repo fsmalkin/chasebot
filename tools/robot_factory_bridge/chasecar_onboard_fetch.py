@@ -25,6 +25,7 @@ Usage (on the Jetson):
 from __future__ import print_function
 
 import argparse
+import ctypes
 import io
 import json
 import math
@@ -183,6 +184,94 @@ class RemoteDetector(object):
         return {"detected": False, "no_new_data": True, "source": "remote_no_new"}
 
 
+# ----------------------------- onboard TensorRT detector (local GPU) -----------------------------
+
+class TrtDetector(object):
+    """Run the golf-ball fine-tune engine on the Nano's own GPU (TRT 7.1).
+
+    No pycuda on this JetPack: device buffers via ctypes on libcudart. Engine
+    is the yolov8n single-class export (input 1x3x320x320 fp32, output
+    1x5x2100: cx,cy,w,h,conf in input-pixel scale). 13.5 ms/frame measured
+    with trtexec 2026-07-02; local frames make feed lag ~0.1 s, so the
+    ego-motion staleness that broke remote-fed runs mostly vanishes.
+    """
+
+    H2D, D2H = 1, 2
+
+    def __init__(self, engine_path, conf_floor=0.20, floor_zone_frac=0.45):
+        import tensorrt as trt
+        self.conf_floor = float(conf_floor)
+        self.floor_zone_frac = float(floor_zone_frac)
+        self.rt = None
+        for name in ("libcudart.so.10.2", "libcudart.so.10.0", "libcudart.so"):
+            try:
+                self.rt = ctypes.CDLL(name)
+                break
+            except OSError:
+                continue
+        if self.rt is None:
+            raise RuntimeError("libcudart not found")
+        logger = trt.Logger(trt.Logger.WARNING)
+        with open(engine_path, "rb") as f:
+            self.engine = trt.Runtime(logger).deserialize_cuda_engine(f.read())
+        if self.engine is None:
+            raise RuntimeError("engine deserialize failed: %s" % engine_path)
+        self.ctx = self.engine.create_execution_context()
+        self.in_shape = tuple(self.engine.get_binding_shape(0))   # (1,3,320,320)
+        self.out_shape = tuple(self.engine.get_binding_shape(1))  # (1,5,2100)
+        self.side = int(self.in_shape[2])
+        self.h_in = np.empty(self.in_shape, dtype=np.float32)
+        self.h_out = np.empty(self.out_shape, dtype=np.float32)
+        self.d_in = self._malloc(self.h_in.nbytes)
+        self.d_out = self._malloc(self.h_out.nbytes)
+
+    def _malloc(self, nbytes):
+        ptr = ctypes.c_void_p()
+        if self.rt.cudaMalloc(ctypes.byref(ptr), ctypes.c_size_t(nbytes)) != 0:
+            raise RuntimeError("cudaMalloc failed (%d bytes)" % nbytes)
+        return ptr
+
+    def _memcpy(self, dst, src, nbytes, kind):
+        if self.rt.cudaMemcpy(dst, src, ctypes.c_size_t(nbytes), ctypes.c_int(kind)) != 0:
+            raise RuntimeError("cudaMemcpy failed")
+
+    def infer(self, bgr):
+        """BGR frame -> best detection dict (offboard obs convention) or None."""
+        h0, w0 = bgr.shape[:2]
+        s = self.side
+        scale = min(float(s) / w0, float(s) / h0)
+        nw, nh = int(round(w0 * scale)), int(round(h0 * scale))
+        resized = bgr if (nw, nh) == (w0, h0) else cv2.resize(bgr, (nw, nh))
+        canvas = np.full((s, s, 3), 114, dtype=np.uint8)
+        px, py = (s - nw) // 2, (s - nh) // 2
+        canvas[py:py + nh, px:px + nw] = resized
+        chw = canvas[:, :, ::-1].transpose(2, 0, 1).astype(np.float32) / 255.0
+        self.h_in[0] = chw
+        self._memcpy(self.d_in, self.h_in.ctypes.data, self.h_in.nbytes, self.H2D)
+        if not self.ctx.execute_v2([int(self.d_in.value), int(self.d_out.value)]):
+            raise RuntimeError("execute_v2 failed")
+        self._memcpy(self.h_out.ctypes.data, self.d_out, self.h_out.nbytes, self.D2H)
+        out = self.h_out[0]  # (5, 2100)
+        i = int(np.argmax(out[4]))
+        conf = float(out[4, i])
+        if conf < self.conf_floor:
+            return None
+        cx = (float(out[0, i]) - px) / scale
+        cy = (float(out[1, i]) - py) / scale
+        bw = float(out[2, i]) / scale
+        bh = float(out[3, i]) / scale
+        if (cy + bh / 2.0) < h0 * self.floor_zone_frac:
+            return None  # above the floor zone: lamps/reflections, not a floor ball
+        return {
+            "detected": True,
+            "bbox_xyxy": [cx - bw / 2.0, cy - bh / 2.0, cx + bw / 2.0, cy + bh / 2.0],
+            "equiv_diameter_px": round(math.sqrt(max(bw, 1e-6) * max(bh, 1e-6)), 3),
+            "center_error": round((cx - w0 / 2.0) / (w0 / 2.0), 6),
+            "confidence": round(conf, 4),
+            "source": "onboard_trt",
+        }
+
+
 # ----------------------------- policy (port of decide_fetch_action) -----------------------------
 
 def default_config(**over):
@@ -301,13 +390,21 @@ def run(args):
     hsv_lo = tuple(int(v) for v in args.hsv_lo.split(","))
     hsv_hi = tuple(int(v) for v in args.hsv_hi.split(","))
     remote = RemoteDetector(args.remote_det_url) if args.detector == "remote" else None
+    trt_det = None
+    if args.detector == "trt":
+        trt_det = TrtDetector(args.trt_engine, conf_floor=args.trt_conf_floor,
+                              floor_zone_frac=args.floor_zone_frac)
 
     def observe():
         if remote is not None:
             return remote.get_obs()
-        det = detect_ball(jpeg_to_bgr(bridge.camera_jpeg()), hsv_lo, hsv_hi,
-                          args.min_area_px, args.min_circularity,
-                          floor_zone_frac=args.floor_zone_frac)
+        frame = jpeg_to_bgr(bridge.camera_jpeg())
+        if trt_det is not None:
+            det = trt_det.infer(frame)
+        else:
+            det = detect_ball(frame, hsv_lo, hsv_hi,
+                              args.min_area_px, args.min_circularity,
+                              floor_zone_frac=args.floor_zone_frac)
         return det if det else {"detected": False}
 
     run_dir = args.run_dir or os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs")
@@ -428,10 +525,11 @@ def run(args):
             elif d["action"] == ACT_HOLD:
                 if state.get("lost_count", 0) > 1:
                     refresher.zero()
-            # pace the perception loop to the camera's ~1.2 fps cache
+            # pace: local TRT eyes support ~8 Hz (15 fps camera, 15 ms infer);
+            # remote path self-paces via no_new_data sleeps regardless
             dt = time.time() - t_loop
-            if dt < 0.35:
-                time.sleep(0.35 - dt)
+            if dt < 0.12:
+                time.sleep(0.12 - dt)
 
         # --- bounded contact push ---
         if stop_reason == "standoff_reached" and args.push_steps > 0 and not args.dry_run:
@@ -493,9 +591,11 @@ def build_parser():
     p.add_argument("--min-circularity", type=float, default=0.45)
     p.add_argument("--floor-zone-frac", type=float, default=0.45,
                    help="reject blobs whose bbox bottom is above h*frac (ball is on the floor)")
-    p.add_argument("--detector", choices=["color", "remote"], default="color",
-                   help="'remote' = consume the laptop YOLO detection feed (hybrid mode)")
+    p.add_argument("--detector", choices=["color", "remote", "trt"], default="color",
+                   help="'remote' = laptop YOLO feed (hybrid); 'trt' = fine-tune engine on the local GPU")
     p.add_argument("--remote-det-url", default="http://192.168.1.59:8791/status")
+    p.add_argument("--trt-engine", default="/home/jetson/chasecar_onboard/golfball_finetune_fp16.engine")
+    p.add_argument("--trt-conf-floor", type=float, default=0.20)
     p.add_argument("--dry-run", action="store_true", help="perception only; never moves")
     p.add_argument("--dry-run-frames", type=int, default=8)
     p.add_argument("--run-dir", default="")
