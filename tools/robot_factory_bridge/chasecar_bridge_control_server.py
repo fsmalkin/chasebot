@@ -181,6 +181,11 @@ def hard_stop():
         state["last"] = "STOPPED"
     bridge_post("/stop", {"source": "dashboard_stop"})
     bridge_post("/motion", {"enabled": False, "source": "dashboard_stop"})
+    # terminating the local ssh can orphan the remote episode process; kill it
+    # explicitly (harmless post-relock either way — bridge refuses motion)
+    threading.Thread(target=lambda: subprocess.run(
+        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "jetson@192.168.1.11",
+         "pkill -f chasecar_onboard_fetch.py"], capture_output=True, timeout=15), daemon=True).start()
 
 
 def _watch(p, outfile):
@@ -188,9 +193,10 @@ def _watch(p, outfile):
     reason = "exit %s" % p.returncode
     try:
         with open(outfile, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            lines = [ln for ln in f.read().splitlines() if ln.strip().startswith("{")]
+        data = json.loads(lines[-1])  # episode summary is the last JSON line
         reason = data.get("stop_reason", reason)
-        if data.get("push", {}).get("executed"):
+        if (data.get("push") or {}).get("executed"):
             reason += " (+push %d)" % data["push"]["executed"]
     except Exception:
         pass
@@ -208,13 +214,17 @@ def start_approach():
         os.makedirs(RUNDIR, exist_ok=True)
         stamp = int(time.time())
         outfile = os.path.join(RUNDIR, "run_%d.json" % stamp)
+        # GO = the validated hybrid loop: onboard brain on the Jetson drives via
+        # localhost, consuming this server's fine-tune detection feed. The old
+        # offboard controller (CTRL) carried its own weak ONNX detector and lost
+        # the ball (3x lost_target on 2026-07-02); keep it only as a fallback.
         cmd = [
-            "python", CTRL, "--calibration", CAL,
-            "--standoff-m", "0.35", "--push-steps", "10", "--push-linear-x", "0.55",
-            "--approach-linear-x", "0.55", "--turn-angular-z", "2.3",
-            "--forward-budget", "30", "--max-steps", "120", "--center-deadband", "0.12",
-            "--confidence-threshold", "0.10", "--min-confidence", "0.25",
-            "--artifact-dir", os.path.join(RUNDIR, "art_%d" % stamp), "--pretty",
+            "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "jetson@192.168.1.11",
+            "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
+            "--detector", "remote", "--remote-det-url", "http://192.168.1.59:8791/status",
+            "--min-confidence", "0.5", "--search-scan", "26",
+            "--standoff-m", "0.35", "--push-steps", "10",
+            "--run-dir", "/home/jetson/chasecar_onboard/runs",
         ]
         bridge_post("/motion", {"enabled": False, "source": "dashboard_prelock"})
         fout = open(outfile, "w", encoding="utf-8")
