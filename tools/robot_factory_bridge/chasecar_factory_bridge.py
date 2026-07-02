@@ -441,6 +441,71 @@ def strict_bool(value):
     raise ValueError("boolean_value_required")
 
 
+JOG_HTML = r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Chasecar Jog</title>
+<style>
+ body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#0e0f12;color:#e8e8ea;text-align:center;-webkit-user-select:none;user-select:none}
+ h3{margin:8px}
+ .cam{width:100%;max-width:460px;background:#000;border-radius:8px;margin:6px auto;display:block}
+ .tel{font-size:12px;color:#9aa0a8;margin:6px;font-family:ui-monospace,monospace}
+ .row{margin:8px}
+ .pad{display:grid;grid-template-columns:repeat(3,96px);grid-auto-rows:70px;gap:10px;justify-content:center;margin:12px auto}
+ button{font-size:16px;font-weight:600;border-radius:12px;border:1px solid #3a4658;background:#1b2330;color:#fff;touch-action:none}
+ button:active{background:#2457a6;transform:scale(0.97)}
+ .stop{background:#7a1d16;border-color:#b42318}
+ .stop:active{background:#b42318}
+ .lock{background:#14532d;border-color:#147a46;padding:14px 18px;font-size:16px}
+ .lock.on{background:#b42318;border-color:#b42318}
+ input[type=range]{width:78%;max-width:340px}
+</style></head><body>
+<h3>Chasecar Jog</h3>
+<img class="cam" id="cam" alt="camera">
+<div class="tel" id="tel">connecting...</div>
+<div class="row">
+ <button class="lock" id="lock">ENABLE MOTION</button>
+ <button class="stop" id="estop" style="padding:14px 22px;font-size:16px">STOP</button>
+</div>
+<div class="row">power <b id="pv">0.30</b>
+ <input type="range" id="pw" min="0.05" max="0.35" step="0.01" value="0.30"></div>
+<div class="pad">
+ <div></div><button data-l="1" data-r="1">Fwd</button><div></div>
+ <button data-l="-1" data-r="1">Spin L</button>
+ <button class="stop" data-l="0" data-r="0">Stop</button>
+ <button data-l="1" data-r="-1">Spin R</button>
+ <div></div><button data-l="-1" data-r="-1">Back</button><div></div>
+</div>
+<script>
+ var pow=0.30, enabled=false, hold=null;
+ function post(p,b){return fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}).catch(function(e){return {error:''+e};});}
+ var pw=document.getElementById('pw'), pv=document.getElementById('pv'), lock=document.getElementById('lock'), tel=document.getElementById('tel'), cam=document.getElementById('cam');
+ pw.addEventListener('input',function(){pow=parseFloat(pw.value);pv.textContent=pow.toFixed(2);});
+ function setLockUi(){lock.textContent=enabled?'DISABLE MOTION':'ENABLE MOTION';lock.classList.toggle('on',enabled);}
+ lock.addEventListener('click',function(){enabled=!enabled;post('/motion',{enabled:enabled,source:'jog'});setLockUi();});
+ document.getElementById('estop').addEventListener('click',function(){post('/stop',{source:'jog'});});
+ function drive(l,r){post('/motors',{left:l*pow,right:r*pow,duration_s:0.4,source:'jog'});}
+ function stopMotors(){post('/stop',{source:'jog'});}
+ var btns=document.querySelectorAll('[data-l]');
+ for(var i=0;i<btns.length;i++){(function(b){
+   var l=parseFloat(b.dataset.l), r=parseFloat(b.dataset.r);
+   function start(e){e.preventDefault(); if(l===0&&r===0){stopMotors();return;} drive(l,r); clearInterval(hold); hold=setInterval(function(){drive(l,r);},150);}
+   function end(e){clearInterval(hold); if(!(l===0&&r===0)) stopMotors();}
+   b.addEventListener('mousedown',start); b.addEventListener('mouseup',end); b.addEventListener('mouseleave',end);
+   b.addEventListener('touchstart',start,{passive:false}); b.addEventListener('touchend',end); b.addEventListener('touchcancel',end);
+ })(btns[i]);}
+ function tick(){
+   cam.src='/camera.jpg?t='+Date.now();
+   fetch('/health',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
+     var age=(s.camera&&s.camera.frame_age_s!=null)?s.camera.frame_age_s.toFixed(2):'-';
+     tel.textContent='motion='+s.motion_enabled+'  L='+(s.left_motor||0).toFixed(3)+'  R='+(s.right_motor||0).toFixed(3)+'  max='+s.max_motor_speed+'  cam_age='+age;
+     enabled=!!s.motion_enabled; setLockUi();
+   }).catch(function(){tel.textContent='health error';});
+ }
+ setInterval(tick,700); tick();
+</script></body></html>"""
+
+
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
@@ -1200,6 +1265,14 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             return
         if parsed.path in ("/dashboard", "/ui"):
             data = DASHBOARD_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if parsed.path in ("/jog", "/control", "/drive"):
+            data = JOG_HTML.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
