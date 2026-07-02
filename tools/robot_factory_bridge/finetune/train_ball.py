@@ -20,6 +20,8 @@ def main():
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--val-frac", type=float, default=0.15)
+    ap.add_argument("--workers", type=int, default=2,
+                    help="dataloader workers; more blows the Windows commit limit (WinError 1455)")
     args = ap.parse_args()
 
     pairs = []
@@ -54,7 +56,7 @@ def main():
     model = YOLO("yolov8n.pt")
     res = model.train(data=yaml_path, epochs=args.epochs, imgsz=args.imgsz, batch=16,
                       project=os.path.join(args.work, "runs"), name="ball", exist_ok=True,
-                      patience=20, verbose=False)
+                      patience=20, verbose=False, workers=args.workers)
     best = os.path.join(args.work, "runs", "ball", "weights", "best.pt")
     m = model.val(data=yaml_path, verbose=False)
     out = {
