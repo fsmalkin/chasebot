@@ -338,6 +338,7 @@ def run(args):
         # --- acquire: rotate until the ball is in frame ---
         scans = 0
         scan_hits = 0
+        discard_next = False  # first fresh verdict after a turn can predate the turn
         while scans < args.search_scan:
             # wait for a FRESH upstream verdict at this heading (upstream runs
             # ~1 Hz; a fixed pause can rotate past the ball unevaluated)
@@ -346,6 +347,14 @@ def run(args):
             while time.time() - t_wait < 2.0:
                 det = observe()
                 if not det.get("no_new_data"):
+                    if discard_next:
+                        # verdict is for a frame captured before/during the turn
+                        # (feed pipeline lags ~0.5-1s); judge this heading on the
+                        # NEXT fresh frame. Caught live 2026-07-02: scan matched a
+                        # stale hit, held at the wrong heading, and spun past.
+                        discard_next = False
+                        det = {"detected": False, "no_new_data": True}
+                        continue
                     break
                 time.sleep(0.12)
             if det.get("detected") and det.get("confidence", 0.0) >= cfg["min_confidence"]:
@@ -360,6 +369,7 @@ def run(args):
             refresher.set(0.0, cfg["turn_angular_z"], hold_s=0.14)
             scans += 1
             time.sleep(0.55)
+            discard_next = True
         summary["scan_steps"] = scans
 
         # --- approach loop ---

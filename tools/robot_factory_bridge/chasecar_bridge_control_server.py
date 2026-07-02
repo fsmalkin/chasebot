@@ -172,10 +172,11 @@ def detector_loop():
         except Exception as e:
             with cam_lock:
                 cam["err"] = "overlay error: %r" % e
-        # cadence: don't hammer the CPU; ~2 Hz max
+        # cadence: ensemble is ~30ms on the GPU; 0.3s shrinks the verdict lag
+        # the onboard scan sees (heading lag caught live 2026-07-02)
         dt = time.time() - t0
-        if dt < 0.5:
-            time.sleep(0.5 - dt)
+        if dt < 0.3:
+            time.sleep(0.3 - dt)
 
 
 def hard_stop():
@@ -231,7 +232,7 @@ def start_approach():
             "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "jetson@192.168.1.11",
             "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
             "--detector", "remote", "--remote-det-url", "http://192.168.1.59:8791/status",
-            "--min-confidence", "0.35", "--search-scan", "26",
+            "--min-confidence", "0.2", "--search-scan", "26",
             "--standoff-m", "0.35", "--push-steps", "10",
             "--run-dir", "/home/jetson/chasecar_onboard/runs",
         ]
