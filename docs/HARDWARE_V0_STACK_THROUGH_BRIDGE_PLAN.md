@@ -142,6 +142,25 @@ a py3.6 TRT inference wrapper (tensorrt 7.1 bindings present; NO pycuda — use
 ctypes/libcudart for buffers) plumbed into `chasecar_onboard_fetch.py` as
 `--detector trt` → fully self-contained robot eyes, Wi-Fi out of the loop.
 
+**Live-iteration night (2026-07-02 evening) — onboard eyes landed, v2 trained.**
+Five supervised GO iterations surfaced and fixed, in order: (1) the GO button
+still ran the legacy offboard ONNX controller → rewired to the hybrid loop;
+(2) verdict lag (~0.5–1 s capture→decision over the feed) made scan and
+approach act on pre-turn frames and double-correct (trace: err +0.94 → −0.97 →
+lost) → post-turn verdict discard in both loops, feed cadence 0.3 s; (3) the
+fine-tune proved scene-blind in an untrained room live → per-frame ensemble
+(fine-tune → YOLO-World fallback, `det.src` tag); (4) `--detector trt`
+onboard wrapper landed (decode parity-verified vs ONNX before first live run) —
+but (5) the 320px engine export was blind past ~1 m (ball ~6px; 556/616
+hardwood frames conf≈0 at 320 vs 0.5–0.9 at 640) → **v2 fine-tune trained on
+both rooms** (2698/476 split; mAP50 0.995) and gated: carpet 0.975/0.965
+(no regression, works even at 320), hardwood 0.93–0.96 (v1: ~0), 0 FP/18,
+plus zero-shot transfer to a THIRD untrained room at 0.40 (v1: 0.0) —
+two-room training measurably generalizes. 640px ONNX exported; **engine
+rebuild on the Nano pending next power-on** (robot was switched off at session
+end): scp `golfball_v2_640.onnx` → `trtexec --fp16` → smoke → GO. Safety:
+every iteration ended `final_safe: true`; the bridge boundary held all night.
+
 ## Decision
 
 The current hardware v0 path gets the sim stack working IRL through the JetBot
