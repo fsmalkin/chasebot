@@ -128,6 +128,20 @@ path); YOLO-World stays in the fallback chain for new scenes. Installed as
 (`detector backend: finetune`). Remaining for a live hybrid episode:
 power the robot on (bridge deploy after boot) + operator-supervised GO.
 
+**Onboard GPU proven (2026-07-02 evening).** Hardware identity settled by photo +
+purchase trail + `/proc/device-tree/model`: the robot has exactly ONE compute
+board, the kit's Jetson Nano 4GB (no Orin — the earlier inventory claim was a
+mis-recollection; the "attached GPU with the big black fan" is the kit Nano and
+its heatsink fan). The fine-tune was exported to ONNX (opset 11, imgsz 320,
+simplified) and built into a TensorRT 7.1 FP16 engine ON the Nano
+(`/home/jetson/chasecar_onboard/golfball_finetune_fp16.engine`, 8.4 MB):
+**13.5 ms/frame GPU compute, ~73 FPS throughput** — ~15× the current CPU color
+loop and ~40× the Wi-Fi feed rate. Live-camera validation of the laptop
+fine-tune feed same evening: 0.92 conf, z=0.35 m on the dashboard. Next slice:
+a py3.6 TRT inference wrapper (tensorrt 7.1 bindings present; NO pycuda — use
+ctypes/libcudart for buffers) plumbed into `chasecar_onboard_fetch.py` as
+`--detector trt` → fully self-contained robot eyes, Wi-Fi out of the loop.
+
 ## Decision
 
 The current hardware v0 path gets the sim stack working IRL through the JetBot
