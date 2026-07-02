@@ -58,7 +58,8 @@ def main():
                       project=os.path.join(args.work, "runs"), name="ball", exist_ok=True,
                       patience=20, verbose=False, workers=args.workers)
     best = os.path.join(args.work, "runs", "ball", "weights", "best.pt")
-    m = model.val(data=yaml_path, verbose=False)
+    m = model.val(data=yaml_path, verbose=False,
+                  project=os.path.join(args.work, "runs"), name="val", exist_ok=True)
     out = {
         "n_train": len(splits["train"]), "n_val": len(splits["val"]),
         "map50": round(float(m.box.map50), 4), "map5095": round(float(m.box.map), 4),

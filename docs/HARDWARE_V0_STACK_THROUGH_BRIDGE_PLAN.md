@@ -116,8 +116,17 @@ The control server (`chasecar_bridge_control_server.py`, :8791) now serves
 `det_ts` + keepalive-on-/status, and the **onboard hybrid loop was dry-run
 validated end-to-end**: Jetson `--detector remote` consumed the laptop
 YOLO-World feed (conf 0.42–0.66, z≈0.26 m stable, ~3 Hz onboard, rate-aware
-no_new_data holds, final_safe) with the bridge locked throughout. Remaining for
-a live hybrid episode: operator-supervised GO.
+no_new_data holds, final_safe) with the bridge locked throughout. **The
+fine-tune landed the same day**: yolov8n on 2791 zero-shot labels (mAP50 0.995,
+2373/418 split), acceptance-gated on held-out frames — **0.97/0.97/0.93 conf on
+the three real-ball frames including both glossy-mat hard cases, 0 false
+positives across 19 ball-less frames**, and it recovered a ball that both
+YOLO-World and the ONNX stack had missed (`try_now.jpg`). Known limit: it is
+scene-specialized (misses the dark wood-floor-room captures from the old camera
+path); YOLO-World stays in the fallback chain for new scenes. Installed as
+`runtime/yolo/golfball_finetune.pt`; the control server picks it up on start
+(`detector backend: finetune`). Remaining for a live hybrid episode:
+power the robot on (bridge deploy after boot) + operator-supervised GO.
 
 ## Decision
 
