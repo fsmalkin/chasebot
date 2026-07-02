@@ -65,21 +65,25 @@ def detector_loop():
     0 false positives across archived bench frames at conf 0.05, only detector
     to find the far-ball-on-glossy-mat case) -> yolov5m ONNX "sports ball".
     """
-    ult, ult_conf, ult_name = None, 0.10, ""
+    # Ensemble: fine-tune first (0.97 conf in its trained scene, but scene-blind
+    # elsewhere — went 0.0 on the wood-floor room live 2026-07-02); YOLO-World
+    # zero-shot takes any frame the fine-tune misses (generalizes across scenes,
+    # 0 FP at conf 0.05 on this bench).
+    ult = world = None
     try:
         if os.path.isfile(CUSTOM_PT):
             from ultralytics import YOLO as _UY
-            ult, ult_name = _UY(CUSTOM_PT), "finetune"
-        elif os.path.isfile(WORLD_PT):
+            ult = _UY(CUSTOM_PT)
+        if os.path.isfile(WORLD_PT):
             from ultralytics import YOLOWorld as _UW
-            ult = _UW(WORLD_PT)
-            ult.set_classes(["ball"])
-            ult_conf, ult_name = 0.05, "yolo-world:ball"
-        if ult is not None:
-            print("detector backend: %s" % ult_name, flush=True)
+            world = _UW(WORLD_PT)
+            world.set_classes(["ball"])
+        if ult is not None or world is not None:
+            print("detector backend: %s" % "+".join(
+                n for n, m in (("finetune", ult), ("yolo-world:ball", world)) if m is not None), flush=True)
     except Exception as e:
         print("ultralytics backend failed (%r); falling back to ONNX" % e, flush=True)
-        ult = None
+        ult = world = None
     try:
         import chasecar_bridge_yolo_onnx_probe as yp
         err = yp.load_detector_dependencies(require_onnx=ult is None)
@@ -87,7 +91,7 @@ def detector_loop():
             raise RuntimeError(err)
         from PIL import Image, ImageDraw
         sess = inp = dtype = None
-        if ult is None:
+        if ult is None and world is None:
             import onnxruntime as ort
             sess = ort.InferenceSession(MODEL, providers=["CPUExecutionProvider"])
             inp = sess.get_inputs()[0]
@@ -119,15 +123,19 @@ def detector_loop():
         try:
             img = Image.open(io.BytesIO(raw)).convert("RGB")
             w, h = img.size
-            if ult is not None:
-                r = ult.predict(img, conf=ult_conf, imgsz=640, verbose=False)[0]
+            if ult is not None or world is not None:
                 best = None
-                if r.boxes is not None and len(r.boxes) > 0:
-                    i = int(r.boxes.conf.argmax())
-                    bx = [float(v) for v in r.boxes.xyxy[i]]
-                    cxx = (bx[0] + bx[2]) / 2.0
-                    best = {"bbox_xyxy": bx, "confidence": float(r.boxes.conf[i]),
-                            "center_error": (cxx - w / 2.0) / (w / 2.0)}
+                for name, model, floor in (("ft", ult, 0.10), ("yw", world, 0.05)):
+                    if model is None:
+                        continue
+                    r = model.predict(img, conf=floor, imgsz=640, verbose=False)[0]
+                    if r.boxes is not None and len(r.boxes) > 0:
+                        i = int(r.boxes.conf.argmax())
+                        bx = [float(v) for v in r.boxes.xyxy[i]]
+                        cxx = (bx[0] + bx[2]) / 2.0
+                        best = {"bbox_xyxy": bx, "confidence": float(r.boxes.conf[i]),
+                                "center_error": (cxx - w / 2.0) / (w / 2.0), "src": name}
+                        break  # fine-tune wins when it fires; World covers its blind scenes
             else:
                 tens, scale, pad = yp.letterbox(img, 640, dtype=dtype)
                 out = sess.run(None, {inp.name: tens})
@@ -150,7 +158,8 @@ def detector_loop():
                 label = "%.2f  z=%.2fm" % (conf, z) if z else "%.2f" % conf
                 d.text((max(2, x0), max(2, y0 - 12)), label, fill=col)
                 det_info = {"confidence": round(conf, 3), "z_m": round(z, 3) if z else None,
-                            "center_error": best.get("center_error"), "equiv_px": round(eq, 1)}
+                            "center_error": best.get("center_error"), "equiv_px": round(eq, 1),
+                            "src": best.get("src")}
             else:
                 d.text((4, 4), "no ball", fill=(240, 80, 60))
             buf = io.BytesIO()
@@ -222,7 +231,7 @@ def start_approach():
             "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "jetson@192.168.1.11",
             "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
             "--detector", "remote", "--remote-det-url", "http://192.168.1.59:8791/status",
-            "--min-confidence", "0.5", "--search-scan", "26",
+            "--min-confidence", "0.35", "--search-scan", "26",
             "--standoff-m", "0.35", "--push-steps", "10",
             "--run-dir", "/home/jetson/chasecar_onboard/runs",
         ]
