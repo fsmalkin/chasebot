@@ -373,6 +373,7 @@ def run(args):
         summary["scan_steps"] = scans
 
         # --- approach loop ---
+        discard_after_turn = False
         while True:
             t_loop = time.time()
             try:
@@ -383,6 +384,14 @@ def run(args):
             if obs.get("no_new_data") and not args.dry_run:
                 # upstream hasn't produced a new frame yet: hold course (the
                 # refresher's max-age auto-coasts to zero if this persists)
+                time.sleep(0.15)
+                continue
+            if discard_after_turn and not args.dry_run:
+                # first fresh verdict after a turn can describe a pre-turn frame
+                # (feed lag ~0.5-1s): acting on it double-corrects and sweeps the
+                # ball across/out of frame (trace onboard_1652156968: err +0.94 ->
+                # -0.97 -> lost). Judge the new heading on the NEXT fresh frame.
+                discard_after_turn = False
                 time.sleep(0.15)
                 continue
             d = decide_fetch_action(obs, state, cfg)
@@ -412,6 +421,7 @@ def run(args):
                 turn_dur = max(0.08, min(0.16, 0.35 * ce))
                 refresher.set(0.0, d["angular_z"], hold_s=turn_dur)
                 time.sleep(turn_dur + 0.30)  # settle + let a fresh frame land (local, fast)
+                discard_after_turn = True
             elif d["action"] == ACT_FORWARD:
                 refresher.set(d["linear_x"], 0.0)  # rolls continuously; refresher feeds deadman
                 state["forward_steps"] += 1
