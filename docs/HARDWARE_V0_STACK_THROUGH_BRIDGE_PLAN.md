@@ -79,6 +79,46 @@ validates the calibrated geometry + control.
 `scripts/chasecar_mono_fetch_harness.py`, `tools/robot_factory_bridge/chasecar_bridge_sim_distance_calibration.py`;
 reproducible run via the harness with `--detector color`.
 
+**IRL validation (2026-07-01/02) — repeatable autonomous fetch on the real robot.**
+Offboard loop (laptop YOLO + calibrated mono distance driving the factory bridge):
+**6 completed fetch-push episodes across two days, 3 safe empty-scan give-ups, 0
+unsafe end-states**, including self-play (fetch → self-reset with randomized turn →
+scan re-acquire → fetch) with no human touches. Best approach: 1.14 m → 0.34 m of
+continuous closed-loop servoing in warm dim lamplight, then a 10-burst contact
+push. Hardware constants and failure modes recorded in memory + commit 809fa4b
+(motor stiction ~0.3, TurnGain 1.0, Wi-Fi response-loss signature + ride-through).
+Perception boundary measured: YOLO 0.7–0.9 conf in daylight, ~0.14 at 1 m in dim
+lamplight (acquire floor 0.12), useless in the dark; classical CV (HSV color,
+tophat local-contrast) is measurably defeated by warm light on glossy wood — the
+white ball reads S≈178 vs floor S≈152. Onboard brain (`chasecar_onboard_fetch.py`)
+validated on the Jetson in dry-run (py3.6, ~4–5 Hz loop, floor-zone gate rejecting
+a dark-room LED false positive); onboard perception awaits a TensorRT YOLO engine
+(`trtexec` confirmed present). Recurring mission-level failure: every successful
+push eventually exiles the ball (under furniture / out of the room) — the passive
+scoop/corral attachment (see `docs-hub chasebot/docs/scoop-attachment-brief`) is
+the unlock for capture-and-carry.
+
+**Detector correction + hybrid feed validation (2026-07-02 PM).** On the repaired
+gstreamer/ISP camera path (15 fps, auto-exposure), a three-way bake-off on real
+bench frames showed **YOLO-World v2 zero-shot prompted with "ball"** beats the
+yolov5m-ONNX "sports ball" stack decisively: 0.38–0.56 vs 0.09 on the easy
+near-ball case, only detector to find the far-ball-on-glossy-mat case, and **zero
+false positives across ~20 archived ball-less bench frames at conf 0.05**
+(9 ms/frame on the RTX 5060). The earlier in-session dismissal of YOLO-World was
+traced to a contaminated test frame (`irl_overlay.jpg`: dark v4l2_bayer capture
+with a burned-in annotation overlay). Frame-diff auto-labels (labeled_diff_v1 /
+walk02_v1) were audited and found poisoned (boxes on background flicker, ball in
+the median background) — quarantined; the corpus was relabeled zero-shot
+(2791 clean labels from 4025 frames, review-sampled) and a yolov8n single-class
+fine-tune targets `runtime/yolo/golfball_finetune.pt`, which the control server
+auto-prefers over the World backend. Pipeline: `tools/robot_factory_bridge/finetune/`.
+The control server (`chasecar_bridge_control_server.py`, :8791) now serves
+`det_ts` + keepalive-on-/status, and the **onboard hybrid loop was dry-run
+validated end-to-end**: Jetson `--detector remote` consumed the laptop
+YOLO-World feed (conf 0.42–0.66, z≈0.26 m stable, ~3 Hz onboard, rate-aware
+no_new_data holds, final_safe) with the bridge locked throughout. Remaining for
+a live hybrid episode: operator-supervised GO.
+
 ## Decision
 
 The current hardware v0 path gets the sim stack working IRL through the JetBot

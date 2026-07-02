@@ -134,6 +134,55 @@ def detect_ball(bgr, hsv_lo, hsv_hi, min_area_px, min_circularity, floor_zone_fr
     return best
 
 
+# ----------------------------- remote detector (hybrid mode) -----------------------------
+
+class RemoteDetector(object):
+    """Consume the laptop's YOLO detection as a compact advisory feed.
+
+    The laptop control server runs YOLO continuously and serves the latest
+    detection at /status (~200 bytes). Only this tiny signal crosses Wi-Fi;
+    frames and motor commands stay on the robot. A dropout or stale feed reads
+    as a miss -> the policy's lost-target guard stops safely.
+    """
+
+    def __init__(self, url, timeout_s=2.0, stale_after_s=3.0):
+        self.url = url
+        self.timeout_s = timeout_s
+        self.stale_after_s = stale_after_s
+        self._last_ts = None
+        self._last_change = 0.0
+
+    def get_obs(self):
+        """Rate-aware: the upstream YOLO runs ~1 Hz while we poll faster. A miss
+        only counts when the upstream frame is FRESH (det_ts advanced); between
+        updates we report no_new_data so the executor holds course instead of
+        ticking the lost counter 3x per real missed frame."""
+        try:
+            raw = urlopen(Request(self.url), timeout=self.timeout_s).read()
+            s = json.loads(raw.decode("utf-8"))
+        except Exception:
+            s = None
+        now = time.time()
+        if s is not None:
+            ts = s.get("det_ts")
+            if ts is not None and ts != self._last_ts:
+                self._last_ts = ts
+                self._last_change = now
+                det = s.get("det")
+                if det:
+                    return {
+                        "detected": True,
+                        "equiv_diameter_px": float(det.get("equiv_px") or 0.0),
+                        "center_error": float(det.get("center_error") or 0.0),
+                        "confidence": float(det.get("confidence") or 0.0),
+                        "source": "remote_yolo",
+                    }
+                return {"detected": False, "source": "remote_fresh_miss"}
+        if self._last_change and (now - self._last_change) > self.stale_after_s:
+            return {"detected": False, "source": "remote_stale"}  # upstream dead: real miss
+        return {"detected": False, "no_new_data": True, "source": "remote_no_new"}
+
+
 # ----------------------------- policy (port of decide_fetch_action) -----------------------------
 
 def default_config(**over):
@@ -251,6 +300,15 @@ def run(args):
                          k_px_m=args.k_px_m)
     hsv_lo = tuple(int(v) for v in args.hsv_lo.split(","))
     hsv_hi = tuple(int(v) for v in args.hsv_hi.split(","))
+    remote = RemoteDetector(args.remote_det_url) if args.detector == "remote" else None
+
+    def observe():
+        if remote is not None:
+            return remote.get_obs()
+        det = detect_ball(jpeg_to_bgr(bridge.camera_jpeg()), hsv_lo, hsv_hi,
+                          args.min_area_px, args.min_circularity,
+                          floor_zone_frac=args.floor_zone_frac)
+        return det if det else {"detected": False}
 
     run_dir = args.run_dir or os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs")
     if not os.path.isdir(run_dir):
@@ -279,12 +337,24 @@ def run(args):
 
         # --- acquire: rotate until the ball is in frame ---
         scans = 0
+        scan_hits = 0
         while scans < args.search_scan:
-            det = detect_ball(jpeg_to_bgr(bridge.camera_jpeg()), hsv_lo, hsv_hi,
-                              args.min_area_px, args.min_circularity,
-                              floor_zone_frac=args.floor_zone_frac)
-            if det and det["confidence"] >= cfg["min_confidence"]:
-                break
+            # wait for a FRESH upstream verdict at this heading (upstream runs
+            # ~1 Hz; a fixed pause can rotate past the ball unevaluated)
+            det = {"detected": False}
+            t_wait = time.time()
+            while time.time() - t_wait < 2.0:
+                det = observe()
+                if not det.get("no_new_data"):
+                    break
+                time.sleep(0.12)
+            if det.get("detected") and det.get("confidence", 0.0) >= cfg["min_confidence"]:
+                scan_hits += 1
+                if scan_hits >= 2:  # debounce: one flickery frame must not end the search
+                    break
+                time.sleep(0.4)  # hold still, confirm on the next fresh frame
+                continue
+            scan_hits = 0
             if args.dry_run:
                 break
             refresher.set(0.0, cfg["turn_angular_z"], hold_s=0.14)
@@ -296,13 +366,15 @@ def run(args):
         while True:
             t_loop = time.time()
             try:
-                det = detect_ball(jpeg_to_bgr(bridge.camera_jpeg()), hsv_lo, hsv_hi,
-                                  args.min_area_px, args.min_circularity,
-                              floor_zone_frac=args.floor_zone_frac)
+                obs = observe()
             except Exception as e:
-                det = None
+                obs = {"detected": False}
                 summary["issues"].append("observe_error:%r" % (e,))
-            obs = det if det else {"detected": False}
+            if obs.get("no_new_data") and not args.dry_run:
+                # upstream hasn't produced a new frame yet: hold course (the
+                # refresher's max-age auto-coasts to zero if this persists)
+                time.sleep(0.15)
+                continue
             d = decide_fetch_action(obs, state, cfg)
             state["step"] += 1
             state["lost_count"] = d.get("lost_count", 0 if obs.get("detected") else state["lost_count"])
@@ -401,6 +473,9 @@ def build_parser():
     p.add_argument("--min-circularity", type=float, default=0.45)
     p.add_argument("--floor-zone-frac", type=float, default=0.45,
                    help="reject blobs whose bbox bottom is above h*frac (ball is on the floor)")
+    p.add_argument("--detector", choices=["color", "remote"], default="color",
+                   help="'remote' = consume the laptop YOLO detection feed (hybrid mode)")
+    p.add_argument("--remote-det-url", default="http://192.168.1.59:8791/status")
     p.add_argument("--dry-run", action="store_true", help="perception only; never moves")
     p.add_argument("--dry-run-frames", type=int, default=8)
     p.add_argument("--run-dir", default="")

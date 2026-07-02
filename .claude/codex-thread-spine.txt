@@ -1,0 +1,21 @@
+# Codex spine thread for the chasebot hw-v0 bringup worktree.
+# Worktree: D:\dev\chasebot-hw-v0   Branch: codex/hw-irl-v0-bringup
+#
+# Spine thread id:
+019ee82b-6b01-7a50-aafe-019f4775956e
+#
+# Checkpoint (rollout JSONL):
+#   C:\Users\afutu\.codex\sessions\2026\06\20\rollout-2026-06-20T23-13-48-019ee82b-6b01-7a50-aafe-019f4775956e.jsonl
+#
+# This thread was started by the Codex app, so the codex MCP server does NOT
+# have it in memory: `mcp__codex__codex-reply` returns "Session not found".
+# Resume it with `codex exec resume` instead (reads prompt from stdin via `-`):
+#
+#   $codex = (gci 'C:\Users\afutu\AppData\Local\OpenAI\Codex\bin\*\codex.exe' |
+#             Sort-Object LastWriteTime -Descending)[0].FullName
+#   Get-Content prompt.txt -Raw | & $codex exec resume 019ee82b-6b01-7a50-aafe-019f4775956e `
+#     -c sandbox_mode="workspace-write" -c approval_policy="never" `
+#     -m gpt-5.5 -c model_reasoning_effort="xhigh" --output-last-message out.txt -
+#
+# Use sandbox_mode="read-only" for status/review turns; "workspace-write" for
+# implementation. Long runs: launch as a background task and ping Fred on exit.

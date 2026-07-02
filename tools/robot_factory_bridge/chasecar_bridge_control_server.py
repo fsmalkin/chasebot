@@ -23,6 +23,8 @@ CAL = "artifacts/session/mono_distance_calibration_bench01/calibration_summary.j
 CTRL = "tools/robot_factory_bridge/chasecar_bridge_visual_fetch_controller.py"
 RUNDIR = os.path.join(REPO, "artifacts", "session", "dashboard_runs")
 MODEL = os.path.join(REPO, "runtime", "yolo", "yolov5m.onnx")
+CUSTOM_PT = os.path.join(REPO, "runtime", "yolo", "golfball_finetune.pt")  # best: bench fine-tune
+WORLD_PT = os.path.join(REPO, "runtime", "yolo", "yolov8s-worldv2.pt")  # zero-shot "ball" prompt
 K_PX_M = 9.621  # real-bench calibration (equiv_diameter_px)
 
 sys.path.insert(0, os.path.join(REPO, "tools", "robot_factory_bridge"))
@@ -56,17 +58,40 @@ def bridge_get(path, timeout=5):
 
 
 def detector_loop():
-    """Continuously: grab bridge frame -> YOLO -> annotate -> cache."""
+    """Continuously: grab bridge frame -> detector -> annotate -> cache.
+
+    Backend priority: golfball_finetune.pt (bench-trained single class) ->
+    yolov8s-worldv2.pt zero-shot prompted with "ball" (IRL-validated 2026-07-02:
+    0 false positives across archived bench frames at conf 0.05, only detector
+    to find the far-ball-on-glossy-mat case) -> yolov5m ONNX "sports ball".
+    """
+    ult, ult_conf, ult_name = None, 0.10, ""
+    try:
+        if os.path.isfile(CUSTOM_PT):
+            from ultralytics import YOLO as _UY
+            ult, ult_name = _UY(CUSTOM_PT), "finetune"
+        elif os.path.isfile(WORLD_PT):
+            from ultralytics import YOLOWorld as _UW
+            ult = _UW(WORLD_PT)
+            ult.set_classes(["ball"])
+            ult_conf, ult_name = 0.05, "yolo-world:ball"
+        if ult is not None:
+            print("detector backend: %s" % ult_name, flush=True)
+    except Exception as e:
+        print("ultralytics backend failed (%r); falling back to ONNX" % e, flush=True)
+        ult = None
     try:
         import chasecar_bridge_yolo_onnx_probe as yp
-        err = yp.load_detector_dependencies(require_onnx=True)
+        err = yp.load_detector_dependencies(require_onnx=ult is None)
         if err:
             raise RuntimeError(err)
         from PIL import Image, ImageDraw
-        import onnxruntime as ort
-        sess = ort.InferenceSession(MODEL, providers=["CPUExecutionProvider"])
-        inp = sess.get_inputs()[0]
-        dtype = yp.np.float16 if "float16" in str(inp.type).lower() else yp.np.float32
+        sess = inp = dtype = None
+        if ult is None:
+            import onnxruntime as ort
+            sess = ort.InferenceSession(MODEL, providers=["CPUExecutionProvider"])
+            inp = sess.get_inputs()[0]
+            dtype = yp.np.float16 if "float16" in str(inp.type).lower() else yp.np.float32
     except Exception as e:
         with cam_lock:
             cam["err"] = "detector init failed: %r" % e
@@ -94,13 +119,23 @@ def detector_loop():
         try:
             img = Image.open(io.BytesIO(raw)).convert("RGB")
             w, h = img.size
-            tens, scale, pad = yp.letterbox(img, 640, dtype=dtype)
-            out = sess.run(None, {inp.name: tens})
-            dets = yp.decode_yolov5_output(
-                out[0], width=w, height=h, scale=scale, pad=pad,
-                confidence_threshold=0.10, class_names={"sports ball"}, iou_threshold=0.45,
-            )
-            best = yp.select_best_detection(dets, min_area_ratio=0.0)
+            if ult is not None:
+                r = ult.predict(img, conf=ult_conf, imgsz=640, verbose=False)[0]
+                best = None
+                if r.boxes is not None and len(r.boxes) > 0:
+                    i = int(r.boxes.conf.argmax())
+                    bx = [float(v) for v in r.boxes.xyxy[i]]
+                    cxx = (bx[0] + bx[2]) / 2.0
+                    best = {"bbox_xyxy": bx, "confidence": float(r.boxes.conf[i]),
+                            "center_error": (cxx - w / 2.0) / (w / 2.0)}
+            else:
+                tens, scale, pad = yp.letterbox(img, 640, dtype=dtype)
+                out = sess.run(None, {inp.name: tens})
+                dets = yp.decode_yolov5_output(
+                    out[0], width=w, height=h, scale=scale, pad=pad,
+                    confidence_threshold=0.10, class_names={"sports ball"}, iou_threshold=0.45,
+                )
+                best = yp.select_best_detection(dets, min_area_ratio=0.0)
             d = ImageDraw.Draw(img)
             # center crosshair + deadband guides
             d.line([(w / 2, 0), (w / 2, h)], fill=(90, 90, 90))
@@ -254,7 +289,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 s = {"running": state["running"], "last": state["last"]}
             with cam_lock:
                 s["det"] = cam["det"]
+                s["det_ts"] = cam["ts"]
                 s["cam_err"] = cam["err"]
+                cam["last_view"] = time.time()  # status pollers (onboard brain) keep the detector hot
             code, data, ct = bridge_get("/health")
             try:
                 h = json.loads(data)

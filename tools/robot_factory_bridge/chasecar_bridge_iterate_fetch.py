@@ -20,6 +20,7 @@ CAL = "artifacts/session/mono_distance_calibration_bench01/calibration_summary.j
 CTRL = "tools/robot_factory_bridge/chasecar_bridge_visual_fetch_controller.py"
 EPLOG = os.path.join(SC, "episodes.jsonl")  # under repo artifacts (gitignored)
 N_EPISODES = int(sys.argv[1]) if len(sys.argv) > 1 else 2
+MIN_CONF = sys.argv[2] if len(sys.argv) > 2 else "0.25"  # acquire floor; long-range dim-light detections start ~0.14
 
 sys.path.insert(0, os.path.join(REPO, "tools", "robot_factory_bridge"))
 import chasecar_bridge_client as c  # noqa: E402
@@ -92,7 +93,7 @@ def run_episode(ep):
         "--standoff-m", "0.35", "--push-steps", "10", "--push-linear-x", "0.55",
         "--approach-linear-x", "0.55", "--turn-angular-z", "2.3",
         "--forward-budget", "40", "--max-steps", "140", "--center-deadband", "0.12",
-        "--confidence-threshold", "0.10", "--min-confidence", "0.25",
+        "--confidence-threshold", "0.08", "--min-confidence", MIN_CONF,
         "--search-scan", "26",
         "--artifact-dir", art,
     ]
