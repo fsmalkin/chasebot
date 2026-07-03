@@ -19,7 +19,9 @@ import urllib.parse
 import urllib.request
 
 REPO = r"D:\dev\chasebot-hw-v0"
-BRIDGE = "http://192.168.1.11:8765"
+BRIDGE = os.environ.get("CHASECAR_BRIDGE_URL", "http://192.168.1.11:8765")
+ROBOT_HOST = os.environ.get("CHASECAR_ROBOT_HOST", "192.168.1.11")
+ROBOT_USER = os.environ.get("CHASECAR_ROBOT_USER", "jetson")
 CAL = "artifacts/session/mono_distance_calibration_bench01/calibration_summary.json"
 CTRL = "tools/robot_factory_bridge/chasecar_bridge_visual_fetch_controller.py"
 RUNDIR = os.path.join(REPO, "artifacts", "session", "dashboard_runs")
@@ -30,7 +32,7 @@ K_PX_M = 9.621  # real-bench calibration (equiv_diameter_px)
 
 sys.path.insert(0, os.path.join(REPO, "tools", "robot_factory_bridge"))
 
-state = {"proc": None, "running": False, "last": "idle", "outfile": None}
+state = {"proc": None, "running": False, "starting": False, "last": "idle", "outfile": None}
 lock = threading.Lock()
 
 # manual 2D jog: armed on first press, watchdog relocks after idle
@@ -54,14 +56,16 @@ cam = {"jpeg": None, "ts": 0.0, "det": None, "err": "starting", "last_view": 0.0
 cam_lock = threading.Lock()
 
 
-def bridge_post(path, body):
+def bridge_post(path, body, timeout=5):
     data = json.dumps(body).encode()
     req = urllib.request.Request(BRIDGE + path, data=data, method="POST", headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=5) as r:
-            return r.read()
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return True, r.read()
+    except urllib.error.HTTPError as e:
+        return False, e.read()
     except Exception as e:
-        return str(e).encode()
+        return False, str(e).encode()
 
 
 def bridge_get(path, timeout=5):
@@ -215,28 +219,99 @@ def _disarm_jog():
         jog["armed"] = False
 
 
+def _robot_ssh_target():
+    return "%s@%s" % (ROBOT_USER, ROBOT_HOST)
+
+
+def remote_pkill_fetch(source, timeout=1.2):
+    cmd = [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", _robot_ssh_target(),
+        "pkill -f chasecar_onboard_fetch.py || true",
+    ]
+    try:
+        r = subprocess.run(cmd, cwd=REPO, capture_output=True, timeout=timeout)
+        return {"ok": r.returncode == 0, "returncode": r.returncode, "source": source}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "returncode": None, "source": source, "error": "timeout"}
+    except Exception as e:
+        return {"ok": False, "returncode": None, "source": source, "error": repr(e)}
+
+
+def _motors_zero(h):
+    try:
+        lm = abs(float(h.get("left_motor") or 0.0))
+        rm = abs(float(h.get("right_motor") or 0.0))
+    except Exception:
+        return False
+    return lm < 1e-6 and rm < 1e-6
+
+
+def verify_motion_disabled(source, attempts=4, poll_interval=0.5, timeout=0.15):
+    """POST stop/disable, then prove the bridge reports locked motors-zero."""
+    details = {"verified": False, "checks": [], "post_ok": False, "disable_ok": False}
+    ok_stop, body_stop = bridge_post("/stop", {"source": source}, timeout=timeout)
+    ok_motion, body_motion = bridge_post("/motion", {"enabled": False, "source": source}, timeout=timeout)
+    details["post_ok"] = bool(ok_stop)
+    details["disable_ok"] = bool(ok_motion)
+    details["stop_body"] = body_stop.decode("utf-8", "replace")[:200]
+    details["disable_body"] = body_motion.decode("utf-8", "replace")[:200]
+    for i in range(int(attempts)):
+        code, data, _ct = bridge_get("/health", timeout=timeout)
+        check = {"attempt": i + 1, "code": code}
+        try:
+            h = json.loads(data)
+            check["motion_enabled"] = h.get("motion_enabled")
+            check["left_motor"] = h.get("left_motor")
+            check["right_motor"] = h.get("right_motor")
+            if h.get("motion_enabled") is False and _motors_zero(h):
+                check["verified"] = True
+                details["checks"].append(check)
+                details["verified"] = True
+                return details
+        except Exception as e:
+            check["error"] = repr(e)
+            check["body"] = data.decode("utf-8", "replace")[:200] if data else ""
+        details["checks"].append(check)
+        if i + 1 < int(attempts):
+            ok_motion, body_motion = bridge_post("/motion", {"enabled": False, "source": source}, timeout=timeout)
+            details["disable_ok"] = details["disable_ok"] or bool(ok_motion)
+            details["last_disable_body"] = body_motion.decode("utf-8", "replace")[:200]
+            time.sleep(float(poll_interval))
+    return details
+
+
+def stop_status_from_verification(result):
+    return "STOPPED (verified)" if result.get("verified") else "STOP UNVERIFIED - CHECK ROBOT"
+
+
 def hard_stop():
     _disarm_jog()
     with lock:
         p = state["proc"]
-        if p and p.poll() is None:
-            try:
-                p.terminate()
-            except Exception:
-                pass
         state["running"] = False
-        state["last"] = "STOPPED"
-    bridge_post("/stop", {"source": "dashboard_stop"})
-    bridge_post("/motion", {"enabled": False, "source": "dashboard_stop"})
-    # terminating the local ssh can orphan the remote episode process; kill it
-    # explicitly (harmless post-relock either way — bridge refuses motion)
-    threading.Thread(target=lambda: subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "jetson@192.168.1.11",
-         "pkill -f chasecar_onboard_fetch.py"], capture_output=True, timeout=15), daemon=True).start()
+        state["starting"] = False
+        state["last"] = "STOPPING"
+    # Terminating local ssh can orphan the remote episode; kill it before verified relock.
+    if p and p.poll() is None:
+        try:
+            p.terminate()
+        except Exception:
+            pass
+    pkill = remote_pkill_fetch("dashboard_stop", timeout=0.5)
+    result = verify_motion_disabled("dashboard_stop")
+    result["pkill"] = pkill
+    with lock:
+        state["last"] = stop_status_from_verification(result)
+    return result
 
 
-def _watch(p, outfile):
+def _watch(p, outfile, fout=None):
     p.wait()
+    if fout is not None:
+        try:
+            fout.close()
+        except Exception:
+            pass
     reason = "exit %s" % p.returncode
     try:
         with open(outfile, "r", encoding="utf-8") as f:
@@ -248,11 +323,21 @@ def _watch(p, outfile):
     except Exception:
         pass
     with lock:
-        if state["last"] != "STOPPED":
-            state["last"] = "done: " + reason
         state["running"] = False
+        state["starting"] = False
         epdir = state.pop("epdir", None)
-    bridge_post("/motion", {"enabled": False, "source": "dashboard_postlock"})
+        stopped = str(state.get("last", "")).startswith("STOP")
+        if not stopped:
+            state["last"] = "ending: " + reason
+    pkill = remote_pkill_fetch("dashboard_watch_exit", timeout=1.2)
+    result = verify_motion_disabled("dashboard_postlock")
+    result["pkill"] = pkill
+    with lock:
+        if not str(state.get("last", "")).startswith("STOP"):
+            if result.get("verified"):
+                state["last"] = "done: " + reason
+            else:
+                state["last"] = stop_status_from_verification(result)
     if epdir and os.path.isdir(epdir):
         tag = "".join(c if c.isalnum() or c in "-_" else "_" for c in reason)[:40]
         try:
@@ -261,63 +346,86 @@ def _watch(p, outfile):
             pass
 
 
-def start_approach():
+def _start_remote_episode(cmd, outfile, running_label, started_msg, source, epdir=None):
     _disarm_jog()
     with lock:
-        if state["running"] and state["proc"] and state["proc"].poll() is None:
-            return "already running"
+        active = bool(state.get("starting")) or (
+            state["running"] and state["proc"] and state["proc"].poll() is None
+        )
+        if active:
+            return {"ok": False, "msg": "already running"}
+        state["starting"] = True
+        state["running"] = False
+        state["last"] = "STARTING"
+    fout = None
+    try:
         os.makedirs(RUNDIR, exist_ok=True)
-        stamp = int(time.time())
-        outfile = os.path.join(RUNDIR, "run_%d.json" % stamp)
-        epdir = os.path.join(REPO, "artifacts", "finetune_dataset", "inbox", "ep_%d" % stamp)
-        os.makedirs(epdir, exist_ok=True)
-        state["epdir"] = epdir
-        # GO = the validated hybrid loop: onboard brain on the Jetson drives via
-        # localhost, consuming this server's fine-tune detection feed. The old
-        # offboard controller (CTRL) carried its own weak ONNX detector and lost
-        # the ball (3x lost_target on 2026-07-02); keep it only as a fallback.
-        cmd = [
-            "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "jetson@192.168.1.11",
-            "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
-            "--detector", "trt",  # local GPU eyes (13.5ms/frame); remote feed stays for the dashboard view
-            "--min-confidence", "0.2", "--search-scan", "26", "--lost-limit", "12",
-            "--standoff-m", "0.35", "--push-steps", "10",
-            "--run-dir", "/home/jetson/chasecar_onboard/runs",
-        ]
-        bridge_post("/motion", {"enabled": False, "source": "dashboard_prelock"})
+        if epdir:
+            os.makedirs(epdir, exist_ok=True)
+        pkill = remote_pkill_fetch(source + "_prestart", timeout=1.2)
+        if not pkill.get("ok"):
+            raise RuntimeError("remote prestart pkill failed: %s" % json.dumps(pkill, sort_keys=True))
+        ok, body = bridge_post("/motion", {"enabled": False, "source": source + "_prelock"}, timeout=0.8)
+        if not ok:
+            raise RuntimeError("bridge prelock failed: %s" % body.decode("utf-8", "replace")[:200])
         fout = open(outfile, "w", encoding="utf-8")
         p = subprocess.Popen(cmd, cwd=REPO, stdout=fout, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        if fout is not None:
+            try:
+                fout.close()
+            except Exception:
+                pass
+        msg = "start failed: %r" % (e,)
+        with lock:
+            state["proc"] = None
+            state["running"] = False
+            state["starting"] = False
+            state["last"] = msg
+            if epdir:
+                state.pop("epdir", None)
+        return {"ok": False, "msg": msg}
+    with lock:
         state["proc"] = p
         state["running"] = True
-        state["last"] = "RUNNING"
+        state["starting"] = False
+        state["last"] = running_label
         state["outfile"] = outfile
-        threading.Thread(target=_watch, args=(p, outfile), daemon=True).start()
-        return "started"
+        if epdir:
+            state["epdir"] = epdir
+    threading.Thread(target=_watch, args=(p, outfile, fout), daemon=True).start()
+    return {"ok": True, "msg": started_msg}
+
+
+def start_approach():
+    stamp = int(time.time())
+    outfile = os.path.join(RUNDIR, "run_%d.json" % stamp)
+    epdir = os.path.join(REPO, "artifacts", "finetune_dataset", "inbox", "ep_%d" % stamp)
+    # GO = the validated hybrid loop: onboard brain on the Jetson drives via
+    # localhost, consuming this server's fine-tune detection feed. The old
+    # offboard controller (CTRL) carried its own weak ONNX detector and lost
+    # the ball (3x lost_target on 2026-07-02); keep it only as a fallback.
+    cmd = [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", _robot_ssh_target(),
+        "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
+        "--detector", "trt",  # local GPU eyes (13.5ms/frame); remote feed stays for the dashboard view
+        "--min-confidence", "0.2", "--search-scan", "26", "--lost-limit", "12",
+        "--standoff-m", "0.35", "--push-steps", "10",
+        "--run-dir", "/home/jetson/chasecar_onboard/runs",
+    ]
+    return _start_remote_episode(cmd, outfile, "RUNNING", "started", "dashboard", epdir=epdir)
 
 
 def start_reset():
     """Dead-reckoned undo: replay the last episode's motion tape backwards."""
-    _disarm_jog()
-    with lock:
-        if state["running"] and state["proc"] and state["proc"].poll() is None:
-            return "already running"
-        os.makedirs(RUNDIR, exist_ok=True)
-        stamp = int(time.time())
-        outfile = os.path.join(RUNDIR, "reset_%d.json" % stamp)
-        cmd = [
-            "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "jetson@192.168.1.11",
-            "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
-            "--reverse-log", "/home/jetson/chasecar_onboard/runs/last_motion.json",
-        ]
-        bridge_post("/motion", {"enabled": False, "source": "dashboard_prelock"})
-        fout = open(outfile, "w", encoding="utf-8")
-        p = subprocess.Popen(cmd, cwd=REPO, stdout=fout, stderr=subprocess.DEVNULL)
-        state["proc"] = p
-        state["running"] = True
-        state["last"] = "RESETTING"
-        state["outfile"] = outfile
-        threading.Thread(target=_watch, args=(p, outfile), daemon=True).start()
-        return "reset started"
+    stamp = int(time.time())
+    outfile = os.path.join(RUNDIR, "reset_%d.json" % stamp)
+    cmd = [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", _robot_ssh_target(),
+        "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
+        "--reverse-log", "/home/jetson/chasecar_onboard/runs/last_motion.json",
+    ]
+    return _start_remote_episode(cmd, outfile, "RESETTING", "reset started", "dashboard_reset")
 
 
 DASH = """<!doctype html>
@@ -403,11 +511,13 @@ DASH = """<!doctype html>
  });
  function tick(){
   document.getElementById('cam').src='/camera.jpg?t='+Date.now();
-  fetch('/status').then(function(r){return r.json();}).then(function(s){
-   var det = s.det ? ('ball: conf '+s.det.confidence+'  z='+s.det.z_m+'m') : ('ball: '+(s.cam_err||'not detected'));
-   document.getElementById('status').textContent='approach: '+s.last+'   |   motion='+s.motion_enabled+'\\n'+det;
-  }).catch(function(){document.getElementById('status').textContent='status error';});
- }
+   fetch('/status').then(function(r){return r.json();}).then(function(s){
+    var det = s.det ? ('ball: conf '+s.det.confidence+'  z='+s.det.z_m+'m') : ('ball: '+(s.cam_err||'not detected'));
+    var status = document.getElementById('status');
+    status.textContent='approach: '+s.last+'   |   motion='+s.motion_enabled+'\\n'+det;
+    status.style.color = (s.last && s.last.indexOf('STOP UNVERIFIED') === 0) ? '#ff5c5c' : '#9aa0a8';
+   }).catch(function(){document.getElementById('status').textContent='status error';});
+  }
  setInterval(tick,800);tick();
 </script></body></html>"""
 
@@ -435,7 +545,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if self.path.startswith("/status"):
             with lock:
-                s = {"running": state["running"], "last": state["last"]}
+                s = {"running": bool(state["running"] or state.get("starting")), "last": state["last"]}
             with cam_lock:
                 s["det"] = cam["det"]
                 s["det_ts"] = cam["ts"]
@@ -453,20 +563,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path.startswith("/go"):
-            self._send(200, json.dumps({"ok": True, "msg": start_approach()}), "application/json")
+            self._send(200, json.dumps(start_approach()), "application/json")
             return
         if self.path.startswith("/reset"):
-            self._send(200, json.dumps({"ok": True, "msg": start_reset()}), "application/json")
+            self._send(200, json.dumps(start_reset()), "application/json")
             return
         if self.path.startswith("/jog_stop"):
             with jog_lock:
                 jog["last_cmd"] = time.time()  # keep armed briefly; idle watchdog relocks
-            bridge_post("/stop", {"source": "dashboard_jog"})
-            self._send(200, json.dumps({"ok": True}), "application/json")
+            ok, body = bridge_post("/stop", {"source": "dashboard_jog"})
+            self._send(200, json.dumps({"ok": bool(ok),
+                                        "msg": "" if ok else body.decode("utf-8", "replace")[:200]}),
+                       "application/json")
             return
         if self.path.startswith("/jog"):
             with lock:
-                busy = state["running"]
+                busy = bool(state["running"] or state.get("starting"))
             if busy:
                 self._send(200, json.dumps({"ok": False, "msg": "episode running"}), "application/json")
                 return
@@ -482,14 +594,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 jog["armed"] = True
                 jog["last_cmd"] = time.time()
             if need_arm:
-                bridge_post("/motion", {"enabled": True, "source": "dashboard_jog"})
-            bridge_post("/cmd_vel", {"linear_x": lx, "angular_z": az,
-                                     "duration_s": 0.45, "source": "dashboard_jog"})
-            self._send(200, json.dumps({"ok": True}), "application/json")
+                ok, body = bridge_post("/motion", {"enabled": True, "source": "dashboard_jog"})
+                if not ok:
+                    with jog_lock:
+                        jog["armed"] = False
+                    self._send(200, json.dumps({"ok": False,
+                                                "msg": body.decode("utf-8", "replace")[:200]}),
+                               "application/json")
+                    return
+            ok, body = bridge_post("/cmd_vel", {"linear_x": lx, "angular_z": az,
+                                                "duration_s": 0.45, "source": "dashboard_jog"})
+            self._send(200, json.dumps({"ok": bool(ok),
+                                        "msg": "" if ok else body.decode("utf-8", "replace")[:200]}),
+                       "application/json")
             return
         if self.path.startswith("/stop"):
-            hard_stop()
-            self._send(200, json.dumps({"ok": True, "msg": "stopped"}), "application/json")
+            result = hard_stop()
+            self._send(200, json.dumps({"ok": bool(result.get("verified")),
+                                        "verified": bool(result.get("verified")),
+                                        "msg": stop_status_from_verification(result),
+                                        "details": result}), "application/json")
             return
         self._send(404, "not found")
 
