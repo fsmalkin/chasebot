@@ -1,11 +1,11 @@
-"""Range-pass telemetry: raw bridge frames + live detection feed, timestamped."""
+﻿"""Range-pass telemetry: raw bridge frames + live detection feed, timestamped."""
 import json
 import os
 import sys
 import time
 import urllib.request
 
-OUT = r"D:\dev\chasebot-hw-v0\artifacts\session\range_telemetry_20260702"
+OUT = r"D:\dev\chasebot-hw-v0\artifacts\session\range_telemetry_" + time.strftime("%Y%m%dT%H%M%S")
 BRIDGE = "http://192.168.1.11:8765"
 FEED = "http://127.0.0.1:8791/status"
 PERIOD_S = 0.33
@@ -47,3 +47,4 @@ while time.time() - t0 < MAX_S:
     if dt < PERIOD_S:
         time.sleep(PERIOD_S - dt)
 print(json.dumps({"frames": n, "duration_s": round(time.time() - t0, 1), "out": OUT}))
+

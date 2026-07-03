@@ -50,7 +50,10 @@ def main():
             if f.lower().endswith(".jpg") and "review" not in r
         )[: args.max_per_dir]
         for fp in files:
-            im = cv2.imread(fp)
+            try:
+                im = cv2.imread(fp)  # ultralytics-patched imread raises on truncated files
+            except Exception:
+                im = None
             if im is None:
                 continue
             h, w = im.shape[:2]
