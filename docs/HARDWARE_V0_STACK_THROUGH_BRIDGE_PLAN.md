@@ -161,6 +161,36 @@ rebuild on the Nano pending next power-on** (robot was switched off at session
 end): scp `golfball_v2_640.onnx` → `trtexec --fp16` → smoke → GO. Safety:
 every iteration ended `final_safe: true`; the bridge boundary held all night.
 
+**Control & navigation roadmap (owner-approved 2026-07-03).** Audit verdict:
+the sim's "scan & plan" was a route classifier + symbolic plan compiler fed by
+SIMULATOR GROUND TRUTH (`publish_odom=true` in the URDF, no stiction model,
+truth-derived scene descriptors) — the decision layer ports to IRL; its inputs
+don't exist yet. Wobble root cause: memoryless bang-bang with min turn pulse
+(~11°) larger than the deadband (±3.6°) = limit cycle, plus unfiltered
+per-frame detections. Nav2 is NOT applicable on this platform (no odometry,
+no encoders; the Nano is frozen at JetPack 4.x/Ubuntu 18.04/py3.6 — the
+board's final supported software). Approved sequence:
+1. **Visual servoing slice** (dispatched to Codex spine 2026-07-03): arc-drive
+   PD steering (turn-while-driving, slew-limited) + alpha-beta/Kalman ball
+   tracker (coast through misses), behind `--steering arc` (default pulse);
+   bench flip after supervised validation.
+2. **STOP-integrity fixes** (same dispatch): verified stop chain per the
+   2026-07-02 adversarial review (bridge_post ok/fail, hard_stop health
+   read-back + honest "UNVERIFIED" UI, synchronous remote pkill on episode
+   boundaries, narrowed lock hold).
+3. **Laptop-side fiducials** for the delivery target (robot cv2 4.1.1 lacks
+   aruco — detect on the laptop, serve target bearing over the existing feed
+   pattern; not in the tight motor loop).
+4. **Port the sim route classifier** as an onboard state machine once ball
+   track + target pose exist.
+5. **Encoder-motor retrofit (~$30, Yahboom drop-in encoder TT motors +
+   4-channel encoder driver)** — cheap real odometry on current chassis;
+   owner spend decision, unlocks planner-grade state estimation.
+6. **JetPack 4.4→4.6 maintenance window** (last-ever release for this board:
+   TRT 8.2, bigger SD card, fixes 88%-full disk) — AFTER the fetch+deliver
+   demo, not before.
+7. **Orin replatform** only when the mission outgrows this chassis.
+
 ## Decision
 
 The current hardware v0 path gets the sim stack working IRL through the JetBot
