@@ -88,10 +88,13 @@ def main():
         f.write("path: %s\ntrain: train/images\nval: val/images\nnames:\n  0: golfball\n" % args.work.replace("\\", "/"))
 
     model = YOLO("yolov8n.pt")
+    # cache="disk" not "ram": Windows spawn pickles the dataset object into every
+    # worker, and a RAM-cached dataset (~800 MB) through that pipe = MemoryError
+    # (hit live 2026-07-02). Disk cache is worker-safe and still skips jpeg decode.
     res = model.train(data=yaml_path, epochs=args.epochs, imgsz=args.imgsz, batch=args.batch,
                       project=os.path.join(args.work, "runs"), name="ball", exist_ok=True,
                       patience=20, verbose=False, workers=args.workers, amp=True,
-                      cache=(False if args.no_cache else "ram"))
+                      cache=(False if args.no_cache else "disk"))
     best = os.path.join(args.work, "runs", "ball", "weights", "best.pt")
     m = model.val(data=yaml_path, verbose=False,
                   project=os.path.join(args.work, "runs"), name="val", exist_ok=True)
