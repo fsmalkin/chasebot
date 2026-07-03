@@ -22,11 +22,18 @@ ANCHORS_MIN = [
     # overwritten by later recordings (lost frame_000100 that way 2026-07-02)
     ("hardwood_hall", os.path.join(REPO, "artifacts", "finetune_dataset", "labeled_hardwood_v1",
                                    "images", "range_telemetry_20260702_frame_000022.jpg"), 0.80),
+    # dark wood-floor night scene, ball at couch skirt [117,161,154,204]. Was
+    # wrongly in FP_FRAMES; the 2026-07-02 v3 candidate detected it (0.14) and
+    # got vetoed for out-seeing the gate. Low floor: genuinely hard frame.
+    ("night_wood_couch", os.path.join(REPO, "artifacts", "session", "iterate_runs",
+                                      "ep_1_1782966105", "_cur.jpg"), 0.10),
 ]
 
 FP_FRAMES = sorted(set(
-    glob.glob(os.path.join(REPO, "artifacts", "session", "iterate_runs", "ep_*", "_cur.jpg"))
-    + [os.path.join(REPO, "artifacts", f) for f in (
+    p for p in glob.glob(os.path.join(REPO, "artifacts", "session", "iterate_runs", "ep_*", "_cur.jpg"))
+    if "ep_1_1782966105" not in p  # contains the ball (night scene) — an anchor, not an FP frame
+) | set(
+    [os.path.join(REPO, "artifacts", f) for f in (
         "after_pivot.jpg", "after_unwall.jpg", "argus_smoke.jpg", "cam_1640.jpg",
         "debug_frame.jpg", "go_check.jpg", "irl_now.jpg", "new_eyes.jpg",
         "onboard_view.jpg", "post_ep2.jpg", "post_ep3.jpg", "where_ball.jpg")]
