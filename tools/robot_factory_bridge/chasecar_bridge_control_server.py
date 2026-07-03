@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 REPO = r"D:\dev\chasebot-hw-v0"
@@ -31,6 +32,22 @@ sys.path.insert(0, os.path.join(REPO, "tools", "robot_factory_bridge"))
 
 state = {"proc": None, "running": False, "last": "idle", "outfile": None}
 lock = threading.Lock()
+
+# manual 2D jog: armed on first press, watchdog relocks after idle
+jog = {"armed": False, "last_cmd": 0.0}
+jog_lock = threading.Lock()
+
+
+def jog_watchdog():
+    while True:
+        time.sleep(0.4)
+        with jog_lock:
+            expired = jog["armed"] and (time.time() - jog["last_cmd"]) > 1.5
+            if expired:
+                jog["armed"] = False
+        if expired:
+            bridge_post("/stop", {"source": "dashboard_jog_idle"})
+            bridge_post("/motion", {"enabled": False, "source": "dashboard_jog_idle"})
 
 # latest annotated frame + detection info, maintained by the detector thread
 cam = {"jpeg": None, "ts": 0.0, "det": None, "err": "starting", "last_view": 0.0, "fail_streak": 0}
@@ -192,7 +209,14 @@ def detector_loop():
             time.sleep(0.3 - dt)
 
 
+def _disarm_jog():
+    """Prevent the jog idle-watchdog from firing a motion-disable into a fresh episode."""
+    with jog_lock:
+        jog["armed"] = False
+
+
 def hard_stop():
+    _disarm_jog()
     with lock:
         p = state["proc"]
         if p and p.poll() is None:
@@ -238,6 +262,7 @@ def _watch(p, outfile):
 
 
 def start_approach():
+    _disarm_jog()
     with lock:
         if state["running"] and state["proc"] and state["proc"].poll() is None:
             return "already running"
@@ -272,6 +297,7 @@ def start_approach():
 
 def start_reset():
     """Dead-reckoned undo: replay the last episode's motion tape backwards."""
+    _disarm_jog()
     with lock:
         if state["running"] and state["proc"] and state["proc"].poll() is None:
             return "already running"
@@ -299,29 +325,82 @@ DASH = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Chasecar Fetch</title>
 <style>
- body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#0e0f12;color:#e8e8ea;text-align:center;-webkit-user-select:none;user-select:none}
- h2{margin:10px}
- .cam{width:100%;max-width:460px;background:#000;border-radius:8px;margin:6px auto;display:block}
- .status{font-family:ui-monospace,monospace;font-size:13px;color:#9aa0a8;margin:8px;white-space:pre-line}
- .btns{display:flex;gap:14px;justify-content:center;margin:14px;padding:0 12px}
- button{font-size:30px;font-weight:800;border:none;border-radius:18px;padding:30px 20px;flex:1;max-width:230px;color:#fff}
+ body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#0e0f12;color:#e8e8ea;text-align:center;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+ h2{margin:8px;font-size:20px}
+ .wrap{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:flex-start;max-width:980px;margin:0 auto;padding:0 8px}
+ .col-cam{flex:1 1 400px;max-width:560px;min-width:300px}
+ .col-ctl{flex:0 1 300px;min-width:260px}
+ .cam{width:100%;background:#000;border-radius:8px;display:block}
+ .status{font-family:ui-monospace,monospace;font-size:12px;color:#9aa0a8;margin:6px;white-space:pre-line;min-height:32px}
+ .btns{display:flex;gap:10px;justify-content:center;margin:6px 0}
+ .btns button{font-size:22px;font-weight:800;border:none;border-radius:14px;padding:18px 8px;flex:1;color:#fff}
  .go{background:#147a46}.go:active{background:#0d5730}
  .stop{background:#b42318}.stop:active{background:#7a1d16}
- .reset{background:#8a6d1a;font-size:18px;padding:14px;max-width:150px}.reset:active{background:#5f4b10}
+ .reset{background:#8a6d1a}.reset:active{background:#5f4b10}
+ .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px auto 0;max-width:280px}
+ .pad button{font-size:26px;font-weight:700;border:none;border-radius:12px;color:#dfe2e8;background:#23262e;
+   aspect-ratio:1;touch-action:none;-webkit-touch-callout:none}
+ .pad button:active,.pad button.on{background:#3a4150}
+ .pad .mid{background:#151820;color:#6b7280}
+ .hint{font-size:11px;color:#6b7280;margin:6px}
+ @media (max-width:700px){
+  .cam{max-height:36vh;object-fit:contain}
+  .btns button{font-size:18px;padding:14px 6px}
+  .pad{max-width:240px}.pad button{font-size:22px}
+  h2{margin:4px;font-size:16px}
+ }
 </style></head><body>
 <h2>Chasecar Fetch</h2>
-<img class="cam" id="cam" alt="camera">
-<div class="status" id="status">connecting...</div>
-<div class="btns">
- <button class="go" id="go">GO</button>
- <button class="reset" id="reset">RESET</button>
- <button class="stop" id="stop">STOP</button>
+<div class="wrap">
+ <div class="col-cam">
+  <img class="cam" id="cam" alt="camera">
+  <div class="status" id="status">connecting...</div>
+ </div>
+ <div class="col-ctl">
+  <div class="btns">
+   <button class="go" id="go">GO</button>
+   <button class="reset" id="reset">RESET</button>
+   <button class="stop" id="stop">STOP</button>
+  </div>
+  <div class="pad" id="pad">
+   <button data-lx="0.55" data-az="1.2">&#8598;</button>
+   <button data-lx="0.55" data-az="0">&#8593;</button>
+   <button data-lx="0.55" data-az="-1.2">&#8599;</button>
+   <button data-lx="0" data-az="2.3">&#8592;</button>
+   <button class="mid" data-lx="0" data-az="0">&#9632;</button>
+   <button data-lx="0" data-az="-2.3">&#8594;</button>
+   <button data-lx="-0.55" data-az="1.2">&#8601;</button>
+   <button data-lx="-0.55" data-az="0">&#8595;</button>
+   <button data-lx="-0.55" data-az="-1.2">&#8600;</button>
+  </div>
+  <div class="hint">hold to drive &middot; release stops &middot; auto-locks when idle</div>
+ </div>
 </div>
 <script>
  function post(p){return fetch(p,{method:'POST'}).then(function(r){return r.json();}).catch(function(e){return {error:''+e};});}
  document.getElementById('go').onclick=function(){document.getElementById('status').textContent='starting...';post('/go');};
  document.getElementById('reset').onclick=function(){document.getElementById('status').textContent='reversing last run...';post('/reset');};
  document.getElementById('stop').onclick=function(){document.getElementById('status').textContent='STOPPING...';post('/stop');};
+ var jogTimer=null;
+ function jogSend(lx,az){post('/jog?lx='+lx+'&az='+az);}
+ function jogStart(btn){
+  var lx=btn.getAttribute('data-lx'), az=btn.getAttribute('data-az');
+  if(lx==='0'&&az==='0'){jogEnd();return;}
+  jogEnd(); btn.classList.add('on');
+  jogSend(lx,az); jogTimer=setInterval(function(){jogSend(lx,az);},250);
+ }
+ function jogEnd(){
+  if(jogTimer){clearInterval(jogTimer);jogTimer=null;}
+  var on=document.querySelector('.pad .on'); if(on){on.classList.remove('on');}
+  post('/jog_stop');
+ }
+ Array.prototype.forEach.call(document.querySelectorAll('.pad button'),function(b){
+  b.addEventListener('pointerdown',function(e){e.preventDefault();jogStart(b);});
+  b.addEventListener('pointerup',jogEnd);
+  b.addEventListener('pointerleave',function(){if(jogTimer){jogEnd();}});
+  b.addEventListener('pointercancel',jogEnd);
+  b.addEventListener('contextmenu',function(e){e.preventDefault();});
+ });
  function tick(){
   document.getElementById('cam').src='/camera.jpg?t='+Date.now();
   fetch('/status').then(function(r){return r.json();}).then(function(s){
@@ -379,6 +458,35 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/reset"):
             self._send(200, json.dumps({"ok": True, "msg": start_reset()}), "application/json")
             return
+        if self.path.startswith("/jog_stop"):
+            with jog_lock:
+                jog["last_cmd"] = time.time()  # keep armed briefly; idle watchdog relocks
+            bridge_post("/stop", {"source": "dashboard_jog"})
+            self._send(200, json.dumps({"ok": True}), "application/json")
+            return
+        if self.path.startswith("/jog"):
+            with lock:
+                busy = state["running"]
+            if busy:
+                self._send(200, json.dumps({"ok": False, "msg": "episode running"}), "application/json")
+                return
+            try:
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                lx = max(-0.6, min(0.6, float(qs.get("lx", ["0"])[0])))
+                az = max(-2.5, min(2.5, float(qs.get("az", ["0"])[0])))
+            except Exception:
+                self._send(400, json.dumps({"ok": False, "msg": "bad params"}), "application/json")
+                return
+            with jog_lock:
+                need_arm = not jog["armed"]
+                jog["armed"] = True
+                jog["last_cmd"] = time.time()
+            if need_arm:
+                bridge_post("/motion", {"enabled": True, "source": "dashboard_jog"})
+            bridge_post("/cmd_vel", {"linear_x": lx, "angular_z": az,
+                                     "duration_s": 0.45, "source": "dashboard_jog"})
+            self._send(200, json.dumps({"ok": True}), "application/json")
+            return
         if self.path.startswith("/stop"):
             hard_stop()
             self._send(200, json.dumps({"ok": True, "msg": "stopped"}), "application/json")
@@ -396,5 +504,6 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 if __name__ == "__main__":
     threading.Thread(target=detector_loop, daemon=True).start()
+    threading.Thread(target=jog_watchdog, daemon=True).start()
     print("control server on 0.0.0.0:8791 (Tailscale http://100.112.221.6:8791/)", flush=True)
     ThreadingHTTPServer(("0.0.0.0", 8791), Handler).serve_forever()
