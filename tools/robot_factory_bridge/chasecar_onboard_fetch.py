@@ -340,6 +340,7 @@ class Refresher(object):
         self._run = True
         self._t = threading.Thread(target=self._loop)
         self._t.daemon = True
+        self.log = []  # (t, linear_x, angular_z, hold_s) — the episode's motion tape
 
     def start(self):
         self._t.start()
@@ -348,6 +349,8 @@ class Refresher(object):
         with self._lock:
             self._sp = (float(linear_x), float(angular_z), time.time())
             self._hold = float(hold_s) if hold_s else None
+            self.log.append((self._sp[2], self._sp[0], self._sp[1],
+                             self._hold if self._hold is not None else 0.0))
 
     def zero(self):
         self.set(0.0, 0.0)
@@ -558,6 +561,11 @@ def run(args):
     summary["stop_reason"] = stop_reason
     summary["counts"] = counts
     summary["duration_s"] = round(time.time() - t_start, 1)
+    try:  # motion tape for the dashboard RESET (reverse-replay) button
+        with open(os.path.join(run_dir, "last_motion.json"), "w") as f:
+            json.dump({"events": refresher.log, "end": time.time()}, f)
+    except Exception as e:
+        summary["issues"].append("motion_log_write:%r" % (e,))
     try:
         hf = bridge.health()
         summary["final_safe"] = (hf.get("motion_enabled") is False
@@ -565,6 +573,69 @@ def run(args):
                                  and abs(float(hf.get("right_motor") or 0)) < 1e-6)
     except Exception:
         summary["final_safe"] = False
+    print(json.dumps(summary))
+    return 0 if summary.get("final_safe") else 1
+
+
+def run_reverse(args):
+    """Dead-reckoned undo: replay the last episode's motion tape backwards.
+
+    Reconstructs effective setpoint segments (bounded by the next set() or the
+    hold/max-age expiry — matching Refresher semantics) and replays them last-
+    to-first with negated velocities. Open-loop: stiction/slip drift grows with
+    episode length; this parks the robot NEAR its start, not exactly on it.
+    """
+    MAX_SEG_S, MAX_TOTAL_S, MAX_AGE = 5.0, 90.0, 1.5
+    if not os.path.isfile(args.reverse_log):
+        print(json.dumps({"type": "onboard_reverse_replay", "stop_reason": "no_motion_tape",
+                          "final_safe": True, "issues": ["no episode has recorded a tape yet"]}))
+        return 0
+    with open(args.reverse_log) as f:
+        tape = json.load(f)
+    ev = sorted(tape.get("events") or [], key=lambda e: e[0])
+    end = float(tape.get("end") or (ev[-1][0] + MAX_AGE if ev else 0))
+    segs = []
+    for i, (t, lx, az, hold) in enumerate(ev):
+        if abs(lx) < 1e-6 and abs(az) < 1e-6:
+            continue
+        t_next = ev[i + 1][0] if i + 1 < len(ev) else end
+        limit = hold if hold > 0 else MAX_AGE
+        dur = min(t_next - t, limit, MAX_SEG_S)
+        if dur >= 0.04:
+            segs.append((lx, az, dur))
+    segs.reverse()
+    total = sum(d for _l, _a, d in segs)
+    scale = min(1.0, MAX_TOTAL_S / total) if total > 0 else 1.0
+
+    bridge = Bridge(args.base_url)
+    refresher = Refresher(bridge)
+    summary = {"type": "onboard_reverse_replay", "segments": len(segs),
+               "replay_s": round(total * scale, 1), "issues": []}
+    try:
+        bridge.set_motion(True, "onboard:reverse_arm")
+        refresher.start()
+        for lx, az, dur in segs:
+            d = dur * scale
+            refresher.set(-lx, -az, hold_s=d)
+            time.sleep(d + 0.05)
+        refresher.zero()
+    except Exception as e:
+        summary["issues"].append("reverse_error:%r" % (e,))
+    finally:
+        refresher.stop()
+        try:
+            bridge.stop("onboard:reverse_done")
+            bridge.set_motion(False, "onboard:reverse_relock")
+        except Exception as e:
+            summary["issues"].append("relock_error:%r" % (e,))
+    try:
+        hf = bridge.health()
+        summary["final_safe"] = (hf.get("motion_enabled") is False
+                                 and abs(float(hf.get("left_motor") or 0)) < 1e-6
+                                 and abs(float(hf.get("right_motor") or 0)) < 1e-6)
+    except Exception:
+        summary["final_safe"] = False
+    summary["stop_reason"] = "reverse_complete" if not summary["issues"] else "reverse_issues"
     print(json.dumps(summary))
     return 0 if summary.get("final_safe") else 1
 
@@ -599,8 +670,11 @@ def build_parser():
     p.add_argument("--dry-run", action="store_true", help="perception only; never moves")
     p.add_argument("--dry-run-frames", type=int, default=8)
     p.add_argument("--run-dir", default="")
+    p.add_argument("--reverse-log", default="",
+                   help="replay this motion tape backwards (dead-reckoned undo) instead of fetching")
     return p
 
 
 if __name__ == "__main__":
-    raise SystemExit(run(build_parser().parse_args()))
+    _args = build_parser().parse_args()
+    raise SystemExit(run_reverse(_args) if _args.reverse_log else run(_args))

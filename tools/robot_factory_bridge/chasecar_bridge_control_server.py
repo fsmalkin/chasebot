@@ -270,6 +270,30 @@ def start_approach():
         return "started"
 
 
+def start_reset():
+    """Dead-reckoned undo: replay the last episode's motion tape backwards."""
+    with lock:
+        if state["running"] and state["proc"] and state["proc"].poll() is None:
+            return "already running"
+        os.makedirs(RUNDIR, exist_ok=True)
+        stamp = int(time.time())
+        outfile = os.path.join(RUNDIR, "reset_%d.json" % stamp)
+        cmd = [
+            "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "jetson@192.168.1.11",
+            "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
+            "--reverse-log", "/home/jetson/chasecar_onboard/runs/last_motion.json",
+        ]
+        bridge_post("/motion", {"enabled": False, "source": "dashboard_prelock"})
+        fout = open(outfile, "w", encoding="utf-8")
+        p = subprocess.Popen(cmd, cwd=REPO, stdout=fout, stderr=subprocess.DEVNULL)
+        state["proc"] = p
+        state["running"] = True
+        state["last"] = "RESETTING"
+        state["outfile"] = outfile
+        threading.Thread(target=_watch, args=(p, outfile), daemon=True).start()
+        return "reset started"
+
+
 DASH = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -283,17 +307,20 @@ DASH = """<!doctype html>
  button{font-size:30px;font-weight:800;border:none;border-radius:18px;padding:30px 20px;flex:1;max-width:230px;color:#fff}
  .go{background:#147a46}.go:active{background:#0d5730}
  .stop{background:#b42318}.stop:active{background:#7a1d16}
+ .reset{background:#8a6d1a;font-size:18px;padding:14px;max-width:150px}.reset:active{background:#5f4b10}
 </style></head><body>
 <h2>Chasecar Fetch</h2>
 <img class="cam" id="cam" alt="camera">
 <div class="status" id="status">connecting...</div>
 <div class="btns">
  <button class="go" id="go">GO</button>
+ <button class="reset" id="reset">RESET</button>
  <button class="stop" id="stop">STOP</button>
 </div>
 <script>
  function post(p){return fetch(p,{method:'POST'}).then(function(r){return r.json();}).catch(function(e){return {error:''+e};});}
  document.getElementById('go').onclick=function(){document.getElementById('status').textContent='starting...';post('/go');};
+ document.getElementById('reset').onclick=function(){document.getElementById('status').textContent='reversing last run...';post('/reset');};
  document.getElementById('stop').onclick=function(){document.getElementById('status').textContent='STOPPING...';post('/stop');};
  function tick(){
   document.getElementById('cam').src='/camera.jpg?t='+Date.now();
@@ -348,6 +375,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith("/go"):
             self._send(200, json.dumps({"ok": True, "msg": start_approach()}), "application/json")
+            return
+        if self.path.startswith("/reset"):
+            self._send(200, json.dumps({"ok": True, "msg": start_reset()}), "application/json")
             return
         if self.path.startswith("/stop"):
             hard_stop()
