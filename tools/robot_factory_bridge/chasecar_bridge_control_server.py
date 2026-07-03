@@ -108,6 +108,19 @@ def detector_loop():
             time.sleep(1.0)
             continue
         code, raw, _ = bridge_get("/camera.jpg", timeout=6)
+        # data flywheel: every episode's frames land in the training inbox,
+        # tagged with the outcome by _watch — failed runs on new surfaces ARE
+        # the next training set (owner call 2026-07-02)
+        if code == 200 and raw and len(raw) >= 500:
+            with lock:
+                epdir = state.get("epdir") if state["running"] else None
+            if epdir:
+                try:
+                    fn = os.path.join(epdir, "frame_%d.jpg" % int(time.time() * 1000))
+                    with open(fn, "wb") as f:
+                        f.write(raw)
+                except Exception:
+                    pass
         if code != 200 or not raw or len(raw) < 500:
             with cam_lock:
                 cam["err"] = "camera unreachable"
@@ -214,7 +227,14 @@ def _watch(p, outfile):
         if state["last"] != "STOPPED":
             state["last"] = "done: " + reason
         state["running"] = False
+        epdir = state.pop("epdir", None)
     bridge_post("/motion", {"enabled": False, "source": "dashboard_postlock"})
+    if epdir and os.path.isdir(epdir):
+        tag = "".join(c if c.isalnum() or c in "-_" else "_" for c in reason)[:40]
+        try:
+            os.rename(epdir, epdir + "_" + tag)
+        except Exception:
+            pass
 
 
 def start_approach():
@@ -224,6 +244,9 @@ def start_approach():
         os.makedirs(RUNDIR, exist_ok=True)
         stamp = int(time.time())
         outfile = os.path.join(RUNDIR, "run_%d.json" % stamp)
+        epdir = os.path.join(REPO, "artifacts", "finetune_dataset", "inbox", "ep_%d" % stamp)
+        os.makedirs(epdir, exist_ok=True)
+        state["epdir"] = epdir
         # GO = the validated hybrid loop: onboard brain on the Jetson drives via
         # localhost, consuming this server's fine-tune detection feed. The old
         # offboard controller (CTRL) carried its own weak ONNX detector and lost
