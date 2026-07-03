@@ -223,10 +223,13 @@ def _robot_ssh_target():
     return "%s@%s" % (ROBOT_USER, ROBOT_HOST)
 
 
-def remote_pkill_fetch(source, timeout=1.2):
+def remote_pkill_fetch(source, timeout=8.0):
+    # bracketed pattern so pkill cannot match the shell running this very
+    # command (self-match killed the ssh session -> rc -1, empty stderr;
+    # every pkill had silently failed this way until fail-closed surfaced it)
     cmd = [
         "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", _robot_ssh_target(),
-        "pkill -f chasecar_onboard_fetch.py || true",
+        "pkill -f 'chasecar_onboard_fetc[h]' || true",
     ]
     try:
         r = subprocess.run(cmd, cwd=REPO, capture_output=True, timeout=timeout)
@@ -297,7 +300,7 @@ def hard_stop():
             p.terminate()
         except Exception:
             pass
-    pkill = remote_pkill_fetch("dashboard_stop", timeout=0.5)
+    pkill = remote_pkill_fetch("dashboard_stop", timeout=4.0)
     result = verify_motion_disabled("dashboard_stop")
     result["pkill"] = pkill
     with lock:
@@ -329,7 +332,7 @@ def _watch(p, outfile, fout=None):
         stopped = str(state.get("last", "")).startswith("STOP")
         if not stopped:
             state["last"] = "ending: " + reason
-    pkill = remote_pkill_fetch("dashboard_watch_exit", timeout=1.2)
+    pkill = remote_pkill_fetch("dashboard_watch_exit", timeout=6.0)
     result = verify_motion_disabled("dashboard_postlock")
     result["pkill"] = pkill
     with lock:
@@ -362,7 +365,7 @@ def _start_remote_episode(cmd, outfile, running_label, started_msg, source, epdi
         os.makedirs(RUNDIR, exist_ok=True)
         if epdir:
             os.makedirs(epdir, exist_ok=True)
-        pkill = remote_pkill_fetch(source + "_prestart", timeout=1.2)
+        pkill = remote_pkill_fetch(source + "_prestart", timeout=6.0)
         if not pkill.get("ok"):
             raise RuntimeError("remote prestart pkill failed: %s" % json.dumps(pkill, sort_keys=True))
         ok, body = bridge_post("/motion", {"enabled": False, "source": source + "_prelock"}, timeout=0.8)
