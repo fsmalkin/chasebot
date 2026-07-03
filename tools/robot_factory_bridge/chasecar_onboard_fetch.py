@@ -51,6 +51,17 @@ ACT_STOP = "stop"
 K_PX_M_DEFAULT = 9.621
 
 
+def clamp(v, lo, hi):
+    return max(float(lo), min(float(hi), float(v)))
+
+
+def variance(xs):
+    if not xs:
+        return 0.0
+    mean = sum(xs) / float(len(xs))
+    return sum((x - mean) * (x - mean) for x in xs) / float(len(xs))
+
+
 # ----------------------------- bridge client (localhost) -----------------------------
 
 class Bridge(object):
@@ -133,6 +144,170 @@ def detect_ball(bgr, hsv_lo, hsv_hi, min_area_px, min_circularity, floor_zone_fr
                 "area_px": float(area),
             }
     return best
+
+
+# ----------------------------- temporal ball tracker -----------------------------
+
+class BallTracker(object):
+    """Tiny alpha-beta tracker over center error and apparent size.
+
+    The detector can arrive at uneven cadence (remote YOLO ~1 Hz, local TRT
+    faster).  The tracker keeps velocity terms in normalized-error/s and px/s,
+    clamps odd dt values, and damps stale velocity while coasting.
+    """
+
+    def __init__(self, alpha=0.45, beta=0.12, min_dt=0.03, max_dt=0.35):
+        self.alpha = float(alpha)
+        self.beta = float(beta)
+        self.min_dt = float(min_dt)
+        self.max_dt = float(max_dt)
+        self._ready = False
+        self._x = 0.0
+        self._vx = 0.0
+        self._s = 0.0
+        self._vs = 0.0
+        self._last_state_t = None
+        self._last_det_t = None
+        self._coasting = False
+
+    @property
+    def fresh_s(self):
+        if self._last_det_t is None:
+            return 999.0
+        ref = self._last_state_t if self._last_state_t is not None else time.time()
+        return max(0.0, float(ref) - float(self._last_det_t))
+
+    def _dt(self, t):
+        if self._last_state_t is None:
+            return self.min_dt
+        return clamp(float(t) - float(self._last_state_t), self.min_dt, self.max_dt)
+
+    def _advance(self, t):
+        if not self._ready:
+            return
+        dt = self._dt(t)
+        self._x += self._vx * dt
+        self._s = max(1e-3, self._s + self._vs * dt)
+        self._last_state_t = float(t)
+        if self._last_det_t is not None and (float(t) - float(self._last_det_t)) > self.max_dt:
+            self._vx *= 0.85
+            self._vs *= 0.85
+
+    def update(self, obs, t):
+        x = float(obs.get("center_error") or 0.0)
+        s = float(obs.get("equiv_diameter_px") or 0.0)
+        if s <= 0.0:
+            return self.predict(t)
+        if not self._ready:
+            self._x = x
+            self._vx = 0.0
+            self._s = s
+            self._vs = 0.0
+            self._ready = True
+            self._last_state_t = float(t)
+            self._last_det_t = float(t)
+            self._coasting = False
+            return self.estimate()
+        dt = self._dt(t)
+        px = self._x + self._vx * dt
+        ps = max(1e-3, self._s + self._vs * dt)
+        rx = x - px
+        rs = s - ps
+        self._x = px + self.alpha * rx
+        self._s = max(1e-3, ps + self.alpha * rs)
+        self._vx += (self.beta * rx) / dt
+        self._vs += (self.beta * rs) / dt
+        self._last_state_t = float(t)
+        self._last_det_t = float(t)
+        self._coasting = False
+        return self.estimate()
+
+    def predict(self, t):
+        if not self._ready:
+            return None
+        self._advance(t)
+        self._coasting = True
+        return self.estimate()
+
+    def estimate(self):
+        if not self._ready:
+            return None
+        return {
+            "center_error": float(self._x),
+            "center_rate": float(self._vx),
+            "equiv_diameter_px": float(self._s),
+            "size_rate": float(self._vs),
+            "coasting": bool(self._coasting),
+            "fresh_s": float(self.fresh_s),
+        }
+
+
+def detection_usable(obs, cfg):
+    detected = bool(obs.get("detected"))
+    confidence = float(obs.get("confidence", 0.0) or 0.0)
+    size_px = float(obs.get(cfg["size_key"], 0.0) or 0.0)
+    return detected and confidence >= float(cfg["min_confidence"]) and size_px > 0.0
+
+
+def slew_value(prev, target, max_rate, dt):
+    dt = max(0.01, float(dt))
+    limit = abs(float(max_rate)) * dt
+    delta = clamp(float(target) - float(prev), -limit, limit)
+    return float(prev) + delta
+
+
+def compute_arc_drive_command(err, err_rate, cfg, kp, kd, slew, dt, prev_lx, prev_az):
+    turn_scale = float(cfg["turn_angular_z"])
+    angular_target = -(float(kp) * float(err) + float(kd) * float(err_rate)) * turn_scale
+    angular_target = clamp(angular_target, -2.5, 2.5)
+    if abs(float(err)) < (float(cfg["center_deadband"]) / 2.0):
+        angular_target = 0.0
+    linear_target = float(cfg["approach_linear_x"]) * max(0.35, 1.0 - abs(float(err)))
+    linear = slew_value(prev_lx, linear_target, slew, dt)
+    angular = slew_value(prev_az, angular_target, slew, dt)
+    return linear, angular, linear_target, angular_target
+
+
+def decide_arc_fetch_action(obs, state, cfg, tracker, args, t_now, prev_lx, prev_az, prev_cmd_t):
+    if detection_usable(obs, cfg):
+        est = tracker.update(obs, t_now)
+    else:
+        est = tracker.predict(t_now)
+    if est is None or float(est.get("fresh_s", 999.0)) > float(args.coast_s):
+        d = decide_fetch_action(obs, state, cfg)
+        return d, obs, prev_lx, prev_az, prev_cmd_t
+
+    servo_obs = dict(obs)
+    servo_obs["detected"] = True
+    servo_obs[cfg["size_key"]] = float(est["equiv_diameter_px"])
+    servo_obs["equiv_diameter_px"] = float(est["equiv_diameter_px"])
+    servo_obs["center_error"] = float(est["center_error"])
+    servo_obs["center_rate"] = float(est["center_rate"])
+    servo_obs["confidence"] = max(float(obs.get("confidence", 0.0) or 0.0), float(cfg["min_confidence"]))
+    servo_obs["coasting"] = bool(est["coasting"])
+    servo_obs["fresh_s"] = round(float(est["fresh_s"]), 3)
+
+    step = int(state.get("step", 0))
+    if step >= int(cfg["max_steps"]):
+        return {"action": ACT_STOP, "reason": "max_steps_reached"}, servo_obs, prev_lx, prev_az, prev_cmd_t
+    size_px = float(servo_obs.get(cfg["size_key"], 0.0) or 0.0)
+    if size_px <= 0.0:
+        return decide_fetch_action(obs, state, cfg), obs, prev_lx, prev_az, prev_cmd_t
+    z_m = float(cfg["k_px_m"]) / size_px
+    if z_m <= float(cfg["standoff_m"]):
+        return {"action": ACT_STOP, "reason": "standoff_reached", "z_m": round(z_m, 4)}, servo_obs, prev_lx, prev_az, prev_cmd_t
+    if int(state.get("forward_steps", 0)) >= int(cfg["forward_budget"]):
+        return {"action": ACT_STOP, "reason": "forward_budget_exhausted", "z_m": round(z_m, 4)}, servo_obs, prev_lx, prev_az, prev_cmd_t
+
+    dt = max(0.01, float(t_now) - float(prev_cmd_t))
+    lx, az, lx_target, az_target = compute_arc_drive_command(
+        servo_obs["center_error"], servo_obs.get("center_rate", 0.0), cfg,
+        args.kp, args.kd, args.slew, dt, prev_lx, prev_az)
+    d = {"action": ACT_FORWARD, "reason": "arc_approach", "linear_x": lx, "angular_z": az,
+         "target_linear_x": round(lx_target, 4), "target_angular_z": round(az_target, 4),
+         "z_m": round(z_m, 4), "coasting": bool(est["coasting"]),
+         "center_error": round(float(servo_obs["center_error"]), 5)}
+    return d, servo_obs, lx, az, float(t_now)
 
 
 # ----------------------------- remote detector (hybrid mode) -----------------------------
@@ -417,6 +592,7 @@ def run(args):
     trace = io.open(trace_path, "w", encoding="utf-8")
 
     summary = {"type": "onboard_fetch_episode", "config": cfg, "dry_run": bool(args.dry_run),
+               "steering": args.steering,
                "trace": trace_path, "issues": [], "counts": {}, "phase_log": []}
 
     h = bridge.health()
@@ -428,6 +604,10 @@ def run(args):
     refresher = Refresher(bridge)
     state = {"step": 0, "forward_steps": 0, "lost_count": 0}
     counts = {"forward": 0, "turn": 0, "hold": 0, "detected": 0}
+    tracker = BallTracker()
+    arc_lx = 0.0
+    arc_az = 0.0
+    arc_cmd_t = time.time()
     stop_reason = "unset"
     t_start = time.time()
     try:
@@ -481,12 +661,12 @@ def run(args):
             except Exception as e:
                 obs = {"detected": False}
                 summary["issues"].append("observe_error:%r" % (e,))
-            if obs.get("no_new_data") and not args.dry_run:
+            if obs.get("no_new_data") and not args.dry_run and args.steering != "arc":
                 # upstream hasn't produced a new frame yet: hold course (the
                 # refresher's max-age auto-coasts to zero if this persists)
                 time.sleep(0.15)
                 continue
-            if discard_after_turn and not args.dry_run:
+            if discard_after_turn and not args.dry_run and args.steering != "arc":
                 # first fresh verdict after a turn can describe a pre-turn frame
                 # (feed lag ~0.5-1s): acting on it double-corrects and sweeps the
                 # ball across/out of frame (trace onboard_1652156968: err +0.94 ->
@@ -494,14 +674,25 @@ def run(args):
                 discard_after_turn = False
                 time.sleep(0.15)
                 continue
-            d = decide_fetch_action(obs, state, cfg)
+            if args.steering == "arc":
+                d, policy_obs, arc_lx, arc_az, arc_cmd_t = decide_arc_fetch_action(
+                    obs, state, cfg, tracker, args, time.time(), arc_lx, arc_az, arc_cmd_t)
+            else:
+                policy_obs = obs
+                d = decide_fetch_action(obs, state, cfg)
             state["step"] += 1
-            state["lost_count"] = d.get("lost_count", 0 if obs.get("detected") else state["lost_count"])
+            if args.steering == "arc" and d.get("reason") == "arc_approach":
+                state["lost_count"] = 0
+            else:
+                state["lost_count"] = d.get("lost_count", 0 if obs.get("detected") else state["lost_count"])
             if obs.get("detected"):
                 counts["detected"] += 1
             counts[d["action"]] = counts.get(d["action"], 0) + 1
-            trace.write(json.dumps({"t": round(time.time() - t_start, 3), "obs": obs, "decision": d,
-                                    "state": dict(state)}) + "\n")
+            rec = {"t": round(time.time() - t_start, 3), "obs": obs, "decision": d,
+                   "state": dict(state)}
+            if args.steering == "arc":
+                rec["policy_obs"] = policy_obs
+            trace.write(json.dumps(rec) + "\n")
             trace.flush()
 
             if args.dry_run:
@@ -523,7 +714,7 @@ def run(args):
                 time.sleep(turn_dur + 0.30)  # settle + let a fresh frame land (local, fast)
                 discard_after_turn = True
             elif d["action"] == ACT_FORWARD:
-                refresher.set(d["linear_x"], 0.0)  # rolls continuously; refresher feeds deadman
+                refresher.set(d["linear_x"], d.get("angular_z", 0.0))  # rolls continuously; refresher feeds deadman
                 state["forward_steps"] += 1
             elif d["action"] == ACT_HOLD:
                 if state.get("lost_count", 0) > 1:
@@ -640,6 +831,78 @@ def run_reverse(args):
     return 0 if summary.get("final_safe") else 1
 
 
+def run_selftest():
+    class Args(object):
+        pass
+    cfg = default_config(center_deadband=0.12, turn_angular_z=2.3, approach_linear_x=0.55)
+    args = Args()
+    args.kp = 0.9
+    args.kd = 0.25
+    args.slew = 1.5
+    args.coast_s = 0.8
+
+    tracker = BallTracker()
+    raw_resid = []
+    filt_resid = []
+    t = 100.0
+    last_truth = None
+    for i in range(60):
+        dt = 0.06 + (0.035 if i % 7 == 0 else 0.0)
+        t += dt
+        truth_err = 0.70 - 0.010 * i
+        truth_size = 24.0 + 0.55 * i
+        jitter = (0.050 if i % 2 == 0 else -0.043) + (0.018 if i % 11 == 0 else 0.0)
+        dropped = (i % 5 == 0)
+        if not dropped:
+            obs = {"detected": True, "confidence": 0.8,
+                   "center_error": truth_err + jitter,
+                   "equiv_diameter_px": truth_size + (1.8 if i % 3 == 0 else -1.2)}
+            est = tracker.update(obs, t)
+            raw_resid.append(float(obs["center_error"]) - truth_err)
+            filt_resid.append(float(est["center_error"]) - truth_err)
+            last_truth = (t, truth_err, truth_size)
+        else:
+            tracker.predict(t)
+    raw_var = variance(raw_resid)
+    filt_var = variance(filt_resid)
+    smoother = filt_var < raw_var * 0.75
+
+    coast_ok = False
+    if last_truth is not None:
+        coast_t = last_truth[0] + 0.22
+        est = tracker.predict(coast_t)
+        truth_err = last_truth[1] - 0.010 * (0.22 / 0.07)
+        coast_ok = abs(float(est["center_error"]) - truth_err) < 0.12
+
+    prev_lx = 0.0
+    prev_az = 0.0
+    slew_ok = True
+    max_delta = args.slew * 0.10 + 1e-9
+    for err in (0.8, 0.45, 0.12, 0.02, -0.18, -0.45):
+        lx, az, _lt, _at = compute_arc_drive_command(err, 0.0, cfg, args.kp, args.kd,
+                                                      args.slew, 0.10, prev_lx, prev_az)
+        if abs(lx - prev_lx) > max_delta or abs(az - prev_az) > max_delta:
+            slew_ok = False
+        prev_lx, prev_az = lx, az
+    _lx, az_pos, _lt, _at = compute_arc_drive_command(0.5, 0.0, cfg, args.kp, args.kd,
+                                                      args.slew, 0.10, 0.0, 0.0)
+    _lx, az_neg, _lt, _at = compute_arc_drive_command(-0.5, 0.0, cfg, args.kp, args.kd,
+                                                      args.slew, 0.10, 0.0, 0.0)
+    sign_ok = az_pos < 0.0 and az_neg > 0.0
+
+    verdict = {"type": "onboard_fetch_selftest",
+               "ok": bool(smoother and coast_ok and slew_ok and sign_ok),
+               "raw_variance": round(raw_var, 7),
+               "filtered_variance": round(filt_var, 7),
+               "variance_ratio": round((filt_var / raw_var) if raw_var > 0.0 else 0.0, 4),
+               "smoother": bool(smoother),
+               "coast_ok": bool(coast_ok),
+               "slew_ok": bool(slew_ok),
+               "sign_ok": bool(sign_ok)}
+    print(json.dumps(verdict, sort_keys=True))
+    return 0 if verdict["ok"] else 1
+
+
 def build_parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--base-url", default="http://127.0.0.1:8765")
@@ -652,6 +915,12 @@ def build_parser():
     p.add_argument("--turn-angular-z", type=float, default=2.3)
     p.add_argument("--approach-linear-x", type=float, default=0.55)
     p.add_argument("--min-confidence", type=float, default=0.35)
+    p.add_argument("--steering", choices=["pulse", "arc"], default="pulse",
+                   help="pulse keeps the legacy turn/forward behavior; arc enables continuous visual servoing")
+    p.add_argument("--kp", type=float, default=0.9, help="arc steering proportional gain")
+    p.add_argument("--kd", type=float, default=0.25, help="arc steering derivative gain")
+    p.add_argument("--slew", type=float, default=1.5, help="arc max command delta per second")
+    p.add_argument("--coast-s", type=float, default=0.8, help="arc tracker coast window before lost handling")
     p.add_argument("--push-steps", type=int, default=0)
     p.add_argument("--push-linear-x", type=float, default=0.55)
     p.add_argument("--search-scan", type=int, default=0)
@@ -672,9 +941,12 @@ def build_parser():
     p.add_argument("--run-dir", default="")
     p.add_argument("--reverse-log", default="",
                    help="replay this motion tape backwards (dead-reckoned undo) instead of fetching")
+    p.add_argument("--selftest", action="store_true", help="run laptop-only tracker/arc servo checks")
     return p
 
 
 if __name__ == "__main__":
     _args = build_parser().parse_args()
+    if _args.selftest:
+        raise SystemExit(run_selftest())
     raise SystemExit(run_reverse(_args) if _args.reverse_log else run(_args))
