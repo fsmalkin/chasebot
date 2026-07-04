@@ -35,6 +35,10 @@ import chasecar_onboard_fetch as onboard  # noqa: E402
 STATIC_STICTION_CMD = 0.30
 ROLLING_STICTION_CMD = 0.18
 TURN_ANGULAR_Z = 2.3
+BRIDGE_MAX_LINEAR_X = 0.6
+BRIDGE_MAX_ANGULAR_Z = 2.5
+BRIDGE_MAX_MOTOR_SPEED = 0.35
+BRIDGE_TURN_GAIN = 1.0
 WHEELBASE_M = 0.13
 MAX_LINEAR_SPEED_MPS = 0.46
 COMMAND_EXPIRY_S = 0.45
@@ -50,6 +54,8 @@ STANDOFF_M = 0.35
 ACTUATION_LATENCY_S = 0.05
 DT_S = 0.02
 MAX_TIME_S = 12.0
+FORWARD_BUDGET = 180
+MAX_STEPS = 260
 
 DEFAULT_KP_VALUES = [0.50, 0.70, 0.90, 1.10, 1.30]
 DEFAULT_KD_VALUES = [0.00, 0.15, 0.25, 0.40]
@@ -63,6 +69,10 @@ class SimConstants:
     static_stiction_cmd: float = STATIC_STICTION_CMD
     rolling_stiction_cmd: float = ROLLING_STICTION_CMD
     turn_angular_z: float = TURN_ANGULAR_Z
+    bridge_max_linear_x: float = BRIDGE_MAX_LINEAR_X
+    bridge_max_angular_z: float = BRIDGE_MAX_ANGULAR_Z
+    bridge_max_motor_speed: float = BRIDGE_MAX_MOTOR_SPEED
+    bridge_turn_gain: float = BRIDGE_TURN_GAIN
     wheelbase_m: float = WHEELBASE_M
     max_linear_speed_mps: float = MAX_LINEAR_SPEED_MPS
     command_expiry_s: float = COMMAND_EXPIRY_S
@@ -78,6 +88,8 @@ class SimConstants:
     actuation_latency_s: float = ACTUATION_LATENCY_S
     dt_s: float = DT_S
     max_time_s: float = MAX_TIME_S
+    forward_budget: int = FORWARD_BUDGET
+    max_steps: int = MAX_STEPS
 
 
 @dataclass(frozen=True)
@@ -93,12 +105,40 @@ class Placement:
         )
 
 
+def clamp(value: float, lo: float, hi: float) -> float:
+    return max(float(lo), min(float(hi), float(value)))
+
+
+def bridge_cmd_vel_to_motors(linear_x: float, angular_z: float, constants: SimConstants) -> tuple[float, float]:
+    """Mirror factory bridge cmd_vel mapping before wheel stiction.
+
+    Source: tools/robot_factory_bridge/chasecar_factory_bridge.py:1130-1149.
+    """
+    max_linear = max(0.001, abs(float(constants.bridge_max_linear_x)))
+    max_angular = max(0.001, abs(float(constants.bridge_max_angular_z)))
+    linear_unit = clamp(float(linear_x) / max_linear, -1.0, 1.0)
+    angular_unit = clamp(float(angular_z) / max_angular, -1.0, 1.0)
+
+    left = linear_unit - (float(constants.bridge_turn_gain) * angular_unit)
+    right = linear_unit + (float(constants.bridge_turn_gain) * angular_unit)
+    max_abs = max(1.0, abs(left), abs(right))
+    left = left / max_abs
+    right = right / max_abs
+
+    max_speed = clamp(abs(float(constants.bridge_max_motor_speed)), 0.0, 1.0)
+    left = clamp(left, -1.0, 1.0) * max_speed
+    right = clamp(right, -1.0, 1.0) * max_speed
+    return clamp(left, -1.0, 1.0), clamp(right, -1.0, 1.0)
+
+
 class RobotKinematics:
     def __init__(self, constants: SimConstants):
         self.c = constants
         self.x = 0.0
         self.y = 0.0
         self.yaw = 0.0
+        self.left_motor_cmd = 0.0
+        self.right_motor_cmd = 0.0
         self.left_eff = 0.0
         self.right_eff = 0.0
 
@@ -109,13 +149,15 @@ class RobotKinematics:
         return float(cmd)
 
     def step(self, linear_x: float, angular_z: float, dt: float) -> tuple[float, float]:
-        left_cmd = max(-1.0, min(1.0, float(linear_x) - float(angular_z) / self.c.turn_angular_z))
-        right_cmd = max(-1.0, min(1.0, float(linear_x) + float(angular_z) / self.c.turn_angular_z))
+        left_cmd, right_cmd = bridge_cmd_vel_to_motors(linear_x, angular_z, self.c)
+        self.left_motor_cmd = left_cmd
+        self.right_motor_cmd = right_cmd
         self.left_eff = self._wheel_effective(left_cmd, self.left_eff)
         self.right_eff = self._wheel_effective(right_cmd, self.right_eff)
 
-        v = self.c.max_linear_speed_mps * (self.left_eff + self.right_eff) / 2.0
-        omega = self.c.turn_angular_z * (self.right_eff - self.left_eff) / 2.0
+        max_motor = max(0.001, abs(float(self.c.bridge_max_motor_speed)))
+        v = self.c.max_linear_speed_mps * (self.left_eff + self.right_eff) / (2.0 * max_motor)
+        omega = self.c.turn_angular_z * (self.right_eff - self.left_eff) / (2.0 * max_motor)
         self.x += v * math.cos(self.yaw) * dt
         self.y += v * math.sin(self.yaw) * dt
         self.yaw = normalize_angle(self.yaw + omega * dt)
@@ -249,8 +291,8 @@ def make_cfg(constants: SimConstants) -> dict[str, Any]:
         approach_linear_x=0.55,
         min_confidence=0.20,
         lost_limit=12,
-        forward_budget=180,
-        max_steps=260,
+        forward_budget=constants.forward_budget,
+        max_steps=constants.max_steps,
     )
 
 
@@ -283,6 +325,7 @@ def run_episode(
     controller_blocked_until = 0.0
     setpoint_hold_until = -999.0
     stop_reason = "timeout"
+    initial_z_m = true_forward_range(robot, ball_xy)
     first_command_t = None
     centered_once = False
     last_center_sign = 0
@@ -303,6 +346,10 @@ def run_episode(
                 "z_m": float(z_true),
                 "linear_x": float(lx_apply),
                 "angular_z": float(az_apply),
+                "left_motor_cmd": float(robot.left_motor_cmd),
+                "right_motor_cmd": float(robot.right_motor_cmd),
+                "left_motor_eff": float(robot.left_eff),
+                "right_motor_eff": float(robot.right_eff),
             }
         )
         if first_command_t is None and (abs(lx_apply) > 1.0e-6 or abs(az_apply) > 1.0e-6):
@@ -361,6 +408,17 @@ def run_episode(
 
     angular_tail = [row["angular_z"] for row in trace if row["t"] >= max(0.0, trace[-1]["t"] - 2.0)]
     oscillation_power = float(np.var(angular_tail)) if angular_tail else 0.0
+    final_z_m = float(trace[-1]["z_m"])
+    initial_size_px = c.k_px_m / max(float(initial_z_m), 1.0e-6)
+    final_size_px = c.k_px_m / max(final_z_m, 1.0e-6)
+    max_abs_motor_cmd = max(
+        max(abs(row["left_motor_cmd"]), abs(row["right_motor_cmd"]))
+        for row in trace
+    )
+    max_abs_effective_motor = max(
+        max(abs(row["left_motor_eff"]), abs(row["right_motor_eff"]))
+        for row in trace
+    )
     return {
         "mode": mode,
         "kp": float(kp),
@@ -375,7 +433,13 @@ def run_episode(
         "overshoot_count": int(overshoots),
         "oscillation_power": round(oscillation_power, 8),
         "first_command_t": None if first_command_t is None else round(float(first_command_t), 4),
-        "final_z_m": round(float(trace[-1]["z_m"]), 5),
+        "initial_z_m": round(float(initial_z_m), 5),
+        "final_z_m": round(final_z_m, 5),
+        "net_forward_progress_m": round(float(initial_z_m) - final_z_m, 5),
+        "initial_equiv_diameter_px": round(initial_size_px, 5),
+        "final_equiv_diameter_px": round(final_size_px, 5),
+        "max_abs_motor_cmd": round(float(max_abs_motor_cmd), 5),
+        "max_abs_effective_motor": round(float(max_abs_effective_motor), 5),
     }
 
 
@@ -461,6 +525,11 @@ def constants_dict(c: SimConstants) -> dict[str, Any]:
         "static_stiction_cmd": c.static_stiction_cmd,
         "rolling_stiction_cmd": c.rolling_stiction_cmd,
         "turn_angular_z": c.turn_angular_z,
+        "bridge_mapping_source": "tools/robot_factory_bridge/chasecar_factory_bridge.py:1130-1149",
+        "bridge_max_linear_x": c.bridge_max_linear_x,
+        "bridge_max_angular_z": c.bridge_max_angular_z,
+        "bridge_max_motor_speed": c.bridge_max_motor_speed,
+        "bridge_turn_gain": c.bridge_turn_gain,
         "wheelbase_m": c.wheelbase_m,
         "max_linear_speed_mps": c.max_linear_speed_mps,
         "command_expiry_s": c.command_expiry_s,
@@ -476,6 +545,8 @@ def constants_dict(c: SimConstants) -> dict[str, Any]:
         "actuation_latency_s": c.actuation_latency_s,
         "dt_s": c.dt_s,
         "max_time_s": c.max_time_s,
+        "forward_budget": c.forward_budget,
+        "max_steps": c.max_steps,
     }
 
 
