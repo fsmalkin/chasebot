@@ -400,12 +400,13 @@ def _start_remote_episode(cmd, outfile, running_label, started_msg, source, epdi
     return {"ok": True, "msg": started_msg}
 
 
-# operator-selectable steering for the next GO. Arc gains are the overnight
-# sim-tuned set (honest-dynamics sweep 2026-07-03: 0% failures, 1.6 overshoots
-# vs pulse 69%/18) — NOT the onboard code defaults.
+# operator-selectable steering for the next GO. Arc gains are the fixed
+# bridge-scale stiction sweep (2026-07-04 multi-seed check: slew=1.00
+# had the lowest failure/oscillation mix; default sweep 23/24 vs pulse 9/24).
 steer = {"mode": "pulse"}
 steer_lock = threading.Lock()
-ARC_GAINS = ["--steering", "arc", "--kp", "0.50", "--kd", "0.15", "--slew", "2.00"]
+ARC_GAINS = ["--steering", "arc", "--kp", "0.30", "--kd", "0.10",
+             "--slew", "1.00", "--turn-gate", "0.55"]
 
 
 def start_approach():

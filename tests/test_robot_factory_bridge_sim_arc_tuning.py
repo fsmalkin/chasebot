@@ -41,7 +41,7 @@ def test_fixed_sim_reproduces_real_old_arc_stall_from_left_edge():
 
     episode = sim.run_episode(
         placement,
-        mode="arc",
+        mode="arc_legacy",
         kp=0.50,
         kd=0.15,
         slew=2.00,
@@ -55,6 +55,37 @@ def test_fixed_sim_reproduces_real_old_arc_stall_from_left_edge():
     assert abs(episode["final_equiv_diameter_px"] - episode["initial_equiv_diameter_px"]) <= 0.25
     assert episode["max_abs_motor_cmd"] < constants.static_stiction_cmd
     assert episode["max_abs_effective_motor"] == 0.0
+
+
+def test_corrected_arc_reaches_standoff_from_both_edge_starts():
+    constants = sim.SimConstants(
+        perception_latency_s=0.0,
+        actuation_latency_s=0.0,
+        dropout_probability=0.0,
+        pixel_noise_sigma=0.0,
+        forward_budget=40,
+        max_steps=140,
+    )
+    half_hfov = math.radians(62.0) / 2.0
+    target_forward_z = sim.K_PX_M / 19.0
+
+    for err in (-0.90, 0.90):
+        bearing = err * half_hfov
+        placement = sim.Placement(range_m=target_forward_z / math.cos(bearing), bearing_right_rad=bearing)
+        episode = sim.run_episode(
+            placement,
+            mode="arc",
+            kp=0.30,
+            kd=0.10,
+            slew=1.00,
+            turn_gate=0.55,
+            seed=42,
+            constants=constants,
+        )
+
+        assert episode["stop_reason"] == "standoff_reached"
+        assert episode["success"] is True
+        assert episode["net_forward_progress_m"] > 0.12
 
 
 def test_perception_latency_shifts_first_applied_response_later():

@@ -57,9 +57,10 @@ MAX_TIME_S = 12.0
 FORWARD_BUDGET = 180
 MAX_STEPS = 260
 
-DEFAULT_KP_VALUES = [0.50, 0.70, 0.90, 1.10, 1.30]
-DEFAULT_KD_VALUES = [0.00, 0.15, 0.25, 0.40]
+DEFAULT_KP_VALUES = [0.30, 0.50, 0.70, 0.90, 1.10]
+DEFAULT_KD_VALUES = [0.00, 0.10, 0.15, 0.25]
 DEFAULT_SLEW_VALUES = [1.00, 1.50, 2.00]
+DEFAULT_TURN_GATE_VALUES = [0.22, 0.35, 0.45, 0.55]
 DEFAULT_EPISODES = 16
 DEFAULT_SEED = 20260703
 
@@ -296,8 +297,83 @@ def make_cfg(constants: SimConstants) -> dict[str, Any]:
     )
 
 
-def _arc_args(kp: float, kd: float, slew: float) -> SimpleNamespace:
-    return SimpleNamespace(kp=float(kp), kd=float(kd), slew=float(slew), coast_s=0.8)
+def _arc_args(kp: float, kd: float, slew: float, turn_gate: float = 0.22) -> SimpleNamespace:
+    return SimpleNamespace(kp=float(kp), kd=float(kd), slew=float(slew), turn_gate=float(turn_gate), coast_s=0.8)
+
+
+def _legacy_compute_arc_drive_command(
+    err: float,
+    err_rate: float,
+    cfg: dict[str, Any],
+    kp: float,
+    kd: float,
+    slew: float,
+    dt: float,
+    prev_lx: float,
+    prev_az: float,
+) -> tuple[float, float, float, float]:
+    turn_scale = float(cfg["turn_angular_z"])
+    angular_target = -(float(kp) * float(err) + float(kd) * float(err_rate)) * turn_scale
+    angular_target = max(-2.5, min(2.5, angular_target))
+    if abs(float(err)) < (float(cfg["center_deadband"]) / 2.0):
+        angular_target = 0.0
+    linear_target = float(cfg["approach_linear_x"]) * max(0.35, 1.0 - abs(float(err)))
+    linear = onboard.slew_value(prev_lx, linear_target, slew, dt)
+    angular = onboard.slew_value(prev_az, angular_target, slew, dt)
+    return linear, angular, linear_target, angular_target
+
+
+def _legacy_decide_arc_fetch_action(
+    obs: dict[str, Any],
+    state: dict[str, Any],
+    cfg: dict[str, Any],
+    tracker: Any,
+    args: SimpleNamespace,
+    t_now: float,
+    prev_lx: float,
+    prev_az: float,
+    prev_cmd_t: float,
+) -> tuple[dict[str, Any], dict[str, Any], float, float, float]:
+    if onboard.detection_usable(obs, cfg):
+        est = tracker.update(obs, t_now)
+    else:
+        est = tracker.predict(t_now)
+    if est is None or float(est.get("fresh_s", 999.0)) > float(args.coast_s):
+        d = onboard.decide_fetch_action(obs, state, cfg)
+        return d, obs, prev_lx, prev_az, prev_cmd_t
+
+    servo_obs = dict(obs)
+    servo_obs["detected"] = True
+    servo_obs[cfg["size_key"]] = float(est["equiv_diameter_px"])
+    servo_obs["equiv_diameter_px"] = float(est["equiv_diameter_px"])
+    servo_obs["center_error"] = float(est["center_error"])
+    servo_obs["center_rate"] = float(est["center_rate"])
+    servo_obs["confidence"] = max(float(obs.get("confidence", 0.0) or 0.0), float(cfg["min_confidence"]))
+    servo_obs["coasting"] = bool(est["coasting"])
+    servo_obs["fresh_s"] = round(float(est["fresh_s"]), 3)
+
+    step = int(state.get("step", 0))
+    if step >= int(cfg["max_steps"]):
+        return {"action": onboard.ACT_STOP, "reason": "max_steps_reached"}, servo_obs, prev_lx, prev_az, prev_cmd_t
+    size_px = float(servo_obs.get(cfg["size_key"], 0.0) or 0.0)
+    if size_px <= 0.0:
+        return onboard.decide_fetch_action(obs, state, cfg), obs, prev_lx, prev_az, prev_cmd_t
+    z_m = float(cfg["k_px_m"]) / size_px
+    if z_m <= float(cfg["standoff_m"]):
+        return {"action": onboard.ACT_STOP, "reason": "standoff_reached", "z_m": round(z_m, 4)}, servo_obs, prev_lx, prev_az, prev_cmd_t
+    if int(state.get("forward_steps", 0)) >= int(cfg["forward_budget"]):
+        return {"action": onboard.ACT_STOP, "reason": "forward_budget_exhausted", "z_m": round(z_m, 4)}, servo_obs, prev_lx, prev_az, prev_cmd_t
+
+    dt = max(0.01, float(t_now) - float(prev_cmd_t))
+    lx, az, lx_target, az_target = _legacy_compute_arc_drive_command(
+        servo_obs["center_error"], servo_obs.get("center_rate", 0.0), cfg,
+        args.kp, args.kd, args.slew, dt, prev_lx, prev_az)
+    d = {"action": onboard.ACT_FORWARD, "reason": "arc_approach", "linear_x": lx, "angular_z": az,
+         "target_linear_x": round(lx_target, 4), "target_angular_z": round(az_target, 4),
+         "z_m": round(z_m, 4), "coasting": bool(est["coasting"]),
+         "center_error": round(float(servo_obs["center_error"]), 5),
+         "arc_regime": "legacy"}
+    return d, servo_obs, lx, az, float(t_now)
 
 
 def run_episode(
@@ -306,6 +382,7 @@ def run_episode(
     kp: float = 0.9,
     kd: float = 0.25,
     slew: float = 1.5,
+    turn_gate: float = 0.22,
     seed: int = 0,
     constants: SimConstants | None = None,
 ) -> dict[str, Any]:
@@ -318,7 +395,7 @@ def run_episode(
     cfg = make_cfg(c)
     state = {"step": 0, "forward_steps": 0, "lost_count": 0}
     tracker = onboard.BallTracker()
-    args = _arc_args(kp, kd, slew)
+    args = _arc_args(kp, kd, slew, turn_gate)
     arc_lx = 0.0
     arc_az = 0.0
     arc_cmd_t = 0.0
@@ -375,10 +452,14 @@ def run_episode(
                 decision, _policy_obs, arc_lx, arc_az, arc_cmd_t = onboard.decide_arc_fetch_action(
                     obs, state, cfg, tracker, args, t, arc_lx, arc_az, arc_cmd_t
                 )
+            elif mode == "arc_legacy":
+                decision, _policy_obs, arc_lx, arc_az, arc_cmd_t = _legacy_decide_arc_fetch_action(
+                    obs, state, cfg, tracker, args, t, arc_lx, arc_az, arc_cmd_t
+                )
             else:
                 decision = onboard.decide_fetch_action(obs, state, cfg)
             state["step"] += 1
-            if mode == "arc" and decision.get("reason") == "arc_approach":
+            if mode in ("arc", "arc_legacy") and decision.get("reason") == "arc_approach":
                 state["lost_count"] = 0
             else:
                 state["lost_count"] = decision.get("lost_count", 0 if obs.get("detected") else state["lost_count"])
@@ -396,7 +477,8 @@ def run_episode(
                 setpoint_hold_until = t + turn_dur
             elif action == onboard.ACT_FORWARD:
                 commands.set(decision.get("linear_x", 0.0), decision.get("angular_z", 0.0), t)
-                state["forward_steps"] += 1
+                if not (mode == "arc" and decision.get("arc_regime") == "turn"):
+                    state["forward_steps"] += 1
             elif action == onboard.ACT_HOLD and state.get("lost_count", 0) > 1:
                 commands.zero(t)
 
@@ -424,6 +506,7 @@ def run_episode(
         "kp": float(kp),
         "kd": float(kd),
         "slew": float(slew),
+        "turn_gate": float(turn_gate),
         "seed": int(seed),
         "range_m": round(placement.range_m, 4),
         "bearing_deg": round(math.degrees(placement.bearing_right_rad), 4),
@@ -477,6 +560,7 @@ def run_gain_sweep(
     kp_values: list[float] | None = None,
     kd_values: list[float] | None = None,
     slew_values: list[float] | None = None,
+    turn_gate_values: list[float] | None = None,
     constants: SimConstants | None = None,
 ) -> dict[str, Any]:
     c = constants or SimConstants()
@@ -484,29 +568,50 @@ def run_gain_sweep(
     kp_values = kp_values or list(DEFAULT_KP_VALUES)
     kd_values = kd_values or list(DEFAULT_KD_VALUES)
     slew_values = slew_values or list(DEFAULT_SLEW_VALUES)
+    turn_gate_values = turn_gate_values or list(DEFAULT_TURN_GATE_VALUES)
     rows = []
     for kp in kp_values:
         for kd in kd_values:
             for slew in slew_values:
-                eps = [
-                    run_episode(p, "arc", kp, kd, slew, seed + i * 37, c)
-                    for i, p in enumerate(placements)
-                ]
-                summary = summarize_episodes("arc kp=%.2f kd=%.2f slew=%.2f" % (kp, kd, slew), eps)
-                summary.update({"mode": "arc", "kp": kp, "kd": kd, "slew": slew, "score": round(score_summary(summary), 6)})
-                rows.append(summary)
+                for turn_gate in turn_gate_values:
+                    eps = [
+                        run_episode(p, "arc", kp, kd, slew, turn_gate, seed + i * 37, c)
+                        for i, p in enumerate(placements)
+                    ]
+                    summary = summarize_episodes(
+                        "arc kp=%.2f kd=%.2f slew=%.2f turn_gate=%.2f" % (kp, kd, slew, turn_gate),
+                        eps,
+                    )
+                    summary.update({"mode": "arc", "kp": kp, "kd": kd, "slew": slew,
+                                    "turn_gate": turn_gate, "score": round(score_summary(summary), 6)})
+                    rows.append(summary)
     rows.sort(key=lambda row: (row["score"], row["failure_rate"], row["mean_time_to_standoff_s"]))
 
     pulse_eps = [
-        run_episode(p, "pulse", 0.9, 0.25, 1.5, seed + i * 37, c)
+        run_episode(p, "pulse", 0.9, 0.25, 1.5, 0.22, seed + i * 37, c)
         for i, p in enumerate(placements)
     ]
     pulse = summarize_episodes("pulse defaults", pulse_eps)
-    pulse.update({"mode": "pulse", "kp": None, "kd": None, "slew": None, "score": round(score_summary(pulse), 6)})
+    pulse.update({"mode": "pulse", "kp": None, "kd": None, "slew": None, "turn_gate": None,
+                  "score": round(score_summary(pulse), 6)})
     default = next(
-        row for row in rows
-        if abs(row["kp"] - 0.9) < 1.0e-9 and abs(row["kd"] - 0.25) < 1.0e-9 and abs(row["slew"] - 1.5) < 1.0e-9
+        (
+            row for row in rows
+            if abs(row["kp"] - 0.3) < 1.0e-9
+            and abs(row["kd"] - 0.1) < 1.0e-9
+            and abs(row["slew"] - 1.0) < 1.0e-9
+            and abs(row["turn_gate"] - 0.55) < 1.0e-9
+        ),
+        None,
     )
+    if default is None:
+        default_eps = [
+            run_episode(p, "arc", 0.3, 0.1, 1.0, 0.55, seed + i * 37, c)
+            for i, p in enumerate(placements)
+        ]
+        default = summarize_episodes("arc current defaults", default_eps)
+        default.update({"mode": "arc", "kp": 0.3, "kd": 0.1, "slew": 1.0,
+                        "turn_gate": 0.55, "score": round(score_summary(default), 6)})
     return {
         "type": "arc_tuning_report",
         "seed": int(seed),
@@ -581,36 +686,39 @@ def render_scorecard(report: dict[str, Any]) -> str:
             "",
             "## Recommendation",
             "",
-            "- recommended: `kp=%.2f kd=%.2f slew=%.2f` score=`%.3f`"
+            "- recommended: `kp=%.2f kd=%.2f slew=%.2f turn_gate=%.2f` score=`%.3f`"
             % (
                 report["recommended"]["kp"],
                 report["recommended"]["kd"],
                 report["recommended"]["slew"],
+                report["recommended"]["turn_gate"],
                 report["recommended"]["score"],
             ),
-            "- current defaults: `kp=%.2f kd=%.2f slew=%.2f` score=`%.3f`"
+            "- current defaults: `kp=%.2f kd=%.2f slew=%.2f turn_gate=%.2f` score=`%.3f`"
             % (
                 report["current_defaults"]["kp"],
                 report["current_defaults"]["kd"],
                 report["current_defaults"]["slew"],
+                report["current_defaults"]["turn_gate"],
                 report["current_defaults"]["score"],
             ),
             "- pulse baseline score: `%.3f`" % report["pulse_baseline"]["score"],
             "",
             "## Top 5 Arc Gain Sets",
             "",
-            "| rank | kp | kd | slew | fail rate | time s | overshoots | osc power | score |",
-            "|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| rank | kp | kd | slew | turn gate | fail rate | time s | overshoots | osc power | score |",
+            "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for rank, row in enumerate(report["top5"], start=1):
         lines.append(
-            "| %d | %.2f | %.2f | %.2f | %.3f | %s | %.3f | %.6f | %.3f |"
+            "| %d | %.2f | %.2f | %.2f | %.2f | %.3f | %s | %.3f | %.6f | %.3f |"
             % (
                 rank,
                 row["kp"],
                 row["kd"],
                 row["slew"],
+                row["turn_gate"],
                 row["failure_rate"],
                 fmt(row["mean_time_to_standoff_s"]),
                 row["mean_overshoot_count"],

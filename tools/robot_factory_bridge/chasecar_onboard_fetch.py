@@ -50,6 +50,14 @@ ACT_STOP = "stop"
 # artifacts/session/mono_distance_calibration_bench01/calibration_summary.json
 K_PX_M_DEFAULT = 9.621
 
+# Mirrors tools/robot_factory_bridge/chasecar_factory_bridge.py:1130-1149
+# for the bench bridge deployment used by the dashboard.
+BRIDGE_MAX_LINEAR_X = 0.6
+BRIDGE_MAX_ANGULAR_Z = 2.5
+BRIDGE_MAX_MOTOR_SPEED = 0.35
+BRIDGE_TURN_GAIN = 1.0
+MOTOR_STATIC_STICTION_CMD = 0.30
+
 
 def clamp(v, lo, hi):
     return max(float(lo), min(float(hi), float(v)))
@@ -256,15 +264,82 @@ def slew_value(prev, target, max_rate, dt):
     return float(prev) + delta
 
 
-def compute_arc_drive_command(err, err_rate, cfg, kp, kd, slew, dt, prev_lx, prev_az):
+def sign_of(value):
+    return 1.0 if float(value) >= 0.0 else -1.0
+
+
+def arc_forward_linear_floor():
+    if BRIDGE_MAX_MOTOR_SPEED <= 0.0:
+        return BRIDGE_MAX_LINEAR_X
+    return (MOTOR_STATIC_STICTION_CMD / BRIDGE_MAX_MOTOR_SPEED) * BRIDGE_MAX_LINEAR_X
+
+
+def arc_turn_angular_floor():
+    gain = max(0.001, abs(float(BRIDGE_TURN_GAIN)))
+    if BRIDGE_MAX_MOTOR_SPEED <= 0.0:
+        return BRIDGE_MAX_ANGULAR_Z
+    return (MOTOR_STATIC_STICTION_CMD / BRIDGE_MAX_MOTOR_SPEED) * (BRIDGE_MAX_ANGULAR_Z / gain)
+
+
+def arc_forward_trim_limit(linear_x):
+    if BRIDGE_MAX_MOTOR_SPEED <= 0.0:
+        return 0.0
+    linear_unit = clamp(abs(float(linear_x)) / BRIDGE_MAX_LINEAR_X, 0.0, 1.0)
+    static_unit = MOTOR_STATIC_STICTION_CMD / BRIDGE_MAX_MOTOR_SPEED
+    margin = min(max(0.0, linear_unit - static_unit), max(0.0, 1.0 - linear_unit))
+    return margin * (BRIDGE_MAX_ANGULAR_Z / max(0.001, abs(float(BRIDGE_TURN_GAIN))))
+
+
+def stiction_slew(prev, target, max_rate, dt, floor):
+    target = float(target)
+    value = slew_value(prev, target, max_rate, dt)
+    floor = abs(float(floor))
+    if abs(target) <= 1.0e-9:
+        if abs(value) < floor:
+            return 0.0
+        return value
+    if abs(value) < floor:
+        return sign_of(target) * floor
+    return value
+
+
+def bridge_cmd_vel_to_motor_units(linear_x, angular_z):
+    linear_unit = clamp(float(linear_x) / BRIDGE_MAX_LINEAR_X, -1.0, 1.0)
+    angular_unit = clamp(float(angular_z) / BRIDGE_MAX_ANGULAR_Z, -1.0, 1.0)
+    left = linear_unit - (BRIDGE_TURN_GAIN * angular_unit)
+    right = linear_unit + (BRIDGE_TURN_GAIN * angular_unit)
+    max_abs = max(1.0, abs(left), abs(right))
+    left = (left / max_abs) * BRIDGE_MAX_MOTOR_SPEED
+    right = (right / max_abs) * BRIDGE_MAX_MOTOR_SPEED
+    return clamp(left, -1.0, 1.0), clamp(right, -1.0, 1.0)
+
+
+def compute_arc_drive_command(err, err_rate, cfg, kp, kd, slew, dt, prev_lx, prev_az, turn_gate=None):
     turn_scale = float(cfg["turn_angular_z"])
-    angular_target = -(float(kp) * float(err) + float(kd) * float(err_rate)) * turn_scale
+    err = float(err)
+    err_rate = float(err_rate)
+    turn_gate = 0.22 if turn_gate is None else float(turn_gate)
+    linear_floor = arc_forward_linear_floor()
+    turn_floor = arc_turn_angular_floor()
+
+    if abs(err) > turn_gate:
+        linear_target = 0.0
+        turn_mag = max(abs(turn_scale), turn_floor)
+        turn_mag = min(turn_mag, BRIDGE_MAX_ANGULAR_Z)
+        angular_target = -sign_of(err) * turn_mag
+        linear = 0.0
+        angular = stiction_slew(prev_az, angular_target, slew, dt, turn_floor)
+        return linear, angular, linear_target, angular_target
+
+    linear_target = max(float(cfg["approach_linear_x"]), linear_floor)
+    angular_target = -(float(kp) * err + float(kd) * err_rate) * turn_scale
     angular_target = clamp(angular_target, -2.5, 2.5)
-    if abs(float(err)) < (float(cfg["center_deadband"]) / 2.0):
+    if abs(err) < (float(cfg["center_deadband"]) / 2.0):
         angular_target = 0.0
-    linear_target = float(cfg["approach_linear_x"]) * max(0.35, 1.0 - abs(float(err)))
-    linear = slew_value(prev_lx, linear_target, slew, dt)
+    angular_target = clamp(angular_target, -arc_forward_trim_limit(linear_target), arc_forward_trim_limit(linear_target))
+    linear = stiction_slew(prev_lx, linear_target, slew, dt, linear_floor)
     angular = slew_value(prev_az, angular_target, slew, dt)
+    angular = clamp(angular, -arc_forward_trim_limit(linear), arc_forward_trim_limit(linear))
     return linear, angular, linear_target, angular_target
 
 
@@ -302,11 +377,14 @@ def decide_arc_fetch_action(obs, state, cfg, tracker, args, t_now, prev_lx, prev
     dt = max(0.01, float(t_now) - float(prev_cmd_t))
     lx, az, lx_target, az_target = compute_arc_drive_command(
         servo_obs["center_error"], servo_obs.get("center_rate", 0.0), cfg,
-        args.kp, args.kd, args.slew, dt, prev_lx, prev_az)
+        args.kp, args.kd, args.slew, dt, prev_lx, prev_az, args.turn_gate)
     d = {"action": ACT_FORWARD, "reason": "arc_approach", "linear_x": lx, "angular_z": az,
          "target_linear_x": round(lx_target, 4), "target_angular_z": round(az_target, 4),
          "z_m": round(z_m, 4), "coasting": bool(est["coasting"]),
-         "center_error": round(float(servo_obs["center_error"]), 5)}
+         "center_error": round(float(servo_obs["center_error"]), 5),
+         "arc_regime": "turn" if abs(float(servo_obs["center_error"])) > float(args.turn_gate) else "forward",
+         "turn_gate": round(float(args.turn_gate), 4),
+         "linear_floor": round(arc_forward_linear_floor(), 4)}
     return d, servo_obs, lx, az, float(t_now)
 
 
@@ -715,7 +793,8 @@ def run(args):
                 discard_after_turn = True
             elif d["action"] == ACT_FORWARD:
                 refresher.set(d["linear_x"], d.get("angular_z", 0.0))  # rolls continuously; refresher feeds deadman
-                state["forward_steps"] += 1
+                if not (args.steering == "arc" and d.get("arc_regime") == "turn"):
+                    state["forward_steps"] += 1
             elif d["action"] == ACT_HOLD:
                 if state.get("lost_count", 0) > 1:
                     refresher.zero()
@@ -831,14 +910,95 @@ def run_reverse(args):
     return 0 if summary.get("final_safe") else 1
 
 
+def _selftest_center_error(robot, ball_xy, hfov_deg):
+    dx = ball_xy[0] - robot["x"]
+    dy = ball_xy[1] - robot["y"]
+    forward = math.cos(robot["yaw"]) * dx + math.sin(robot["yaw"]) * dy
+    if forward <= 0.0:
+        return None, forward
+    left = -math.sin(robot["yaw"]) * dx + math.cos(robot["yaw"]) * dy
+    right = -left
+    center_error = math.atan2(right, forward) / (math.radians(hfov_deg) / 2.0)
+    return center_error, forward
+
+
+def _selftest_observe(robot, ball_xy, cfg):
+    center_error, forward = _selftest_center_error(robot, ball_xy, 62.0)
+    if center_error is None or abs(center_error) > 1.08:
+        return {"detected": False}
+    return {"detected": True,
+            "confidence": 0.92,
+            "center_error": center_error,
+            "equiv_diameter_px": float(cfg["k_px_m"]) / max(forward, 1.0e-6)}
+
+
+def _selftest_step_robot(robot, linear_x, angular_z, dt):
+    left_cmd, right_cmd = bridge_cmd_vel_to_motor_units(linear_x, angular_z)
+    left_floor = MOTOR_STATIC_STICTION_CMD if abs(robot["left_eff"]) <= 1.0e-6 else 0.18
+    right_floor = MOTOR_STATIC_STICTION_CMD if abs(robot["right_eff"]) <= 1.0e-6 else 0.18
+    robot["left_eff"] = 0.0 if abs(left_cmd) < left_floor else left_cmd
+    robot["right_eff"] = 0.0 if abs(right_cmd) < right_floor else right_cmd
+    max_motor = max(0.001, BRIDGE_MAX_MOTOR_SPEED)
+    v = 0.46 * (robot["left_eff"] + robot["right_eff"]) / (2.0 * max_motor)
+    omega = 2.3 * (robot["right_eff"] - robot["left_eff"]) / (2.0 * max_motor)
+    robot["x"] += v * math.cos(robot["yaw"]) * dt
+    robot["y"] += v * math.sin(robot["yaw"]) * dt
+    robot["yaw"] += omega * dt
+    while robot["yaw"] > math.pi:
+        robot["yaw"] -= 2.0 * math.pi
+    while robot["yaw"] < -math.pi:
+        robot["yaw"] += 2.0 * math.pi
+
+
+def _selftest_arc_closed_loop_from_edge(cfg, args):
+    half_hfov = math.radians(62.0) / 2.0
+    bearing = -0.90 * half_hfov
+    forward_z = float(cfg["k_px_m"]) / 19.0
+    ball_range = forward_z / max(0.001, math.cos(bearing))
+    ball_xy = (ball_range * math.cos(bearing), -ball_range * math.sin(bearing))
+    robot = {"x": 0.0, "y": 0.0, "yaw": 0.0, "left_eff": 0.0, "right_eff": 0.0}
+    state = {"step": 0, "forward_steps": 0, "lost_count": 0}
+    tracker = BallTracker()
+    arc_lx = 0.0
+    arc_az = 0.0
+    arc_cmd_t = 100.0
+    t = 100.0
+    command_lx = 0.0
+    command_az = 0.0
+    progress_m = 0.0
+    stop_reason = "timeout"
+    for _i in range(180):
+        obs = _selftest_observe(robot, ball_xy, cfg)
+        decision, _policy_obs, arc_lx, arc_az, arc_cmd_t = decide_arc_fetch_action(
+            obs, state, cfg, tracker, args, t, arc_lx, arc_az, arc_cmd_t)
+        state["step"] += 1
+        if decision["action"] == ACT_STOP:
+            stop_reason = decision.get("reason", "stop")
+            break
+        if decision["action"] == ACT_FORWARD:
+            command_lx = decision.get("linear_x", 0.0)
+            command_az = decision.get("angular_z", 0.0)
+            if decision.get("arc_regime") != "turn":
+                state["forward_steps"] += 1
+        for _sub in range(6):
+            _selftest_step_robot(robot, command_lx, command_az, 0.02)
+            t += 0.02
+        _ce, z_m = _selftest_center_error(robot, ball_xy, 62.0)
+        progress_m = max(progress_m, forward_z - z_m)
+    return {"stop_reason": stop_reason,
+            "progress_m": round(progress_m, 4),
+            "forward_steps": int(state["forward_steps"])}
+
+
 def run_selftest():
     class Args(object):
         pass
     cfg = default_config(center_deadband=0.12, turn_angular_z=2.3, approach_linear_x=0.55)
     args = Args()
-    args.kp = 0.9
-    args.kd = 0.25
-    args.slew = 1.5
+    args.kp = 0.3
+    args.kd = 0.1
+    args.slew = 1.0
+    args.turn_gate = 0.55
     args.coast_s = 0.8
 
     tracker = BallTracker()
@@ -874,31 +1034,59 @@ def run_selftest():
         truth_err = last_truth[1] - 0.010 * (0.22 / 0.07)
         coast_ok = abs(float(est["center_error"]) - truth_err) < 0.12
 
-    prev_lx = 0.0
+    prev_lx = arc_forward_linear_floor()
     prev_az = 0.0
     slew_ok = True
     max_delta = args.slew * 0.10 + 1e-9
-    for err in (0.8, 0.45, 0.12, 0.02, -0.18, -0.45):
+    for err in (0.18, 0.12, 0.02, -0.08, -0.18):
         lx, az, _lt, _at = compute_arc_drive_command(err, 0.0, cfg, args.kp, args.kd,
-                                                      args.slew, 0.10, prev_lx, prev_az)
-        if abs(lx - prev_lx) > max_delta or abs(az - prev_az) > max_delta:
+                                                      args.slew, 0.10, prev_lx, prev_az,
+                                                      args.turn_gate)
+        if abs(az - prev_az) > max_delta:
             slew_ok = False
         prev_lx, prev_az = lx, az
     _lx, az_pos, _lt, _at = compute_arc_drive_command(0.5, 0.0, cfg, args.kp, args.kd,
-                                                      args.slew, 0.10, 0.0, 0.0)
+                                                      args.slew, 0.10, 0.0, 0.0,
+                                                      args.turn_gate)
     _lx, az_neg, _lt, _at = compute_arc_drive_command(-0.5, 0.0, cfg, args.kp, args.kd,
-                                                      args.slew, 0.10, 0.0, 0.0)
+                                                      args.slew, 0.10, 0.0, 0.0,
+                                                      args.turn_gate)
     sign_ok = az_pos < 0.0 and az_neg > 0.0
+    deadband_ok = True
+    floor = arc_forward_linear_floor()
+    for i in range(-10, 11):
+        err = float(i) / 10.0
+        lx, az, _lt, _at = compute_arc_drive_command(err, 0.0, cfg, args.kp, args.kd,
+                                                      args.slew, 0.10, 0.0, 0.0,
+                                                      args.turn_gate)
+        if abs(lx) > 1.0e-9 and lx < floor - 1.0e-9:
+            deadband_ok = False
+        left_motor, right_motor = bridge_cmd_vel_to_motor_units(lx, az)
+        if abs(err) > args.turn_gate:
+            if max(abs(left_motor), abs(right_motor)) < MOTOR_STATIC_STICTION_CMD - 1.0e-9:
+                deadband_ok = False
+        elif abs(lx) > 1.0e-9:
+            if (abs(left_motor) < MOTOR_STATIC_STICTION_CMD - 1.0e-9
+                    or abs(right_motor) < MOTOR_STATIC_STICTION_CMD - 1.0e-9):
+                deadband_ok = False
+    closed_loop = _selftest_arc_closed_loop_from_edge(cfg, args)
+    closed_loop_ok = (closed_loop["stop_reason"] == "standoff_reached"
+                      and float(closed_loop["progress_m"]) > 0.12)
 
     verdict = {"type": "onboard_fetch_selftest",
-               "ok": bool(smoother and coast_ok and slew_ok and sign_ok),
+               "ok": bool(smoother and coast_ok and slew_ok and sign_ok and deadband_ok and closed_loop_ok),
                "raw_variance": round(raw_var, 7),
                "filtered_variance": round(filt_var, 7),
                "variance_ratio": round((filt_var / raw_var) if raw_var > 0.0 else 0.0, 4),
                "smoother": bool(smoother),
                "coast_ok": bool(coast_ok),
                "slew_ok": bool(slew_ok),
-               "sign_ok": bool(sign_ok)}
+               "sign_ok": bool(sign_ok),
+               "deadband_ok": bool(deadband_ok),
+               "closed_loop_ok": bool(closed_loop_ok),
+               "closed_loop": closed_loop,
+               "linear_floor": round(floor, 4),
+               "turn_gate": round(float(args.turn_gate), 4)}
     print(json.dumps(verdict, sort_keys=True))
     return 0 if verdict["ok"] else 1
 
@@ -917,9 +1105,10 @@ def build_parser():
     p.add_argument("--min-confidence", type=float, default=0.35)
     p.add_argument("--steering", choices=["pulse", "arc"], default="pulse",
                    help="pulse keeps the legacy turn/forward behavior; arc enables continuous visual servoing")
-    p.add_argument("--kp", type=float, default=0.9, help="arc steering proportional gain")
-    p.add_argument("--kd", type=float, default=0.25, help="arc steering derivative gain")
-    p.add_argument("--slew", type=float, default=1.5, help="arc max command delta per second")
+    p.add_argument("--kp", type=float, default=0.3, help="arc steering proportional gain")
+    p.add_argument("--kd", type=float, default=0.1, help="arc steering derivative gain")
+    p.add_argument("--slew", type=float, default=1.0, help="arc max command delta per second")
+    p.add_argument("--turn-gate", type=float, default=0.55, help="arc off-center threshold for in-place turn regime")
     p.add_argument("--coast-s", type=float, default=0.8, help="arc tracker coast window before lost handling")
     p.add_argument("--push-steps", type=int, default=0)
     p.add_argument("--push-linear-x", type=float, default=0.55)
