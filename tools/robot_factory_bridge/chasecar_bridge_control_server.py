@@ -400,10 +400,20 @@ def _start_remote_episode(cmd, outfile, running_label, started_msg, source, epdi
     return {"ok": True, "msg": started_msg}
 
 
+# operator-selectable steering for the next GO. Arc gains are the overnight
+# sim-tuned set (honest-dynamics sweep 2026-07-03: 0% failures, 1.6 overshoots
+# vs pulse 69%/18) — NOT the onboard code defaults.
+steer = {"mode": "pulse"}
+steer_lock = threading.Lock()
+ARC_GAINS = ["--steering", "arc", "--kp", "0.50", "--kd", "0.15", "--slew", "2.00"]
+
+
 def start_approach():
     stamp = int(time.time())
     outfile = os.path.join(RUNDIR, "run_%d.json" % stamp)
     epdir = os.path.join(REPO, "artifacts", "finetune_dataset", "inbox", "ep_%d" % stamp)
+    with steer_lock:
+        mode = steer["mode"]
     # GO = the validated hybrid loop: onboard brain on the Jetson drives via
     # localhost, consuming this server's fine-tune detection feed. The old
     # offboard controller (CTRL) carried its own weak ONNX detector and lost
@@ -415,8 +425,9 @@ def start_approach():
         "--min-confidence", "0.2", "--search-scan", "26", "--lost-limit", "12",
         "--standoff-m", "0.35", "--push-steps", "10",
         "--run-dir", "/home/jetson/chasecar_onboard/runs",
-    ]
-    return _start_remote_episode(cmd, outfile, "RUNNING", "started", "dashboard", epdir=epdir)
+    ] + (ARC_GAINS if mode == "arc" else [])
+    label = "RUNNING (%s)" % mode
+    return _start_remote_episode(cmd, outfile, label, "started " + mode, "dashboard", epdir=epdir)
 
 
 def start_reset():
@@ -448,6 +459,12 @@ DASH = """<!doctype html>
  .go{background:#147a46}.go:active{background:#0d5730}
  .stop{background:#b42318}.stop:active{background:#7a1d16}
  .reset{background:#8a6d1a}.reset:active{background:#5f4b10}
+ .seglabel{font-size:11px;color:#6b7280;margin:8px 0 2px;text-transform:uppercase;letter-spacing:.06em}
+ .seg{display:flex;margin:0 auto;max-width:280px;border:1px solid #2a2f3a;border-radius:12px;overflow:hidden}
+ .seg button{flex:1;font-size:15px;font-weight:700;border:none;padding:12px 8px;background:#1a1d24;color:#8b93a0}
+ .seg .pulse.sel{background:#3a4150;color:#fff}
+ .seg .arc.sel{background:#1d9e75;color:#fff}
+ .seg.locked{opacity:.45;pointer-events:none}
  .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px auto 0;max-width:280px}
  .pad button{font-size:26px;font-weight:700;border:none;border-radius:12px;color:#dfe2e8;background:#23262e;
    aspect-ratio:1;touch-action:none;-webkit-touch-callout:none}
@@ -468,7 +485,12 @@ DASH = """<!doctype html>
   <div class="status" id="status">connecting...</div>
  </div>
  <div class="col-ctl">
-  <div class="btns">
+  <div class="seglabel">steering (applies to next GO)</div>
+  <div class="seg" id="seg">
+   <button class="pulse sel" data-mode="pulse">PULSE</button>
+   <button class="arc" data-mode="arc">ARC &#9889;</button>
+  </div>
+  <div class="btns" style="margin-top:8px">
    <button class="go" id="go">GO</button>
    <button class="reset" id="reset">RESET</button>
    <button class="stop" id="stop">STOP</button>
@@ -492,6 +514,10 @@ DASH = """<!doctype html>
  document.getElementById('go').onclick=function(){document.getElementById('status').textContent='starting...';post('/go');};
  document.getElementById('reset').onclick=function(){document.getElementById('status').textContent='reversing last run...';post('/reset');};
  document.getElementById('stop').onclick=function(){document.getElementById('status').textContent='STOPPING...';post('/stop');};
+ function setSeg(mode){Array.prototype.forEach.call(document.querySelectorAll('#seg button'),function(b){b.classList.toggle('sel',b.getAttribute('data-mode')===mode);});}
+ Array.prototype.forEach.call(document.querySelectorAll('#seg button'),function(b){
+  b.onclick=function(){var mode=b.getAttribute('data-mode');setSeg(mode);post('/steer?mode='+mode).then(function(r){if(!r||!r.ok){/* server rejected (mid-run): tick() resyncs */}});};
+ });
  var jogTimer=null;
  function jogSend(lx,az){post('/jog?lx='+lx+'&az='+az);}
  function jogStart(btn){
@@ -519,6 +545,8 @@ DASH = """<!doctype html>
     var status = document.getElementById('status');
     status.textContent='approach: '+s.last+'   |   motion='+s.motion_enabled+'\\n'+det;
     status.style.color = (s.last && s.last.indexOf('STOP UNVERIFIED') === 0) ? '#ff5c5c' : '#9aa0a8';
+    if(s.steering){setSeg(s.steering);}
+    document.getElementById('seg').classList.toggle('locked', !!s.running);
    }).catch(function(){document.getElementById('status').textContent='status error';});
   }
  setInterval(tick,800);tick();
@@ -549,6 +577,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/status"):
             with lock:
                 s = {"running": bool(state["running"] or state.get("starting")), "last": state["last"]}
+            with steer_lock:
+                s["steering"] = steer["mode"]
             with cam_lock:
                 s["det"] = cam["det"]
                 s["det_ts"] = cam["ts"]
@@ -570,6 +600,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if self.path.startswith("/reset"):
             self._send(200, json.dumps(start_reset()), "application/json")
+            return
+        if self.path.startswith("/steer"):
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            mode = (qs.get("mode", [""])[0] or "").lower()
+            if mode not in ("pulse", "arc"):
+                self._send(400, json.dumps({"ok": False, "msg": "mode must be pulse|arc"}), "application/json")
+                return
+            with lock:
+                busy = bool(state["running"] or state.get("starting"))
+            if busy:
+                self._send(200, json.dumps({"ok": False, "msg": "cannot change mid-run"}), "application/json")
+                return
+            with steer_lock:
+                steer["mode"] = mode
+            self._send(200, json.dumps({"ok": True, "steering": mode}), "application/json")
             return
         if self.path.startswith("/jog_stop"):
             with jog_lock:
