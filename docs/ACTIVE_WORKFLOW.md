@@ -14,6 +14,24 @@ Owner priority update (2026-07-09): restore the locked bench stack, collect
 hardwood ARC evidence, apply trace-backed corrections, and clear the acquisition
 repeatability matrix. Fiducial delivery wiring waits behind that milestone.
 
+Owner unattended update (2026-07-10): agent-operated acquisition experiments
+may run while the owner is elsewhere in the house, but only through
+`scripts/hardware_acquisition_unattended_runner.py` in a confirmed isolated,
+dog-free room. The runner uses onboard TensorRT ARC with `push_steps=0`, verifies
+STOP/lock and camera health around every phase, preserves the trace, reverse
+replays only completed episodes, and requires post-reset geometry to match the
+baseline. It fail-closes on the first bad gate and caps a campaign at five
+cycles. Contact/push and delivery remain supervised because reverse replay does
+not reset the ball.
+
+Locked validation:
+
+`python scripts/hardware_acquisition_unattended_runner.py --cycles 1 --pretty`
+
+Live execution after the room isolation gate:
+
+`python scripts/hardware_acquisition_unattended_runner.py --cycles <1-5> --execute-motion --confirm-owner-unattended --room-isolated --pretty`
+
 **The sim multiball lane below is PAUSED at its June-11 state** (streak
 broken at 4/5 by seed `20260651`; Option A repair landed through Phase 2,
 verification rerun pending environment recovery). Nothing below this header

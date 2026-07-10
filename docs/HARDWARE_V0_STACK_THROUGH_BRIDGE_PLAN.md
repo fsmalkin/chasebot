@@ -210,7 +210,12 @@ board's final supported software). Approved sequence:
    The repair was deployed locked at commit `996a51c` with matching local/robot
    SHA-256, Jetson self-test green, a no-motion TensorRT dry-run
    `final_safe=true`, and final bridge health locked at zero motors.
-   **Open: hard-floor far-left rerun, then the 0.12<|err|<0.55 mid-band and
+   Owner direction on 2026-07-10 moves repeated acquisition into a guarded
+   unattended lane: no-contact standoff, verified STOP/lock, trace pull,
+   completed-tape reverse replay, and post-reset geometry verification, capped
+   at five cycles in an isolated dog-free room. Supervision owns push/contact;
+   reverse replay returns only the robot. **Open: validate and run
+   the unattended far-left cycle gate, then the 0.12<|err|<0.55 mid-band and
    repeatability matrix.**
 2. **STOP-integrity fixes** (same dispatch): verified stop chain per the
    2026-07-02 adversarial review (bridge_post ok/fail, hard_stop health

@@ -165,3 +165,19 @@ def test_status_payload_serves_target_with_its_own_freshness(monkeypatch):
 def test_dashboard_exposes_live_center_error_for_operator_setup():
     assert "s.det.center_error" in control_server.DASH
     assert "err=" in control_server.DASH
+
+
+def test_acquire_only_command_preserves_arc_gains_and_disables_push():
+    command = control_server.build_approach_command("arc", push_steps=0)
+
+    assert command[command.index("--push-steps") + 1] == "0"
+    assert command[command.index("--steering") + 1] == "arc"
+    assert command[command.index("--turn-gate") + 1] == "0.55"
+    assert command[command.index("--detector") + 1] == "trt"
+
+
+def test_dashboard_fetch_command_keeps_bounded_push_default():
+    command = control_server.build_approach_command("pulse")
+
+    assert command[command.index("--push-steps") + 1] == "10"
+    assert "--steering" not in command

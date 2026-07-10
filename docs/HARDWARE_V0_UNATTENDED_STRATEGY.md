@@ -1,5 +1,52 @@
 # Hardware V0 Unattended Strategy
 
+## Active Acquisition Contract (2026-07-10)
+
+The owner has authorized agent-operated unattended acquisition experiments
+while he is elsewhere in the house. The active implementation is
+`scripts/hardware_acquisition_unattended_runner.py`; this section supersedes the
+older offboard/color-stack operating details below where they conflict.
+
+The unattended lane is deliberately no-contact. It runs the current onboard
+TensorRT ARC brain to visual standoff with `push_steps=0`, verifies the bridge
+is locked, preserves the trace, reverse-replays the completed motion tape, then
+compares post-reset onboard target geometry with the pre-run baseline.
+Supervision owns push/contact and delivery because reverse replay returns only
+the robot.
+
+Live motion requires all of the following:
+
+- explicit `--execute-motion --confirm-owner-unattended --room-isolated` flags;
+- a hard-floor room closed to dogs and people, with a clear path;
+- a verified dashboard STOP chain, fresh bridge camera, and zero motors;
+- at least three high-confidence onboard TRT detections in the expected case;
+- one to five requested cycles and a campaign stop file;
+- per-phase timeouts, motor bounds, final relock, trace preservation, completed
+  reverse summary, and post-reset geometry within tolerance.
+
+The campaign stops after the first timeout, stale camera, detector mismatch,
+unsafe health response, nonzero final motor, missing trace, failed reverse,
+geometry drift, or stop-file request. Reverse replay requires a completed
+episode with a current motion tape.
+
+Direction impact:
+
+| Surface | Effect |
+| --- | --- |
+| Cost | No hardware spend |
+| Timeline | Adds one safety-runner slice, then accelerates repeated acquisition evidence |
+| Claims strengthened | Autonomous acquisition repeatability, STOP integrity, trace provenance, reset boundedness |
+| Claims deferred | Unattended contact, pushing, delivery, and multi-room navigation |
+| Work displaced | The manual one-off ARC rerun is replaced by the guarded no-contact cycle gate |
+
+Locked validation:
+
+`python scripts/hardware_acquisition_unattended_runner.py --cycles 1 --pretty`
+
+Live execution after room isolation is confirmed:
+
+`python scripts/hardware_acquisition_unattended_runner.py --cycles <1-5> --execute-motion --confirm-owner-unattended --room-isolated --pretty`
+
 ## Decision
 
 The hardware v0 unattended lane advances through one serial behavior gate at a

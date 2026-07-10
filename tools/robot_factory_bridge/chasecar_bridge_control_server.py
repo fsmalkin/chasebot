@@ -478,7 +478,19 @@ ARC_GAINS = ["--steering", "arc", "--kp", "0.30", "--kd", "0.10",
              "--slew", "1.00", "--turn-gate", "0.55"]
 
 
-def start_approach():
+def build_approach_command(mode, push_steps=10):
+    push_steps = max(0, min(10, int(push_steps)))
+    return [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", _robot_ssh_target(),
+        "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
+        "--detector", "trt",  # local GPU eyes; remote feed stays for the dashboard view
+        "--min-confidence", "0.2", "--search-scan", "26", "--lost-limit", "12",
+        "--standoff-m", "0.35", "--push-steps", str(push_steps),
+        "--run-dir", "/home/jetson/chasecar_onboard/runs",
+    ] + (ARC_GAINS if mode == "arc" else [])
+
+
+def start_approach(push_steps=10, source="dashboard"):
     stamp = int(time.time())
     outfile = os.path.join(RUNDIR, "run_%d.json" % stamp)
     epdir = os.path.join(REPO, "artifacts", "finetune_dataset", "inbox", "ep_%d" % stamp)
@@ -488,16 +500,9 @@ def start_approach():
     # localhost, consuming this server's fine-tune detection feed. The old
     # offboard controller (CTRL) carried its own weak ONNX detector and lost
     # the ball (3x lost_target on 2026-07-02); keep it only as a fallback.
-    cmd = [
-        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", _robot_ssh_target(),
-        "python3", "/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py",
-        "--detector", "trt",  # local GPU eyes (13.5ms/frame); remote feed stays for the dashboard view
-        "--min-confidence", "0.2", "--search-scan", "26", "--lost-limit", "12",
-        "--standoff-m", "0.35", "--push-steps", "10",
-        "--run-dir", "/home/jetson/chasecar_onboard/runs",
-    ] + (ARC_GAINS if mode == "arc" else [])
+    cmd = build_approach_command(mode, push_steps=push_steps)
     label = "RUNNING (%s)" % mode
-    return _start_remote_episode(cmd, outfile, label, "started " + mode, "dashboard", epdir=epdir)
+    return _start_remote_episode(cmd, outfile, label, "started " + mode, source, epdir=epdir)
 
 
 def start_reset():
@@ -676,6 +681,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(200, DASH)
 
     def do_POST(self):
+        if self.path.startswith("/go-acquire-only"):
+            self._send(200, json.dumps(start_approach(push_steps=0, source="unattended_acquire")),
+                       "application/json")
+            return
         if self.path.startswith("/go"):
             self._send(200, json.dumps(start_approach()), "application/json")
             return

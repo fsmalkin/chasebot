@@ -131,11 +131,17 @@ it reproduces any observed hardware failure.
 
 ## Operator and Agent Roles
 
-The operator powers the robot, clears the floor, places the ball, selects ARC,
-and presses GO or STOP. The agent owns transport checks, locked deployment,
-camera and detector verification, trace collection, diagnosis, code, tests, and
-evidence packaging. The operator exclusively owns motion activation and the GO,
-RESET, and jog controls.
+The operator powers the robot, establishes a hard-floor test room closed to
+dogs and people, clears the path, and places the ball. The agent owns transport
+checks, locked deployment, camera and detector verification, trace collection,
+diagnosis, code, tests, and evidence packaging.
+
+Owner direction on 2026-07-10 additionally authorizes agent-operated unattended
+acquisition cycles through `scripts/hardware_acquisition_unattended_runner.py`.
+That lane is limited to no-contact ARC standoff, verified STOP/lock, trace
+preservation, reverse replay of completed motion tapes, and post-reset geometry
+verification. Contact/push, delivery, dashboard jog, and arbitrary GO/RESET
+outside the guarded runner remain supervised.
 
 When progress needs a physical action, safety observation, or owner decision,
 the agent sends a mobile attention notification with the exact request. Safe

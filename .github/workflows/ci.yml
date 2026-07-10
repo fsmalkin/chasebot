@@ -64,7 +64,11 @@ jobs:
           PY
 
       - name: Control-server regression tests
-        run: python -m pytest tests/test_chasecar_ci_control_server.py -q
+        run: |
+          python -m pytest \
+            tests/test_chasecar_ci_control_server.py \
+            tests/test_hardware_acquisition_unattended_runner.py \
+            -q
 
       - name: PowerShell script parse check
         shell: pwsh

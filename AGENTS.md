@@ -79,6 +79,29 @@ reachability, tool-controlled motion lock, verified stop path, fresh camera,
 coherent target/detector state, bounded command limits, and final motors zero
 with the bridge locked.
 
+## Unattended Hardware Experiment Contract
+
+Owner direction on 2026-07-10 authorizes agent-operated unattended acquisition
+experiments while the owner is elsewhere in the house. This is a narrow lane,
+not blanket permission for arbitrary GO, RESET, jog, contact, or delivery runs.
+
+Use only `scripts/hardware_acquisition_unattended_runner.py`. Live execution
+requires its explicit owner-confirmation and isolated-room flags. The room must
+be closed to dogs and people with a clear hard-floor path. Each cycle must:
+
+1. verify STOP, bridge lock, zero motors, fresh camera, and repeated onboard TRT
+   target geometry;
+2. run ARC to visual standoff with `push_steps=0`;
+3. verify post-episode STOP/lock and preserve the onboard trace;
+4. reverse-replay only a completed episode's motion tape;
+5. verify STOP/lock again and compare post-reset target geometry with baseline;
+6. stop the campaign on the first failed check, timeout, drift violation, stale
+   frame, motor-bound violation, or operator stop file.
+
+Keep unattended campaigns at five cycles or fewer. Contact/push and delivery
+remain supervised because dead-reckoned reverse resets the robot, not the ball,
+and wheel slip accumulates without encoders.
+
 ## Baseline
 
 1. Runtime substrate: Docker-first (`docker compose` profiles).
@@ -107,6 +130,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 
 | Task | Command |
 |------|---------|
+| Hardware unattended acquisition | `python scripts/hardware_acquisition_unattended_runner.py --cycles <1-5> --execute-motion --confirm-owner-unattended --room-isolated --pretty` |
 | First UAT | `scripts/run_first_uat.ps1 -ExecutionLane container_kilted -Distro Ubuntu-24.04 -RuntimeTarget robot_fidelity_orin` |
 | Full replay | `scripts/run_compose_uat.ps1 -Action run -ProjectName <name> -RuntimeTarget robot_fidelity_orin -UatMode full_replay -UatExecutionContext sim_gate` |
 | Pre-LLM dual | `scripts/run_headless_pre_llm.ps1 -Lane dual` |
