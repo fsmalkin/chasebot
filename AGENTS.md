@@ -26,6 +26,13 @@ required, ask for it and wait through the available tool when possible.
 For notifications:
 - Agent notifications and pings go through the Claude mobile app via the
   `PushNotification` tool.
+- During live hardware work, immediately send a mobile notification whenever
+  progress needs the operator's physical action, safety observation, or
+  decision. State the exact requested action and do not rely on a chat-only
+  message. Use the runtime's direct push tool when available; otherwise end the
+  requesting turn so the terminal notification hook delivers the alert.
+- Continue safe autonomous work between operator gates; notification is for a
+  real attention requirement, not routine progress.
 - The Telegram bridge is retired (2026-06-10); do not use `mcp__telegram__*`
   tools.
 - Keep agent-authored start, milestone, blocker, and completion updates in chat

@@ -88,8 +88,14 @@ it reproduces any observed hardware failure.
 - The historical baseline scorecard reproduced the known evidence classes. Its
   local output is
   `artifacts/session/hardware_acquisition_baseline_20260709/onboard_acquisition_trace_scorecard/scorecard.md`.
-- The first new far-left hard-floor episode is waiting for operator ball
-  placement. ARC is selected and the bridge remains locked.
+- The robot has been relocated to a second hardwood room. A locked inspection
+  confirmed a fresh gstreamer frame, bridge health `ok=true`, both motors at
+  zero, and `commands_received=0`; the raw setup frame is
+  `artifacts/session/hardware_live_20260709/new_room_camera.jpg`.
+- The ball is currently live at about `z=0.73 m` and `center_error=-0.19`.
+  Distance is in range; the first far-left episode is waiting only for lateral
+  placement below `center_error=-0.60`. ARC is selected and the bridge remains
+  locked.
 
 ## Direction Impact
 
@@ -108,6 +114,10 @@ and presses GO or STOP. The agent owns transport checks, locked deployment,
 camera and detector verification, trace collection, diagnosis, code, tests, and
 evidence packaging. The operator exclusively owns motion activation and the GO,
 RESET, and jog controls.
+
+When progress needs a physical action, safety observation, or owner decision,
+the agent sends a mobile attention notification with the exact request. Safe
+autonomous work continues between those operator gates.
 
 ## Stop Conditions
 
