@@ -110,8 +110,14 @@ it reproduces any observed hardware failure.
   judgment before another pivot. The forward ARC regime is unchanged. The
   trace-calibrated simulator reproduces `lost_target` with the old unbounded
   turn and reaches standoff with the bounded controller; symmetric left/right
-  delayed-camera cases also pass. A locked deploy and hard-floor rerun remain
-  required before the repair is called proven.
+  delayed-camera cases also pass.
+- The repair was deployed while locked at commit `996a51c`; local and robot
+  SHA-256 matched (`80906b1d765a0077669096ff74c190c23448376fe1c846cc6d43a7f268c11542`).
+  The Jetson Python 3.6 self-test and a three-frame TensorRT dry-run passed with
+  `final_safe=true`, `commands_received=57` unchanged from the failed episode,
+  motion disabled, and both motors at zero. The current raw frame contains no
+  visible ball, so a hard-floor operator rerun remains required before the
+  repair is called proven.
 
 ## Direction Impact
 

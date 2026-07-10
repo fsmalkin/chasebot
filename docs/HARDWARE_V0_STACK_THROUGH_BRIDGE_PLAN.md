@@ -207,8 +207,11 @@ board's final supported software). Approved sequence:
    stops, discards the first post-turn frame, and rejudges from a fresh frame;
    the smooth forward regime is unchanged. Offline reproduction, both-edge
    delayed-camera cases, Python 3.6 compatibility, and onboard self-test pass.
-   **Open: locked deploy, hard-floor far-left rerun, then the
-   0.12<|err|<0.55 mid-band and repeatability matrix.**
+   The repair was deployed locked at commit `996a51c` with matching local/robot
+   SHA-256, Jetson self-test green, a no-motion TensorRT dry-run
+   `final_safe=true`, and final bridge health locked at zero motors.
+   **Open: hard-floor far-left rerun, then the 0.12<|err|<0.55 mid-band and
+   repeatability matrix.**
 2. **STOP-integrity fixes** (same dispatch): verified stop chain per the
    2026-07-02 adversarial review (bridge_post ok/fail, hard_stop health
    read-back + honest "UNVERIFIED" UI, synchronous remote pkill on episode
