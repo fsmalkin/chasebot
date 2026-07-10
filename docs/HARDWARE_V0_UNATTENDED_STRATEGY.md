@@ -29,6 +29,11 @@ unsafe health response, nonzero final motor, missing trace, failed reverse,
 geometry drift, or stop-file request. Reverse replay requires a completed
 episode with a current motion tape.
 
+Unattended acquisition runs remain in scope until the owner explicitly pauses
+or revokes them. Agents proceed under that standing scope. Concrete
+safety-relevant physical conditions require verification; owner confirmation
+supplies conditions beyond tool visibility.
+
 Direction impact:
 
 | Surface | Effect |

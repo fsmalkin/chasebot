@@ -490,12 +490,14 @@ def build_approach_command(mode, push_steps=10):
     ] + (ARC_GAINS if mode == "arc" else [])
 
 
-def start_approach(push_steps=10, source="dashboard"):
+def start_approach(push_steps=10, source="dashboard", steering_mode=None):
     stamp = int(time.time())
     outfile = os.path.join(RUNDIR, "run_%d.json" % stamp)
     epdir = os.path.join(REPO, "artifacts", "finetune_dataset", "inbox", "ep_%d" % stamp)
     with steer_lock:
-        mode = steer["mode"]
+        mode = steering_mode or steer["mode"]
+    if mode not in ("pulse", "arc"):
+        return {"ok": False, "msg": "invalid steering mode"}
     # GO = the validated hybrid loop: onboard brain on the Jetson drives via
     # localhost, consuming this server's fine-tune detection feed. The old
     # offboard controller (CTRL) carried its own weak ONNX detector and lost
@@ -682,7 +684,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path.startswith("/go-acquire-only"):
-            self._send(200, json.dumps(start_approach(push_steps=0, source="unattended_acquire")),
+            self._send(200, json.dumps(start_approach(push_steps=0, source="unattended_acquire",
+                                                     steering_mode="arc")),
                        "application/json")
             return
         if self.path.startswith("/go"):

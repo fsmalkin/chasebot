@@ -181,3 +181,32 @@ def test_dashboard_fetch_command_keeps_bounded_push_default():
 
     assert command[command.index("--push-steps") + 1] == "10"
     assert "--steering" not in command
+
+
+def test_unattended_start_forces_arc_independent_of_dashboard_toggle(monkeypatch):
+    captured = {}
+
+    def fake_start(command, _outfile, _label, _message, source, epdir=None):
+        captured["command"] = command
+        captured["source"] = source
+        captured["epdir"] = epdir
+        return {"ok": True}
+
+    monkeypatch.setattr(control_server, "_start_remote_episode", fake_start)
+    with control_server.steer_lock:
+        original = control_server.steer["mode"]
+        control_server.steer["mode"] = "pulse"
+    try:
+        result = control_server.start_approach(
+            push_steps=0,
+            source="unattended_acquire",
+            steering_mode="arc",
+        )
+    finally:
+        with control_server.steer_lock:
+            control_server.steer["mode"] = original
+
+    assert result["ok"] is True
+    assert captured["source"] == "unattended_acquire"
+    assert captured["command"][captured["command"].index("--push-steps") + 1] == "0"
+    assert captured["command"][captured["command"].index("--steering") + 1] == "arc"

@@ -87,7 +87,11 @@ not blanket permission for arbitrary GO, RESET, jog, contact, or delivery runs.
 
 Use only `scripts/hardware_acquisition_unattended_runner.py`. Live execution
 requires its explicit owner-confirmation and isolated-room flags. The room must
-be closed to dogs and people with a clear hard-floor path. Each cycle must:
+be closed to dogs and people with a clear hard-floor path. Unattended
+acquisition runs are standing in scope unless the owner explicitly pauses or
+revokes them; agents do not request fresh scope authorization for each
+campaign. Concrete safety-relevant physical conditions require verification;
+owner confirmation supplies conditions beyond tool visibility. Each cycle must:
 
 1. verify STOP, bridge lock, zero motors, fresh camera, and repeated onboard TRT
    target geometry;
