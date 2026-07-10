@@ -24,7 +24,8 @@ jobs:
 
       - name: Python 3.6 compatibility gate for Jetson onboard fetch
         run: |
-          vermin --target=3.6 --violations \
+          # The trailing '-' accepts requirements at or below the Jetson's 3.6 runtime.
+          vermin --target=3.6- --violations \
             tools/robot_factory_bridge/chasecar_onboard_fetch.py \
             tools/robot_factory_bridge/onboard_route_policy.py
 

@@ -33,10 +33,9 @@ import os
 import threading
 import time
 
-try:
-    from urllib.request import Request, urlopen  # py3
-except ImportError:  # pragma: no cover
-    from urllib2 import Request, urlopen  # type: ignore
+# The deployed Jetson runtime is Python 3.6. Keeping a Python 2 fallback here
+# makes compatibility scanners classify this Python-3-only file as ambiguous.
+from urllib.request import Request, urlopen
 
 import cv2
 import numpy as np
