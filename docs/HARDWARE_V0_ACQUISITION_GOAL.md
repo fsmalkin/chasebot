@@ -92,10 +92,26 @@ it reproduces any observed hardware failure.
   confirmed a fresh gstreamer frame, bridge health `ok=true`, both motors at
   zero, and `commands_received=0`; the raw setup frame is
   `artifacts/session/hardware_live_20260709/new_room_camera.jpg`.
-- The ball is currently live at about `z=0.73 m` and `center_error=-0.19`.
-  Distance is in range; the first far-left episode is waiting only for lateral
-  placement below `center_error=-0.60`. ARC is selected and the bridge remains
-  locked.
+- Before the first run, the ball was live at about `z=0.59 m` and
+  `center_error=-0.79`, fully visible at the far-left edge. ARC was selected
+  and the bridge was locked.
+- The first far-left hard-floor diagnostic ran as
+  `onboard_1652159798` from `center_error=-0.7926`. It issued ten continuous
+  turn-regime commands, made no measured centering or range progress, swept the
+  ball out of view, and ended `lost_target` with `final_safe=true`. The preserved
+  scorecard is
+  `artifacts/session/hardware_live_20260709/failed_far_left_2300/onboard_acquisition_trace_scorecard/scorecard.md`.
+- Root cause: ARC treated repeated cached camera frames as fresh and continued
+  a full-speed in-place pivot through tracker coasting. The tuning simulator
+  also incorrectly allowed a pure pivot to satisfy standoff by shrinking
+  forward-axis projection; that metric is now physical robot-to-ball range.
+- Decision: the far-off ARC regime now uses a bounded `0.08-0.16 s` pivot,
+  stops, discards the first post-turn frame, and requires a fresh camera
+  judgment before another pivot. The forward ARC regime is unchanged. The
+  trace-calibrated simulator reproduces `lost_target` with the old unbounded
+  turn and reaches standoff with the bounded controller; symmetric left/right
+  delayed-camera cases also pass. A locked deploy and hard-floor rerun remain
+  required before the repair is called proven.
 
 ## Direction Impact
 

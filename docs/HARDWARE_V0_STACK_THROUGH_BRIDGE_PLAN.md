@@ -196,6 +196,19 @@ board's final supported software). Approved sequence:
    discipline from this saga: a simulator earns tuning authority only by
    reproducing an observed hardware failure; and never conclude chassis
    capability from a carpet run — surface is a variable.
+   **Hard-floor result and repair (2026-07-09):** the first far-left run
+   (`onboard_1652159798`, start error `-0.7926`) pivoted on hardwood but treated
+   repeated cached frames as fresh, continued at full turn through tracker
+   coasting, swept the ball out of view, and ended `lost_target` safely. The
+   simulator initially hid this failure by treating reduced forward-axis
+   projection during a pure pivot as standoff; physical range and cached-frame
+   reuse are now modeled. The old unbounded turn reproduces the hardware
+   failure. The repaired far-off regime uses a bounded `0.08-0.16 s` pivot,
+   stops, discards the first post-turn frame, and rejudges from a fresh frame;
+   the smooth forward regime is unchanged. Offline reproduction, both-edge
+   delayed-camera cases, Python 3.6 compatibility, and onboard self-test pass.
+   **Open: locked deploy, hard-floor far-left rerun, then the
+   0.12<|err|<0.55 mid-band and repeatability matrix.**
 2. **STOP-integrity fixes** (same dispatch): verified stop chain per the
    2026-07-02 adversarial review (bridge_post ok/fail, hard_stop health
    read-back + honest "UNVERIFIED" UI, synchronous remote pkill on episode

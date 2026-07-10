@@ -302,6 +302,11 @@ def stiction_slew(prev, target, max_rate, dt, floor):
     return value
 
 
+def turn_pulse_duration(center_error):
+    """Bound an open-loop pivot before requiring a fresh camera judgment."""
+    return max(0.08, min(0.16, 0.35 * abs(float(center_error))))
+
+
 def bridge_cmd_vel_to_motor_units(linear_x, angular_z):
     linear_unit = clamp(float(linear_x) / BRIDGE_MAX_LINEAR_X, -1.0, 1.0)
     angular_unit = clamp(float(angular_z) / BRIDGE_MAX_ANGULAR_Z, -1.0, 1.0)
@@ -343,7 +348,8 @@ def compute_arc_drive_command(err, err_rate, cfg, kp, kd, slew, dt, prev_lx, pre
 
 
 def decide_arc_fetch_action(obs, state, cfg, tracker, args, t_now, prev_lx, prev_az, prev_cmd_t):
-    if detection_usable(obs, cfg):
+    fresh_detection = detection_usable(obs, cfg)
+    if fresh_detection:
         est = tracker.update(obs, t_now)
     else:
         est = tracker.predict(t_now)
@@ -373,15 +379,39 @@ def decide_arc_fetch_action(obs, state, cfg, tracker, args, t_now, prev_lx, prev
     if int(state.get("forward_steps", 0)) >= int(cfg["forward_budget"]):
         return {"action": ACT_STOP, "reason": "forward_budget_exhausted", "z_m": round(z_m, 4)}, servo_obs, prev_lx, prev_az, prev_cmd_t
 
+    err = float(servo_obs["center_error"])
+    if abs(err) > float(args.turn_gate):
+        if not fresh_detection:
+            lost = int(state.get("lost_count", 0)) + 1
+            if lost > int(cfg["lost_limit"]):
+                d = {"action": ACT_STOP, "reason": "lost_target", "lost_count": lost}
+            else:
+                d = {"action": ACT_HOLD, "reason": "arc_turn_wait_fresh", "lost_count": lost,
+                     "z_m": round(z_m, 4), "coasting": True,
+                     "center_error": round(err, 5), "arc_regime": "turn"}
+            return d, servo_obs, 0.0, 0.0, float(t_now)
+
+        turn_mag = max(abs(float(cfg["turn_angular_z"])), arc_turn_angular_floor())
+        turn_mag = min(turn_mag, BRIDGE_MAX_ANGULAR_Z)
+        angular = -sign_of(err) * turn_mag
+        d = {"action": ACT_TURN, "reason": "arc_turn_pulse", "angular_z": angular,
+             "target_angular_z": angular, "linear_x": 0.0, "target_linear_x": 0.0,
+             "pulse_s": round(turn_pulse_duration(err), 4),
+             "z_m": round(z_m, 4), "coasting": False,
+             "center_error": round(err, 5), "arc_regime": "turn",
+             "turn_gate": round(float(args.turn_gate), 4),
+             "linear_floor": round(arc_forward_linear_floor(), 4)}
+        return d, servo_obs, 0.0, 0.0, float(t_now)
+
     dt = max(0.01, float(t_now) - float(prev_cmd_t))
     lx, az, lx_target, az_target = compute_arc_drive_command(
-        servo_obs["center_error"], servo_obs.get("center_rate", 0.0), cfg,
+        err, servo_obs.get("center_rate", 0.0), cfg,
         args.kp, args.kd, args.slew, dt, prev_lx, prev_az, args.turn_gate)
     d = {"action": ACT_FORWARD, "reason": "arc_approach", "linear_x": lx, "angular_z": az,
          "target_linear_x": round(lx_target, 4), "target_angular_z": round(az_target, 4),
          "z_m": round(z_m, 4), "coasting": bool(est["coasting"]),
-         "center_error": round(float(servo_obs["center_error"]), 5),
-         "arc_regime": "turn" if abs(float(servo_obs["center_error"])) > float(args.turn_gate) else "forward",
+         "center_error": round(err, 5),
+         "arc_regime": "forward",
          "turn_gate": round(float(args.turn_gate), 4),
          "linear_floor": round(arc_forward_linear_floor(), 4)}
     return d, servo_obs, lx, az, float(t_now)
@@ -743,7 +773,7 @@ def run(args):
                 # refresher's max-age auto-coasts to zero if this persists)
                 time.sleep(0.15)
                 continue
-            if discard_after_turn and not args.dry_run and args.steering != "arc":
+            if discard_after_turn and not args.dry_run:
                 # first fresh verdict after a turn can describe a pre-turn frame
                 # (feed lag ~0.5-1s): acting on it double-corrects and sweeps the
                 # ball across/out of frame (trace onboard_1652156968: err +0.94 ->
@@ -786,7 +816,7 @@ def run(args):
                 break
             if d["action"] == ACT_TURN:
                 ce = abs(float(obs.get("center_error") or 0.0))
-                turn_dur = max(0.08, min(0.16, 0.35 * ce))
+                turn_dur = float(d.get("pulse_s", turn_pulse_duration(ce)))
                 refresher.set(0.0, d["angular_z"], hold_s=turn_dur)
                 time.sleep(turn_dur + 0.30)  # settle + let a fresh frame land (local, fast)
                 discard_after_turn = True
@@ -925,10 +955,13 @@ def _selftest_observe(robot, ball_xy, cfg):
     center_error, forward = _selftest_center_error(robot, ball_xy, 62.0)
     if center_error is None or abs(center_error) > 1.08:
         return {"detected": False}
+    dx = ball_xy[0] - robot["x"]
+    dy = ball_xy[1] - robot["y"]
+    range_m = math.hypot(dx, dy)
     return {"detected": True,
             "confidence": 0.92,
             "center_error": center_error,
-            "equiv_diameter_px": float(cfg["k_px_m"]) / max(forward, 1.0e-6)}
+            "equiv_diameter_px": float(cfg["k_px_m"]) / max(range_m, 1.0e-6)}
 
 
 def _selftest_step_robot(robot, linear_x, angular_z, dt):
@@ -965,6 +998,7 @@ def _selftest_arc_closed_loop_from_edge(cfg, args):
     command_lx = 0.0
     command_az = 0.0
     progress_m = 0.0
+    initial_range = math.hypot(ball_xy[0] - robot["x"], ball_xy[1] - robot["y"])
     stop_reason = "timeout"
     for _i in range(180):
         obs = _selftest_observe(robot, ball_xy, cfg)
@@ -979,11 +1013,27 @@ def _selftest_arc_closed_loop_from_edge(cfg, args):
             command_az = decision.get("angular_z", 0.0)
             if decision.get("arc_regime") != "turn":
                 state["forward_steps"] += 1
+        elif decision["action"] == ACT_TURN:
+            command_lx = 0.0
+            command_az = decision.get("angular_z", 0.0)
+            pulse_s = float(decision.get("pulse_s", turn_pulse_duration(obs.get("center_error", 0.0))))
+            pulse_steps = max(1, int(math.ceil(pulse_s / 0.02)))
+            for _sub in range(pulse_steps):
+                _selftest_step_robot(robot, command_lx, command_az, 0.02)
+                t += 0.02
+            command_lx = 0.0
+            command_az = 0.0
+            for _sub in range(15):
+                _selftest_step_robot(robot, 0.0, 0.0, 0.02)
+                t += 0.02
+        elif decision["action"] == ACT_HOLD:
+            command_lx = 0.0
+            command_az = 0.0
         for _sub in range(6):
             _selftest_step_robot(robot, command_lx, command_az, 0.02)
             t += 0.02
-        _ce, z_m = _selftest_center_error(robot, ball_xy, 62.0)
-        progress_m = max(progress_m, forward_z - z_m)
+        range_m = math.hypot(ball_xy[0] - robot["x"], ball_xy[1] - robot["y"])
+        progress_m = max(progress_m, initial_range - range_m)
     return {"stop_reason": stop_reason,
             "progress_m": round(progress_m, 4),
             "forward_steps": int(state["forward_steps"])}

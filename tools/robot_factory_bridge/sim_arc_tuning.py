@@ -44,6 +44,7 @@ MAX_LINEAR_SPEED_MPS = 0.46
 COMMAND_EXPIRY_S = 0.45
 REFRESH_HZ = 10.0
 PERCEPTION_HZ = 15.0
+CONTROLLER_HZ = 8.0
 PERCEPTION_LATENCY_S = 0.08
 CAMERA_WIDTH_PX = 320
 HFOV_DEG = 62.0
@@ -79,7 +80,9 @@ class SimConstants:
     command_expiry_s: float = COMMAND_EXPIRY_S
     refresh_hz: float = REFRESH_HZ
     perception_hz: float = PERCEPTION_HZ
+    controller_hz: float = CONTROLLER_HZ
     perception_latency_s: float = PERCEPTION_LATENCY_S
+    reuse_latest_observation: bool = False
     camera_width_px: int = CAMERA_WIDTH_PX
     hfov_deg: float = HFOV_DEG
     pixel_noise_sigma: float = PIXEL_NOISE_SIGMA
@@ -214,6 +217,7 @@ class PerceptionPipeline:
     def _project(self, robot: RobotKinematics) -> dict[str, Any]:
         dx = self.ball_xy[0] - robot.x
         dy = self.ball_xy[1] - robot.y
+        range_m = math.hypot(dx, dy)
         forward = math.cos(robot.yaw) * dx + math.sin(robot.yaw) * dy
         left = -math.sin(robot.yaw) * dx + math.cos(robot.yaw) * dy
         right = -left
@@ -228,7 +232,7 @@ class PerceptionPipeline:
             return {"detected": False}
         sigma_center = self.c.pixel_noise_sigma / (self.c.camera_width_px / 2.0)
         noisy_center = center_error + float(self.rng.normal(0.0, sigma_center))
-        noisy_size = self.c.k_px_m / max(forward, 1.0e-6) + float(self.rng.normal(0.0, self.c.pixel_noise_sigma))
+        noisy_size = self.c.k_px_m / max(range_m, 1.0e-6) + float(self.rng.normal(0.0, self.c.pixel_noise_sigma))
         return {
             "detected": True,
             "confidence": 0.92,
@@ -271,6 +275,13 @@ def true_forward_range(robot: RobotKinematics, ball_xy: tuple[float, float]) -> 
     dx = ball_xy[0] - robot.x
     dy = ball_xy[1] - robot.y
     return math.cos(robot.yaw) * dx + math.sin(robot.yaw) * dy
+
+
+def true_range(robot: RobotKinematics, ball_xy: tuple[float, float]) -> float:
+    """Physical robot-to-ball range, independent of camera heading."""
+    dx = ball_xy[0] - robot.x
+    dy = ball_xy[1] - robot.y
+    return math.hypot(dx, dy)
 
 
 def generate_placements(seed: int, episodes: int) -> list[Placement]:
@@ -376,6 +387,68 @@ def _legacy_decide_arc_fetch_action(
     return d, servo_obs, lx, az, float(t_now)
 
 
+def _unbounded_turn_decide_arc_fetch_action(
+    obs: dict[str, Any],
+    state: dict[str, Any],
+    cfg: dict[str, Any],
+    tracker: Any,
+    args: SimpleNamespace,
+    t_now: float,
+    prev_lx: float,
+    prev_az: float,
+    prev_cmd_t: float,
+) -> tuple[dict[str, Any], dict[str, Any], float, float, float]:
+    """Snapshot the pre-repair two-regime controller for failure reproduction.
+
+    This deliberately preserves the July 9 hard-floor behavior: cached frames
+    are treated as fresh, and an in-place turn continues while the tracker
+    coasts. Keep it simulator-only so the observed overshoot remains a durable
+    regression witness after the onboard controller is repaired.
+    """
+    if onboard.detection_usable(obs, cfg):
+        est = tracker.update(obs, t_now)
+    else:
+        est = tracker.predict(t_now)
+    if est is None or float(est.get("fresh_s", 999.0)) > float(args.coast_s):
+        d = onboard.decide_fetch_action(obs, state, cfg)
+        return d, obs, prev_lx, prev_az, prev_cmd_t
+
+    servo_obs = dict(obs)
+    servo_obs["detected"] = True
+    servo_obs[cfg["size_key"]] = float(est["equiv_diameter_px"])
+    servo_obs["equiv_diameter_px"] = float(est["equiv_diameter_px"])
+    servo_obs["center_error"] = float(est["center_error"])
+    servo_obs["center_rate"] = float(est["center_rate"])
+    servo_obs["confidence"] = max(float(obs.get("confidence", 0.0) or 0.0), float(cfg["min_confidence"]))
+    servo_obs["coasting"] = bool(est["coasting"])
+    servo_obs["fresh_s"] = round(float(est["fresh_s"]), 3)
+
+    step = int(state.get("step", 0))
+    if step >= int(cfg["max_steps"]):
+        return {"action": onboard.ACT_STOP, "reason": "max_steps_reached"}, servo_obs, prev_lx, prev_az, prev_cmd_t
+    size_px = float(servo_obs.get(cfg["size_key"], 0.0) or 0.0)
+    if size_px <= 0.0:
+        return onboard.decide_fetch_action(obs, state, cfg), obs, prev_lx, prev_az, prev_cmd_t
+    z_m = float(cfg["k_px_m"]) / size_px
+    if z_m <= float(cfg["standoff_m"]):
+        return {"action": onboard.ACT_STOP, "reason": "standoff_reached", "z_m": round(z_m, 4)}, servo_obs, prev_lx, prev_az, prev_cmd_t
+    if int(state.get("forward_steps", 0)) >= int(cfg["forward_budget"]):
+        return {"action": onboard.ACT_STOP, "reason": "forward_budget_exhausted", "z_m": round(z_m, 4)}, servo_obs, prev_lx, prev_az, prev_cmd_t
+
+    dt = max(0.01, float(t_now) - float(prev_cmd_t))
+    lx, az, lx_target, az_target = onboard.compute_arc_drive_command(
+        servo_obs["center_error"], servo_obs.get("center_rate", 0.0), cfg,
+        args.kp, args.kd, args.slew, dt, prev_lx, prev_az, args.turn_gate)
+    d = {"action": onboard.ACT_FORWARD, "reason": "arc_approach", "linear_x": lx, "angular_z": az,
+         "target_linear_x": round(lx_target, 4), "target_angular_z": round(az_target, 4),
+         "z_m": round(z_m, 4), "coasting": bool(est["coasting"]),
+         "center_error": round(float(servo_obs["center_error"]), 5),
+         "arc_regime": "turn" if abs(float(servo_obs["center_error"])) > float(args.turn_gate) else "forward",
+         "turn_gate": round(float(args.turn_gate), 4),
+         "linear_floor": round(onboard.arc_forward_linear_floor(), 4)}
+    return d, servo_obs, lx, az, float(t_now)
+
+
 def run_episode(
     placement: Placement,
     mode: str = "arc",
@@ -400,9 +473,12 @@ def run_episode(
     arc_az = 0.0
     arc_cmd_t = 0.0
     controller_blocked_until = 0.0
+    next_controller_t = 0.0
+    latest_observation: dict[str, Any] | None = None
+    discard_after_turn = False
     setpoint_hold_until = -999.0
     stop_reason = "timeout"
-    initial_z_m = true_forward_range(robot, ball_xy)
+    initial_z_m = true_range(robot, ball_xy)
     first_command_t = None
     centered_once = False
     last_center_sign = 0
@@ -415,7 +491,7 @@ def run_episode(
         lx_apply, az_apply = commands.command_at(t)
         _v, _omega = robot.step(lx_apply, az_apply, c.dt_s)
         ce_true = true_center_error(robot, ball_xy, c)
-        z_true = true_forward_range(robot, ball_xy)
+        z_true = true_range(robot, ball_xy)
         trace.append(
             {
                 "t": round(t, 4),
@@ -446,10 +522,27 @@ def run_episode(
             break
 
         observations = perception.observations_ready(t)
-        if observations and t >= controller_blocked_until:
-            obs = observations[-1]
+        if observations:
+            latest_observation = observations[-1]
+        controller_due = bool(observations)
+        if c.reuse_latest_observation:
+            controller_due = latest_observation is not None and t >= next_controller_t - 1.0e-9
+            if t >= next_controller_t - 1.0e-9:
+                period = 1.0 / max(0.1, float(c.controller_hz))
+                while next_controller_t <= t + 1.0e-9:
+                    next_controller_t += period
+        if (controller_due and latest_observation is not None and t >= controller_blocked_until
+                and discard_after_turn):
+            discard_after_turn = False
+            controller_blocked_until = t + 0.15
+        elif controller_due and latest_observation is not None and t >= controller_blocked_until:
+            obs = latest_observation
             if mode == "arc":
                 decision, _policy_obs, arc_lx, arc_az, arc_cmd_t = onboard.decide_arc_fetch_action(
+                    obs, state, cfg, tracker, args, t, arc_lx, arc_az, arc_cmd_t
+                )
+            elif mode == "arc_unbounded_turn":
+                decision, _policy_obs, arc_lx, arc_az, arc_cmd_t = _unbounded_turn_decide_arc_fetch_action(
                     obs, state, cfg, tracker, args, t, arc_lx, arc_az, arc_cmd_t
                 )
             elif mode == "arc_legacy":
@@ -459,7 +552,7 @@ def run_episode(
             else:
                 decision = onboard.decide_fetch_action(obs, state, cfg)
             state["step"] += 1
-            if mode in ("arc", "arc_legacy") and decision.get("reason") == "arc_approach":
+            if mode in ("arc", "arc_legacy", "arc_unbounded_turn") and decision.get("reason") == "arc_approach":
                 state["lost_count"] = 0
             else:
                 state["lost_count"] = decision.get("lost_count", 0 if obs.get("detected") else state["lost_count"])
@@ -471,18 +564,19 @@ def run_episode(
                 break
             if action == onboard.ACT_TURN:
                 err = abs(float(obs.get("center_error") or 0.0))
-                turn_dur = max(0.08, min(0.16, 0.35 * err))
+                turn_dur = float(decision.get("pulse_s", onboard.turn_pulse_duration(err)))
                 commands.set(0.0, decision["angular_z"], t)
                 controller_blocked_until = t + turn_dur + 0.30
                 setpoint_hold_until = t + turn_dur
+                discard_after_turn = True
             elif action == onboard.ACT_FORWARD:
                 commands.set(decision.get("linear_x", 0.0), decision.get("angular_z", 0.0), t)
-                if not (mode == "arc" and decision.get("arc_regime") == "turn"):
+                if not (mode in ("arc", "arc_unbounded_turn") and decision.get("arc_regime") == "turn"):
                     state["forward_steps"] += 1
             elif action == onboard.ACT_HOLD and state.get("lost_count", 0) > 1:
                 commands.zero(t)
 
-        if mode == "pulse" and t > setpoint_hold_until and setpoint_hold_until > 0.0:
+        if t > setpoint_hold_until and setpoint_hold_until > 0.0:
             commands.zero(t)
             setpoint_hold_until = -999.0
 
