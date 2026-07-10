@@ -1,5 +1,13 @@
 # Hardware V0 Stack-Through-Bridge Plan
 
+## Active Acquisition Goal (2026-07-09)
+
+The active owner goal is reliable, smooth golf-ball acquisition and approach
+with fully onboard perception. Hard-floor ARC validation, trace-backed control
+repair, and a five-case repeatability matrix take priority over delivery-target
+planner wiring. The evidence bar and operator split are defined in
+`docs/HARDWARE_V0_ACQUISITION_GOAL.md`.
+
 ## Direction Pivot (2026-06-30)
 
 This branch proves the **mono perception+control stack in simulation as a digital

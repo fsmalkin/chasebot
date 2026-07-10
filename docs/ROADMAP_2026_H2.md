@@ -1,5 +1,14 @@
 # Roadmap 2026 H2
 
+## Current Hardware Priority (2026-07-09)
+
+The real JetBot Mini hardware lane now prioritizes reliable acquisition and a
+smooth camera-relative approach. The controller must clear center, mid-band,
+and far-offset hard-floor cases with fully onboard perception, trace-backed
+smoothness evidence, and five consecutive mixed-placement passes. Delivery
+planner wiring resumes after this primitive is repeatable. The governing goal
+is `docs/HARDWARE_V0_ACQUISITION_GOAL.md`.
+
 ## Near-Term (First UAT to Full Visual UAT)
 
 Current status as of February 27, 2026:

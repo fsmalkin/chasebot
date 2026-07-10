@@ -102,6 +102,11 @@ Current rung: reliable fetch with fully-onboard perception; delivery target
 
 ## Work queue (priority order)
 
+Owner priority update (2026-07-09): complete the acquisition and smooth
+approach evidence bar in `docs/HARDWARE_V0_ACQUISITION_GOAL.md` before resuming
+delivery planner wiring. The hard-floor ARC experiment below is the first live
+gate.
+
 1. **(bench, operator-gated)** Hard-floor off-center arc A/B: ball at
    |err|>0.6 on hardwood, dashboard ARC, GO. If it pivots-centers-fetches:
    arc validated, close the saga. If it stalls on HARD floor: real bug —

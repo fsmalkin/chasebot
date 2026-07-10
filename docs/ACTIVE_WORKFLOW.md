@@ -6,8 +6,13 @@
 `codex/hw-irl-v0-bringup`). Its living surfaces are:
 
 - Governing plan + current state: `docs/HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md`
+- Active milestone: `docs/HARDWARE_V0_ACQUISITION_GOAL.md`
 - Execution handoff (Codex gpt-5.6-sol spine): `docs/handoffs/2026-07-04-codex-56-sol-handoff.md`
 - Operator dashboard: http://100.112.221.6:8791/ (see `docs/DASHBOARD_OPERATOR_GUIDE.md` header)
+
+Owner priority update (2026-07-09): restore the locked bench stack, collect
+hardwood ARC evidence, apply trace-backed corrections, and clear the acquisition
+repeatability matrix. Fiducial delivery wiring waits behind that milestone.
 
 **The sim multiball lane below is PAUSED at its June-11 state** (streak
 broken at 4/5 by seed `20260651`; Option A repair landed through Phase 2,
