@@ -1,5 +1,43 @@
 # Dashboard Operator Guide
 
+## ⚠ Two dashboards exist (2026-07-04)
+
+**Hardware bench dashboard** (the one you want for the real robot):
+`tools/robot_factory_bridge/chasecar_bridge_control_server.py`, port
+**:8791** — http://100.112.221.6:8791/ on the tailnet, or
+https://chasebox.tail3b1bce.ts.net/ from a phone. It is a single page:
+
+- **Live camera** with detection overlay (fine-tune → YOLO-World ensemble;
+  box + confidence + calibrated distance = exactly what the robot's policy
+  sees).
+- **PULSE | ARC toggle** — steering mode for the *next* GO. Arc injects the
+  sim-tuned gains; the toggle greys out mid-run and the server refuses
+  mid-run changes.
+- **GO** — launches an autonomous fetch episode on the robot (onboard
+  TensorRT eyes). Every run auto-banks its frames to the training inbox,
+  outcome-tagged (the data flywheel).
+- **RESET** — dead-reckoned undo: replays the last episode's motion tape
+  backwards (parks *near* the start, not exactly on it).
+- **STOP** — verified stop: posts stop + motion-lock, then reads the
+  robot's health back and reports "STOPPED (verified)" or a red
+  "STOP UNVERIFIED - CHECK ROBOT". Overrides everything, including RESET
+  and jog.
+- **2D jog pad** — hold-to-drive manual control (arrows pivot/drive,
+  diagonals arc). Commands expire in 0.45 s (deadman-backed); releasing
+  stops; motion auto-relocks after 1.5 s idle. Refused while an episode
+  runs.
+
+Bring-up when the robot powers on: join AP (`netsh wlan connect
+name="jetbot-mini"`), deploy the bridge
+(`scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11
+-RobotUser jetson -Start -Camera -TurnGain 1.0` — boots LOCKED), start the
+control server if down. Full state + protocols:
+`docs/handoffs/2026-07-04-codex-56-sol-handoff.md`.
+
+**Simulation dashboard** (Docker, port :8855 / :8895 era) — everything
+below this header. The sim lane is paused as of 2026-07-04; this content is
+accurate for that stack when it resumes.
+
 ## Purpose
 
 Use the browser dashboard to run and observe the bounded LLM supervisor demos:

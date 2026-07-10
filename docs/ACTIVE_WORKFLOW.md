@@ -1,5 +1,25 @@
 # Active Workflow (Canonical 2026 Rebuild)
 
+## ⚠ Lane status (2026-07-04)
+
+**The active workstream is hardware-v0 IRL** (real JetBot Mini, branch
+`codex/hw-irl-v0-bringup`). Its living surfaces are:
+
+- Governing plan + current state: `docs/HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md`
+- Execution handoff (Codex gpt-5.6-sol spine): `docs/handoffs/2026-07-04-codex-56-sol-handoff.md`
+- Operator dashboard: http://100.112.221.6:8791/ (see `docs/DASHBOARD_OPERATOR_GUIDE.md` header)
+
+**The sim multiball lane below is PAUSED at its June-11 state** (streak
+broken at 4/5 by seed `20260651`; Option A repair landed through Phase 2,
+verification rerun pending environment recovery). Nothing below this header
+has been updated since; treat dates/status accordingly. The sim planner's
+decision layer has since been ported for onboard use with a 510-scene parity
+proof (`tools/robot_factory_bridge/onboard_route_policy.py`).
+
+**Stale-reference warning:** Telegram agent comms were RETIRED 2026-06-10.
+The Telegram bridge sections below are historical; do not provision or use
+`telegram_*` tooling.
+
 ## Scope
 
 This is the single source of truth for the rebuilt stack bring-up, UAT execution, and GUI rehearsal sequencing.

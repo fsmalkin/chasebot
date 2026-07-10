@@ -174,6 +174,20 @@ board's final supported software). Approved sequence:
    PD steering (turn-while-driving, slew-limited) + alpha-beta/Kalman ball
    tracker (coast through misses), behind `--steering arc` (default pulse);
    bench flip after supervised validation.
+   **Outcome (2026-07-04, three bench iterations):** (a) arc v1 stalled —
+   commanded sub-stiction forward because stiction was modeled pre-scaling;
+   fixed with a two-regime controller + honest sim whose pytest gate must
+   REPRODUCE the real stall before tuning (commits 2d1f950, 4541199).
+   (b) arc-forward then PROVEN on hard floor (standoff+push,
+   onboard_1652153224). (c) turn-regime "stall" at |err|=0.81 was a CARPET
+   artifact — owner confirmed brisk in-place pivot on hard floor via the jog
+   pad; conclusion retracted, no code change. **Open: hard-floor off-center
+   arc A/B (next bench experiment) and the untested 0.12<|err|<0.55
+   mid-band.** Dashboard gained a PULSE/ARC steering toggle (arc injects
+   sim-tuned kp 0.30 / kd 0.10 / slew 1.00 / turn-gate 0.55). Standing
+   discipline from this saga: a simulator earns tuning authority only by
+   reproducing an observed hardware failure; and never conclude chassis
+   capability from a carpet run — surface is a variable.
 2. **STOP-integrity fixes** (same dispatch): verified stop chain per the
    2026-07-02 adversarial review (bridge_post ok/fail, hard_stop health
    read-back + honest "UNVERIFIED" UI, synchronous remote pkill on episode

@@ -4,18 +4,40 @@
 # Spine thread id:
 019ee82b-6b01-7a50-aafe-019f4775956e
 #
+# MODEL: gpt-5.6-sol at xhigh (owner switch; was gpt-5.5 through 2026-07-04).
+# Standing handoff/context doc for this thread:
+#   docs/handoffs/2026-07-04-codex-56-sol-handoff.md
+#
 # Checkpoint (rollout JSONL):
 #   C:\Users\afutu\.codex\sessions\2026\06\20\rollout-2026-06-20T23-13-48-019ee82b-6b01-7a50-aafe-019f4775956e.jsonl
 #
-# This thread was started by the Codex app, so the codex MCP server does NOT
-# have it in memory: `mcp__codex__codex-reply` returns "Session not found".
-# Resume it with `codex exec resume` instead (reads prompt from stdin via `-`):
+# Origin/footguns:
+# - Thread was started by the Codex APP → the codex MCP server does NOT know
+#   it (`mcp__codex__codex-reply` returns "Session not found"). Resume with
+#   `codex exec resume` (prompt from stdin via `-`).
+# - The app can silently ARCHIVE the thread; resume then errors
+#   "session ... is archived" → run `codex unarchive <id>` first
+#   (hit + recovered 2026-07-03).
+# - `codex exec resume` does NOT accept `-C`; set the process cwd instead.
+# - The exec sandbox blocks network (pip/ssh). Robot-touching operational
+#   turns need `--dangerously-bypass-approvals-and-sandbox` + explicit
+#   no-motion bounds in the prompt (pattern used 2026-07-03 bring-up turn).
 #
 #   $codex = (gci 'C:\Users\afutu\AppData\Local\OpenAI\Codex\bin\*\codex.exe' |
 #             Sort-Object LastWriteTime -Descending)[0].FullName
 #   Get-Content prompt.txt -Raw | & $codex exec resume 019ee82b-6b01-7a50-aafe-019f4775956e `
 #     -c sandbox_mode="workspace-write" -c approval_policy="never" `
-#     -m gpt-5.5 -c model_reasoning_effort="xhigh" --output-last-message out.txt -
+#     -m gpt-5.6-sol -c model_reasoning_effort="xhigh" --output-last-message out.txt -
 #
-# Use sandbox_mode="read-only" for status/review turns; "workspace-write" for
-# implementation. Long runs: launch as a background task and ping Fred on exit.
+# sandbox_mode="read-only" for status/review turns; "workspace-write" for
+# implementation. Long runs: background task; ping Fred on exit.
+#
+# Turn log (2026-07-03..04 supervisory session, all reviewed + pushed):
+#   1. servoing+STOP slices → commits bbfd748, 92fa55c (+ supervisor fixes
+#      9f474fe: pkill self-match, ssh timeouts)
+#   2. CI slice → 9f676c6
+#   3. overnight sim slices → a463144 (arc tuning harness), 4abb838
+#      (route-policy port, 510-scene parity)
+#   4. robot bring-up (bypass sandbox, no-motion) → operational, no commit
+#   5. arc stiction fix → 2d1f950 (honest sim + reproduce-stall gate),
+#      4541199 (two-regime controller)
