@@ -113,8 +113,15 @@ Current rung: reliable fetch with fully-onboard perception; delivery target
    /status). Sim world marker optional. Owner prints a ~10cm marker.
    Unlocks: delivery mission + the descriptor fields onboard_route_policy
    needs.
-3. **Wire the ported planner** once target pose exists: scene-descriptor
-   builder from BallTracker + target det + staleness; route the onboard
+   **Software complete (2026-07-09):** `/status` now serves the configured
+   marker pose plus freshness/error fields, and the spectator feed draws its
+   outline. Synthetic OpenCV 5 tests are green. The 10 cm printed-marker range
+   check remains pending; see `docs/notes/aruco-target-feed.md`. The same turn
+   corrected the Vermin gate to express a Python 3.6 compatibility ceiling and
+   removed the obsolete Python 2 URL-import fallback. A clean Python 3.12
+   fast-CI rehearsal passes with the workflow's exact dependency set.
+3. **Wire the ported planner** after the printed-marker range check: build the
+   scene descriptor from BallTracker + target det + staleness; route the onboard
    loop through deterministic_route_label for scan/approach/deliver
    sequencing. Parity test stays green.
 4. **Carpet mode (deferred, owner call)**: pivot-on-carpet needs either

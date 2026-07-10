@@ -1,6 +1,10 @@
 import ast
+import json
 import subprocess
 from pathlib import Path
+
+import cv2
+import numpy as np
 
 import chasecar_bridge_control_server as control_server
 
@@ -71,3 +75,88 @@ def test_bridge_post_returns_failure_tuple_for_unreachable_bridge(monkeypatch):
     assert ok is False
     assert isinstance(body, bytes)
     assert b"unroutable test URL" in body
+
+
+def _aruco_scene(markers):
+    """Build a 320x240 RGB scene from (marker_id, x, y, size_px) tuples."""
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    scene = np.full((240, 320), 255, dtype=np.uint8)
+    for marker_id, x, y, size_px in markers:
+        marker = cv2.aruco.generateImageMarker(dictionary, marker_id, size_px)
+        scene[y:y + size_px, x:x + size_px] = marker
+    return np.repeat(scene[:, :, None], 3, axis=2)
+
+
+def test_aruco_target_detector_recovers_centered_metric_pose():
+    detector = control_server.ArucoTargetDetector(
+        cv2_module=cv2,
+        np_module=np,
+        dictionary_name="DICT_4X4_50",
+        marker_id=0,
+        marker_size_m=0.10,
+        focal_px=225.317,
+    )
+
+    target = detector.detect(_aruco_scene([(0, 80, 40, 160)]))
+
+    assert target["id"] == 0
+    assert target["dictionary"] == "DICT_4X4_50"
+    assert target["pose_status"] == "metric"
+    assert target["pose_method"] == "aruco_ippe_square_empirical_intrinsics"
+    assert abs(target["center_error"]) < 0.01
+    assert abs(target["bearing_rad"]) < 0.01
+    assert 0.13 < target["z_m"] < 0.16
+    assert target["distance_m"] >= target["z_m"]
+    assert target["calibration"]["source"] == "mono_distance_calibration_bench01"
+    assert target["limits"]
+    assert json.loads(json.dumps(target))["pose_status"] == "metric"
+
+
+def test_aruco_target_detector_selects_configured_id_and_preserves_bearing_sign():
+    detector = control_server.ArucoTargetDetector(
+        cv2_module=cv2,
+        np_module=np,
+        marker_id=0,
+        marker_size_m=0.10,
+        focal_px=225.317,
+    )
+
+    target = detector.detect(_aruco_scene([(7, 20, 70, 90), (0, 210, 70, 90)]))
+
+    assert target["id"] == 0
+    assert target["center_px"][0] > 160.0
+    assert target["center_error"] > 0.0
+    assert target["bearing_rad"] > 0.0
+    assert detector.detect(_aruco_scene([(7, 115, 75, 90)])) is None
+
+
+def test_status_payload_serves_target_with_its_own_freshness(monkeypatch):
+    target = {"id": 0, "bearing_rad": 0.25, "pose_status": "metric"}
+    with control_server.cam_lock:
+        original_cam = dict(control_server.cam)
+        control_server.cam.update({
+            "det": {"confidence": 0.9},
+            "ts": 123.0,
+            "err": "",
+            "target": target,
+            "target_ts": 122.5,
+            "target_err": "",
+        })
+    monkeypatch.setattr(
+        control_server,
+        "bridge_get",
+        lambda path, timeout=5: (200, json.dumps({"motion_enabled": False}).encode(), "application/json"),
+    )
+
+    try:
+        payload = control_server.build_status_payload()
+    finally:
+        with control_server.cam_lock:
+            control_server.cam.clear()
+            control_server.cam.update(original_cam)
+
+    assert payload["target"] == target
+    assert payload["target_ts"] == 122.5
+    assert payload["target_err"] == ""
+    assert payload["det_ts"] == 123.0
+    assert payload["motion_enabled"] is False

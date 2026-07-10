@@ -9,7 +9,10 @@ https://chasebox.tail3b1bce.ts.net/ from a phone. It is a single page:
 
 - **Live camera** with detection overlay (fine-tune → YOLO-World ensemble;
   box + confidence + calibrated distance = exactly what the robot's policy
-  sees).
+  sees). A blue outline marks the delivery ArUco target when `DICT_4X4_50`
+  marker ID `0` is visible. The default marker square is 10 cm; configuration,
+  `/status` fields, and calibration limits live in
+  `docs/notes/aruco-target-feed.md`.
 - **PULSE | ARC toggle** — steering mode for the *next* GO. Arc injects the
   sim-tuned gains; the toggle greys out mid-run and the server refuses
   mid-run changes.

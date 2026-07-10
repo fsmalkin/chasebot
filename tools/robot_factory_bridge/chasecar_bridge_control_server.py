@@ -29,8 +29,13 @@ MODEL = os.path.join(REPO, "runtime", "yolo", "yolov5m.onnx")
 CUSTOM_PT = os.path.join(REPO, "runtime", "yolo", "golfball_finetune.pt")  # best: bench fine-tune
 WORLD_PT = os.path.join(REPO, "runtime", "yolo", "yolov8s-worldv2.pt")  # zero-shot "ball" prompt
 K_PX_M = 9.621  # real-bench calibration (equiv_diameter_px)
+ARUCO_DICTIONARY_NAME = os.environ.get("CHASECAR_ARUCO_DICTIONARY", "DICT_4X4_50")
+ARUCO_MARKER_ID = os.environ.get("CHASECAR_ARUCO_MARKER_ID", "0")
+ARUCO_MARKER_SIZE_M = os.environ.get("CHASECAR_ARUCO_MARKER_SIZE_M", "0.10")
+ARUCO_FOCAL_PX = os.environ.get("CHASECAR_ARUCO_FOCAL_PX", "225.317")
 
 sys.path.insert(0, os.path.join(REPO, "tools", "robot_factory_bridge"))
+from chasecar_bridge_aruco_target import ArucoTargetDetector
 
 state = {"proc": None, "running": False, "starting": False, "last": "idle", "outfile": None}
 lock = threading.Lock()
@@ -52,7 +57,17 @@ def jog_watchdog():
             bridge_post("/motion", {"enabled": False, "source": "dashboard_jog_idle"})
 
 # latest annotated frame + detection info, maintained by the detector thread
-cam = {"jpeg": None, "ts": 0.0, "det": None, "err": "starting", "last_view": 0.0, "fail_streak": 0}
+cam = {
+    "jpeg": None,
+    "ts": 0.0,
+    "det": None,
+    "err": "starting",
+    "target": None,
+    "target_ts": None,
+    "target_err": "starting",
+    "last_view": 0.0,
+    "fail_streak": 0,
+}
 cam_lock = threading.Lock()
 
 
@@ -105,6 +120,8 @@ def detector_loop():
     except Exception as e:
         print("ultralytics backend failed (%r); falling back to ONNX" % e, flush=True)
         ult = world = None
+    target_detector = None
+    target_init_error = ""
     try:
         import chasecar_bridge_yolo_onnx_probe as yp
         err = yp.load_detector_dependencies(require_onnx=ult is None)
@@ -121,6 +138,29 @@ def detector_loop():
         with cam_lock:
             cam["err"] = "detector init failed: %r" % e
         return
+    try:
+        import cv2
+        target_detector = ArucoTargetDetector(
+            cv2_module=cv2,
+            np_module=yp.np,
+            dictionary_name=ARUCO_DICTIONARY_NAME,
+            marker_id=int(ARUCO_MARKER_ID),
+            marker_size_m=float(ARUCO_MARKER_SIZE_M),
+            focal_px=float(ARUCO_FOCAL_PX),
+        )
+        print(
+            "target backend: aruco %s id=%d size=%.3fm" % (
+                target_detector.dictionary_name,
+                target_detector.marker_id,
+                target_detector.marker_size_m,
+            ),
+            flush=True,
+        )
+    except Exception as e:
+        target_init_error = "target detector unavailable: %r" % e
+        print(target_init_error, flush=True)
+    with cam_lock:
+        cam["target_err"] = target_init_error
     while True:
         t0 = time.time()
         with cam_lock:
@@ -146,6 +186,8 @@ def detector_loop():
             with cam_lock:
                 cam["err"] = "camera unreachable"
                 cam["det"] = None
+                cam["target"] = None
+                cam["target_ts"] = None
                 cam["fail_streak"] += 1
                 streak = cam["fail_streak"]
             if streak % 4 == 0:  # self-heal a Wi-Fi flap
@@ -157,6 +199,7 @@ def detector_loop():
         try:
             img = Image.open(io.BytesIO(raw)).convert("RGB")
             w, h = img.size
+            frame_ts = time.time()
             if ult is not None or world is not None:
                 best = None
                 for name, model, floor in (("ft", ult, 0.10), ("yw", world, 0.05)):
@@ -178,6 +221,16 @@ def detector_loop():
                     confidence_threshold=0.10, class_names={"sports ball"}, iou_threshold=0.45,
                 )
                 best = yp.select_best_detection(dets, min_area_ratio=0.0)
+            target_info = None
+            target_frame_error = target_init_error
+            if target_detector is not None:
+                try:
+                    target_info = target_detector.detect(img)
+                    target_frame_error = ""
+                    if target_info is not None:
+                        target_info["observed_ts"] = frame_ts
+                except Exception as e:
+                    target_frame_error = "target detection failed: %r" % e
             d = ImageDraw.Draw(img)
             # center crosshair + deadband guides
             d.line([(w / 2, 0), (w / 2, h)], fill=(90, 90, 90))
@@ -196,16 +249,32 @@ def detector_loop():
                             "src": best.get("src")}
             else:
                 d.text((4, 4), "no ball", fill=(240, 80, 60))
+            if target_info:
+                target_corners = [tuple(p) for p in target_info["corners_px"]]
+                d.line(target_corners + [target_corners[0]], fill=(70, 160, 255), width=3)
+                target_label = "target %d  bearing=%+.1f" % (
+                    target_info["id"],
+                    target_info["bearing_deg"],
+                )
+                if target_info.get("z_m") is not None:
+                    target_label += "  z=%.2fm" % target_info["z_m"]
+                tx, ty = target_corners[0]
+                d.text((max(2, tx), max(14, ty - 12)), target_label, fill=(70, 160, 255))
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=80)
             with cam_lock:
                 cam["jpeg"] = buf.getvalue()
-                cam["ts"] = time.time()
+                cam["ts"] = frame_ts
                 cam["det"] = det_info
                 cam["err"] = ""
+                cam["target"] = target_info
+                cam["target_ts"] = frame_ts if target_info is not None else None
+                cam["target_err"] = target_frame_error
         except Exception as e:
             with cam_lock:
                 cam["err"] = "overlay error: %r" % e
+                cam["target"] = None
+                cam["target_ts"] = None
         # cadence: ensemble is ~30ms on the GPU; 0.3s shrinks the verdict lag
         # the onboard scan sees (heading lag caught live 2026-07-02)
         dt = time.time() - t0
@@ -443,6 +512,32 @@ def start_reset():
     return _start_remote_episode(cmd, outfile, "RESETTING", "reset started", "dashboard_reset")
 
 
+def build_status_payload():
+    """Snapshot server perception and bridge-lock state for /status clients."""
+    with lock:
+        payload = {
+            "running": bool(state["running"] or state.get("starting")),
+            "last": state["last"],
+        }
+    with steer_lock:
+        payload["steering"] = steer["mode"]
+    with cam_lock:
+        payload["det"] = cam["det"]
+        payload["det_ts"] = cam["ts"]
+        payload["cam_err"] = cam["err"]
+        payload["target"] = cam["target"]
+        payload["target_ts"] = cam["target_ts"]
+        payload["target_err"] = cam["target_err"]
+        cam["last_view"] = time.time()  # status pollers keep detector threads hot
+    _code, data, _ct = bridge_get("/health")
+    try:
+        health = json.loads(data)
+        payload["motion_enabled"] = health.get("motion_enabled")
+    except Exception:
+        pass
+    return payload
+
+
 DASH = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -576,22 +671,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(code, data, ct or "image/jpeg")
             return
         if self.path.startswith("/status"):
-            with lock:
-                s = {"running": bool(state["running"] or state.get("starting")), "last": state["last"]}
-            with steer_lock:
-                s["steering"] = steer["mode"]
-            with cam_lock:
-                s["det"] = cam["det"]
-                s["det_ts"] = cam["ts"]
-                s["cam_err"] = cam["err"]
-                cam["last_view"] = time.time()  # status pollers (onboard brain) keep the detector hot
-            code, data, ct = bridge_get("/health")
-            try:
-                h = json.loads(data)
-                s["motion_enabled"] = h.get("motion_enabled")
-            except Exception:
-                pass
-            self._send(200, json.dumps(s), "application/json")
+            self._send(200, json.dumps(build_status_payload()), "application/json")
             return
         self._send(200, DASH)
 

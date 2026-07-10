@@ -195,6 +195,13 @@ board's final supported software). Approved sequence:
 3. **Laptop-side fiducials** for the delivery target (robot cv2 4.1.1 lacks
    aruco — detect on the laptop, serve target bearing over the existing feed
    pattern; not in the tight motor loop).
+   **Software outcome (2026-07-09):** the control server now detects
+   `DICT_4X4_50` marker ID `0`, estimates camera-frame pose for a configured
+   0.10 m marker, draws the target on the spectator feed, and publishes
+   `target` + `target_ts` + `target_err` from `/status`. Synthetic OpenCV 5
+   tests cover centered metric pose, off-axis bearing, configured-ID filtering,
+   and status serialization. Live printed-marker range validation remains the
+   physical evidence gate; see `docs/notes/aruco-target-feed.md`.
 4. **Port the sim route classifier** as an onboard state machine once ball
    track + target pose exist.
 5. **Encoder-motor retrofit (~$30, Yahboom drop-in encoder TT motors +
