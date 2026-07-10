@@ -160,3 +160,8 @@ def test_status_payload_serves_target_with_its_own_freshness(monkeypatch):
     assert payload["target_err"] == ""
     assert payload["det_ts"] == 123.0
     assert payload["motion_enabled"] is False
+
+
+def test_dashboard_exposes_live_center_error_for_operator_setup():
+    assert "s.det.center_error" in control_server.DASH
+    assert "err=" in control_server.DASH

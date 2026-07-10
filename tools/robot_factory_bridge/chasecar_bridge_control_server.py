@@ -637,7 +637,7 @@ DASH = """<!doctype html>
  function tick(){
   document.getElementById('cam').src='/camera.jpg?t='+Date.now();
    fetch('/status').then(function(r){return r.json();}).then(function(s){
-    var det = s.det ? ('ball: conf '+s.det.confidence+'  z='+s.det.z_m+'m') : ('ball: '+(s.cam_err||'not detected'));
+    var det = s.det ? ('ball: conf '+s.det.confidence+'  z='+s.det.z_m+'m  err='+Number(s.det.center_error).toFixed(2)) : ('ball: '+(s.cam_err||'not detected'));
     var status = document.getElementById('status');
     status.textContent='approach: '+s.last+'   |   motion='+s.motion_enabled+'\\n'+det;
     status.style.color = (s.last && s.last.indexOf('STOP UNVERIFIED') === 0) ? '#ff5c5c' : '#9aa0a8';
