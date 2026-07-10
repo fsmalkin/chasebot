@@ -73,6 +73,24 @@ it reproduces any observed hardware failure.
 7. Expand to lighting variation, then treat carpet pivoting as a separate
    surface-control lane.
 
+## Progress (2026-07-09)
+
+- The Windows host joined `jetbot-mini`; the factory bridge was redeployed with
+  camera enabled and `TurnGain=1.0`.
+- Locked preflight passed with motion disabled, motors at zero, a fresh
+  gstreamer frame, and verified STOP/relock responses.
+- The current onboard brain was deployed and passed its Python 3.6 self-test.
+- A three-frame onboard TensorRT dry-run detected the ball at about `0.92`
+  confidence and ended `final_safe=true` with zero motion commands.
+- `scripts/onboard_acquisition_trace_scorecard.py` now distinguishes smooth
+  acquisition, stalled turn response, stalled forward response, target loss,
+  and center-limit-cycle behavior from onboard JSONL traces.
+- The historical baseline scorecard reproduced the known evidence classes. Its
+  local output is
+  `artifacts/session/hardware_acquisition_baseline_20260709/onboard_acquisition_trace_scorecard/scorecard.md`.
+- The first new far-left hard-floor episode is waiting for operator ball
+  placement. ARC is selected and the bridge remains locked.
+
 ## Direction Impact
 
 | Surface | Effect |
