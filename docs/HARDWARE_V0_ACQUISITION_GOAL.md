@@ -118,6 +118,16 @@ it reproduces any observed hardware failure.
   motion disabled, and both motors at zero. The current raw frame contains no
   visible ball, so a hard-floor operator rerun remains required before the
   repair is called proven.
+- Owner direction on 2026-07-10 authorized unattended acquisition as a standing
+  lane. Commits `afcd1bc` and `ce6eccb` add a no-contact acquire/STOP/trace/
+  reverse/geometry runner and force its private endpoint to ARC independently
+  of the dashboard toggle. Sixteen safety-focused tests pass. The locked live
+  runner artifact at
+  `artifacts/session/hardware_unattended_locked_20260710/campaign_summary.json`
+  recorded five correct onboard TRT detections, no added motion commands, and
+  verified final STOP/lock. The refreshed laptop service is live on port 8791;
+  the first live cycle waits only for confirmation that the physical room is
+  closed to dogs and people.
 
 ## Direction Impact
 

@@ -52,6 +52,17 @@ Live execution after room isolation is confirmed:
 
 `python scripts/hardware_acquisition_unattended_runner.py --cycles <1-5> --execute-motion --confirm-owner-unattended --room-isolated --pretty`
 
+## Current Validation
+
+Commits `afcd1bc` and `ce6eccb` implement the runner and force its private
+no-contact endpoint to ARC independently of the dashboard toggle. Sixteen
+safety-focused tests pass. The locked live validation at
+`artifacts/session/hardware_unattended_locked_20260710/campaign_summary.json`
+recorded five onboard TRT detections in the expected far-left case, preserved
+the bridge command count at 57, and ended with verified STOP/lock at zero
+motors. The refreshed laptop control service is live on port 8791. The first
+motion cycle now depends on physical room-isolation confirmation.
+
 ## Decision
 
 The hardware v0 unattended lane advances through one serial behavior gate at a
