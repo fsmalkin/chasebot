@@ -1,6 +1,6 @@
 """Laptop control server: GO/STOP fetch dashboard with live YOLO overlay.
 
-Serves http://100.112.221.6:8791/ — green GO runs the mono fetch approach+push
+Serves http://127.0.0.1:8791/ — green GO runs the mono fetch approach+push
 against the robot bridge; red STOP kills the run and locks the bridge. The
 camera feed is annotated by a background YOLO thread (bbox + confidence +
 calibrated distance) so the operator sees exactly what perception sees.
@@ -770,5 +770,5 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 if __name__ == "__main__":
     threading.Thread(target=detector_loop, daemon=True).start()
     threading.Thread(target=jog_watchdog, daemon=True).start()
-    print("control server on 0.0.0.0:8791 (Tailscale http://100.112.221.6:8791/)", flush=True)
+    print("control server on 0.0.0.0:8791 (Tailscale http://127.0.0.1:8791/)", flush=True)
     ThreadingHTTPServer(("0.0.0.0", 8791), Handler).serve_forever()

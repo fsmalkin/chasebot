@@ -5,7 +5,7 @@
 This file below the divider is the **2025 WSL/sim era** and is kept as an
 archive. Current robot control is the hardware bench stack:
 
-- **Dashboard (operator)**: http://100.112.221.6:8791/ — GO / RESET / STOP,
+- **Dashboard (operator)**: http://127.0.0.1:8791/ — GO / RESET / STOP,
   PULSE|ARC steering toggle, 2D jog pad. See the header of
   `docs/DASHBOARD_OPERATOR_GUIDE.md`.
 - **Bridge (robot, boots locked)**: `http://192.168.1.11:8765` — /health,

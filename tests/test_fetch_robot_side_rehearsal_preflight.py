@@ -29,7 +29,7 @@ def _args(tmp_path: Path, **overrides):
         "readiness_summary": str(tmp_path / "readiness.json"),
         "rehearsal_plan": str(tmp_path / "plan.json"),
         "physical_gap_summary": str(tmp_path / "physical_gap.json"),
-        "dashboard_url": "http://100.112.221.6:8883",
+        "dashboard_url": "http://127.0.0.1:8883",
     }
     payload.update(overrides)
     return SimpleNamespace(**payload)

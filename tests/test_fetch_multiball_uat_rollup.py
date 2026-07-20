@@ -164,7 +164,7 @@ def _gate_summary(
 def _args(**overrides):
     payload = {
         "campaign_id": "rollup",
-        "dashboard_base_url": "http://100.112.221.6:8895",
+        "dashboard_base_url": "http://127.0.0.1:8895",
         "gate_summary": [],
         "min_live_gates": 2,
         "min_scenes": 2,
@@ -194,7 +194,7 @@ def test_multiball_rollup_scores_supervised_visual_uat_green(tmp_path, monkeypat
     assert summary["provider_retry_count"] == 1
     assert summary["provider_status_counts"] == {"ok": 6}
     assert summary["stage_label_counts"] == {"complete": 6}
-    assert summary["visual_proof"][0]["links"][0]["url"].startswith("http://100.112.221.6:8895/artifacts/session/")
+    assert summary["visual_proof"][0]["links"][0]["url"].startswith("http://127.0.0.1:8895/artifacts/session/")
 
 
 def test_multiball_rollup_flags_hidden_nav2_in_local_setup(tmp_path, monkeypatch):

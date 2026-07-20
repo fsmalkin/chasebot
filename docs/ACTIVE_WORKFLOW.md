@@ -8,7 +8,7 @@
 - Governing plan + current state: `docs/HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md`
 - Active milestone: `docs/HARDWARE_V0_ACQUISITION_GOAL.md`
 - Execution handoff (Codex gpt-5.6-sol spine): `docs/handoffs/2026-07-04-codex-56-sol-handoff.md`
-- Operator dashboard: http://100.112.221.6:8791/ (see `docs/DASHBOARD_OPERATOR_GUIDE.md` header)
+- Operator dashboard: http://127.0.0.1:8791/ (see `docs/DASHBOARD_OPERATOR_GUIDE.md` header)
 
 Owner priority update (2026-07-09): restore the locked bench stack, collect
 hardwood ARC evidence, apply trace-backed corrections, and clear the acquisition
@@ -295,7 +295,7 @@ push-ready handoff, stage labels, and browser-watchable proof links:
 ```powershell
 python scripts\fetch_multiball_uat_rollup.py `
   --campaign-id <id> `
-  --dashboard-base-url http://100.112.221.6:8895 `
+  --dashboard-base-url http://127.0.0.1:8895 `
   --gate-summary artifacts\session\<gate_a>\fetch_multiball_retrieval_gate\gate_summary.json `
   --gate-summary artifacts\session\<gate_b>\fetch_multiball_retrieval_gate\gate_summary.json
 ```
@@ -309,11 +309,11 @@ required executable route coverage across `nav2_reposition_first`,
 Browser-watchable proof is packaged at
 `artifacts/session/live_multiball_llm_supervised_route_diverse_seed20260644_4x3_activity_fix_20260607_visual_package/fetch_visual_uat_package/package_summary.json`.
 Operator links:
-[onboard](http://100.112.221.6:8895/artifacts/session/20260607T150953019289Z/visual/raw_camera_browser.mp4),
-[topdown](http://100.112.221.6:8895/artifacts/session/20260607T150953019289Z/visual/topdown_telemetry_browser.mp4),
-[world](http://100.112.221.6:8895/artifacts/session/20260607T150953019289Z/visual/world_stream.mp4),
+[onboard](http://127.0.0.1:8895/artifacts/session/20260607T150953019289Z/visual/raw_camera_browser.mp4),
+[topdown](http://127.0.0.1:8895/artifacts/session/20260607T150953019289Z/visual/topdown_telemetry_browser.mp4),
+[world](http://127.0.0.1:8895/artifacts/session/20260607T150953019289Z/visual/world_stream.mp4),
 and
-[keyframes](http://100.112.221.6:8895/artifacts/session/20260607T150953019289Z/visual/keyframe_review_contact_sheet.png).
+[keyframes](http://127.0.0.1:8895/artifacts/session/20260607T150953019289Z/visual/keyframe_review_contact_sheet.png).
 
 Current route-diverse rollup status:
 `artifacts/session/live_multiball_llm_supervised_route_diverse_activity_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`.
@@ -359,12 +359,12 @@ replayable geometry and a named missing capability. Treat it separately from
 `fetch_to_pose` delivery.
 
 Browser-watchable proof:
-[scene 1 onboard](http://100.112.221.6:8895/artifacts/session/20260609T014550277555Z/visual/raw_camera_browser.mp4),
-[scene 2 onboard](http://100.112.221.6:8895/artifacts/session/20260609T015846475172Z/visual/raw_camera_browser.mp4),
-[scene 3 onboard](http://100.112.221.6:8895/artifacts/session/20260609T021111225550Z/visual/raw_camera_browser.mp4),
-[scene 4 onboard](http://100.112.221.6:8895/artifacts/session/20260609T021927401634Z/visual/raw_camera_browser.mp4),
+[scene 1 onboard](http://127.0.0.1:8895/artifacts/session/20260609T014550277555Z/visual/raw_camera_browser.mp4),
+[scene 2 onboard](http://127.0.0.1:8895/artifacts/session/20260609T015846475172Z/visual/raw_camera_browser.mp4),
+[scene 3 onboard](http://127.0.0.1:8895/artifacts/session/20260609T021111225550Z/visual/raw_camera_browser.mp4),
+[scene 4 onboard](http://127.0.0.1:8895/artifacts/session/20260609T021927401634Z/visual/raw_camera_browser.mp4),
 and
-[scene 2 keyframes](http://100.112.221.6:8895/artifacts/session/20260609T015846475172Z/visual/keyframe_review_contact_sheet.png).
+[scene 2 keyframes](http://127.0.0.1:8895/artifacts/session/20260609T015846475172Z/visual/keyframe_review_contact_sheet.png).
 The visual package summary is
 `artifacts/session/live_multiball_route_diverse_seed20260648_4x3_bounded_giveup_20260608_visual_package/fetch_visual_uat_package/package_summary.json`.
 
@@ -743,7 +743,7 @@ June 4, 2026 second-seed planner-routed breadth check:
 June 4, 2026 browser UAT bundle:
 
 - Page:
-  `http://100.112.221.6:8883/fetch-plan`
+  `http://127.0.0.1:8883/fetch-plan`
 - Scope: the living plan now includes a dedicated UAT review bundle with three
   route samples from seed `20260628`: recovery/re-aim, Nav2-first, and
   fetch-ready local. Each sample leads with the onboard browser MP4 and links to

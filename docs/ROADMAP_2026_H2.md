@@ -1890,9 +1890,9 @@ counts stay tied to measured `fetch_to_pose` passes. Browser proof is
 packaged at
 `artifacts/session/live_multiball_route_diverse_seed20260648_4x3_bounded_giveup_20260608_visual_package/fetch_visual_uat_package/package_summary.json`,
 with onboard-first links such as
-[scene 2 onboard](http://100.112.221.6:8895/artifacts/session/20260609T015846475172Z/visual/raw_camera_browser.mp4)
+[scene 2 onboard](http://127.0.0.1:8895/artifacts/session/20260609T015846475172Z/visual/raw_camera_browser.mp4)
 and
-[scene 2 keyframes](http://100.112.221.6:8895/artifacts/session/20260609T015846475172Z/visual/keyframe_review_contact_sheet.png).
+[scene 2 keyframes](http://127.0.0.1:8895/artifacts/session/20260609T015846475172Z/visual/keyframe_review_contact_sheet.png).
 
 This checkpoint reframes the next roadmap lane. Multi-Ball Retrieval v1 can
 advance with a terminal outcome contract: deliver each ball through measured

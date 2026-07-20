@@ -1,6 +1,6 @@
 """Reverse proxy: laptop 0.0.0.0:8790 -> robot factory bridge 192.168.1.11:8765.
 
-Lets the jog page be reached over Tailscale (http://100.112.221.6:8790/jog).
+Lets the jog page be reached over Tailscale (http://127.0.0.1:8790/jog).
 Forwards all GET/POST verbatim so the page's same-origin /motors, /camera.jpg,
 /health calls hit the bridge.
 """

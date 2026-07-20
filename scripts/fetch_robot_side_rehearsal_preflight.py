@@ -28,7 +28,7 @@ DEFAULT_PHYSICAL_GAP_SUMMARY = (
     "artifacts/session/physical_onboard_proof_gap_current_proof_cards_20260605/"
     "fetch_physical_onboard_proof_gap/physical_onboard_proof_gap_summary.json"
 )
-DEFAULT_DASHBOARD_URL = "http://100.112.221.6:8883"
+DEFAULT_DASHBOARD_URL = "http://127.0.0.1:8883"
 CURRENT_REHEARSAL_SEED = "20260648"
 
 

@@ -4,7 +4,7 @@
 
 **Hardware bench dashboard** (the one you want for the real robot):
 `tools/robot_factory_bridge/chasecar_bridge_control_server.py`, port
-**:8791** — http://100.112.221.6:8791/ on the tailnet, or
+**:8791** — http://127.0.0.1:8791/ on the tailnet, or
 https://chasebox.tail3b1bce.ts.net/ from a phone. It is a single page:
 
 - **Live camera** with detection overlay (fine-tune → YOLO-World ensemble;

@@ -18,7 +18,7 @@ REPO = r"D:\dev\chasebot-hw-v0"
 INBOX = os.path.join(REPO, "artifacts", "finetune_dataset", "inbox")
 LABELER = os.path.join(REPO, "tools", "robot_factory_bridge", "finetune", "label_zeroshot.py")
 HUB = r"D:\services\docs-hub\site\chasebot\flywheel"
-HUB_URL = "http://100.112.221.6:8123/chasebot/flywheel"
+HUB_URL = "http://127.0.0.1:8123/chasebot/flywheel"
 
 
 def main():

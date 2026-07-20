@@ -41,3 +41,9 @@ operator_events.jsonl
 runtime/yolo/
 .codex_yolo_deps/
 .codex-remote-attachments/
+
+# Local agent and operator coordination
+.claude/
+AGENTS.md
+FRESH_THREAD_CONTINUATION_*.md
+docs/handoffs/

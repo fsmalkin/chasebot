@@ -1,130 +1,108 @@
-# Chasecar
+# Chasebot
 
-Container-first ROS 2 stack for autonomous ball acquisition, planning, and tracking validation on a JetBot Nano platform.
+Chasebot is an autonomous ball-retrieval robot built end to end on a JetBot
+Mini with a Jetson Nano. The project combines computer vision, bounded autonomy,
+motion control, operator tooling, and hardware safety into one working product
+system.
 
-## System Overview
+I use Chasebot as a hands-on product and engineering testbed: define a useful
+physical task, instrument the real failure modes, build the smallest complete
+workflow, and advance capability only when the evidence supports it.
+
+![Chasebot simulated perception view](docs/media/chasebot-perception.png)
+
+## Product System
 
 ```mermaid
-graph TB
-    subgraph Operator["Operator Layer"]
-        Dashboard["Browser Dashboard<br/>(control + status)"]
-        Xpra["Xpra Live View<br/>(operator visual)"]
-    end
-
-    subgraph Brain["Brain Layer"]
-        Supervisor["LLM Supervisor<br/>bounded next-intent"]
-        Policy["Deterministic Policy<br/>frozen contract gating"]
-        Executor["Intent Executor<br/>behavior dispatch"]
-    end
-
-    subgraph Perception["Perception"]
-        YOLO["YOLO v8 Detector<br/>TensorRT INT8"]
-        Extractor["3D Position Extractor<br/>RGB + aligned depth"]
-    end
-
-    subgraph Navigation["Navigation"]
-        Nav2["Nav2 Stack<br/>local planning + control"]
-        CmdVel["cmd_vel relay"]
-    end
-
-    subgraph Simulation["Simulation Lanes"]
-        Gate["Gate Lane<br/>Gazebo Jetty + Kilted"]
-        Isaac["Fidelity Lane<br/>Isaac Sim + Jazzy bridge"]
-    end
-
-    subgraph Validation["Validation Pipeline"]
-        UAT["UAT Orchestrator<br/>coordinate → snapshot → orientation → nav2 → multi-target"]
-        Campaign["Campaign Runner<br/>3x dual + soak + RC"]
-    end
-
-    Dashboard --> Supervisor
-    Supervisor --> Policy
-    Policy --> Executor
-    Executor --> Nav2
-    Nav2 --> CmdVel
-    CmdVel --> Gate
-    CmdVel --> Isaac
-    Gate --> YOLO
-    Isaac --> YOLO
-    YOLO --> Extractor
-    Extractor --> Supervisor
-    Extractor --> Nav2
-    Gate --> Xpra
-    UAT --> Gate
-    Campaign --> UAT
+flowchart LR
+    Camera["CSI camera"] --> Perception["YOLO + TensorRT perception"]
+    Perception --> Policy["Bounded task policy"]
+    Policy --> Safety["Safety bridge"]
+    Safety --> Motors["JetBot motors"]
+    Operator["Browser operator console"] --> Safety
+    Simulator["Gazebo and seeded scenarios"] --> Validation["Automated gates"]
+    Robot["Physical robot runs"] --> Validation
+    Validation --> Policy
 ```
 
-## Active Architecture (2026)
+The optional LLM layer proposes high-level intent within a fixed action
+contract. Deterministic policy and the safety bridge retain control of every
+motor command.
 
-| Lane | Role | Stack |
-|------|------|-------|
-| Gate (authoritative) | Deterministic pass/fail | ROS 2 Kilted + Gazebo Jetty |
-| Fidelity (parallel) | High-fidelity parity | Isaac Sim + Jazzy bridge sidecar |
+## What I Built
 
-- Robot-fidelity target: `robot_fidelity_orin` (Jetson Orin Nano 8GB)
-- Canonical inference: `tensorrt_int8`
-- Locked decisions: [docs/STACK_DECISIONS_2026.md](docs/STACK_DECISIONS_2026.md)
+| Product area | Implementation |
+| --- | --- |
+| Perception | Fine-tuned YOLO models, monocular distance estimation, TensorRT deployment, confidence and scene-generalization gates |
+| Autonomy | Scan, acquire, approach, push, recover, and stop behaviors with bounded retries and explicit terminal states |
+| Operator experience | Browser dashboard for live camera state, motion lock, run controls, error reporting, and emergency stop |
+| Hardware integration | JetBot motor bridge, CSI camera backends, command relay, calibration tools, and laptop-to-robot deployment scripts |
+| Validation | Seeded simulation scenarios, replayable evidence packages, unit tests, hardware preflight checks, and safety-focused run summaries |
 
-## Quick Start
+## Selected Evidence
 
-### First UAT (Operator Entry)
+- A 320-pixel TensorRT FP16 model ran on the Jetson Nano at 13.5 ms per frame,
+  approximately 73 FPS of GPU inference.
+- The two-room fine-tune reached 0.995 mAP50, retained 0.93-0.975 confidence on
+  held-out room samples, and produced zero false positives across 18 negative
+  validation images.
+- The physical control path fails closed on stale camera frames, command
+  mismatches, detector disagreement, motion-lock violations, and explicit stop
+  requests.
+- Hardware runs use capped speed and duration, a 0.5-second deadman timeout,
+  final zero-motor verification, and a required lock/relock sequence.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_first_uat.ps1 `
-  -ExecutionLane container_kilted `
-  -Distro Ubuntu-24.04 `
-  -RuntimeTarget robot_fidelity_orin
-```
+The detailed benchmark record is in
+[Hardware V0 Stack Through Bridge Plan](docs/HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md).
+The safety model is documented in
+[Hardware V0 Unattended Strategy](docs/HARDWARE_V0_UNATTENDED_STRATEGY.md).
 
-This cleans stale compose projects, runs coordinate UAT, captures Milestone 1 evidence, and writes session artifacts. See [docs/FIRST_UAT_RUNBOOK.md](docs/FIRST_UAT_RUNBOOK.md) for details.
+## Product Decisions
 
-### Full Headless Replay
+**AI authority.** Perception and planning can be probabilistic. Actuation stays
+inside a deterministic command contract with measurable refusal conditions.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual
-```
+**Simulation and reality.** Simulation provides cheap breadth across seeded
+geometry and failure cases. Physical runs establish camera, latency, traction,
+stiction, and safety evidence unavailable from simulation.
 
-Runs all pre-LLM gates: coordinate, snapshot, orientation, nav2 readiness, and multi-target nav2. `dual` runs fast lane then fidelity lane.
+**Operator trust.** The dashboard exposes the camera feed, active policy,
+motion state, command history, and stop controls in one place. Every run ends
+with an explicit safe-state check.
 
-### Pre-LLM Campaign (3x dual + soak + RC)
+**Evidence discipline.** Claims are tied to stored run summaries, model
+provenance, tests, and visual evidence. Current evidence supports supervised
+single-room acquisition experiments. Unattended contact, delivery, and
+multi-room autonomy remain outside the validated boundary.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1
-```
+## Technology
 
-Includes same-session GUI rehearsal and parity checks per cycle.
+- Python, PowerShell, C++, HTML, and JavaScript
+- ROS 2, Nav2, Gazebo, OpenCV, YOLO, ONNX, and TensorRT
+- JetBot Mini, Jetson Nano 4GB, CSI camera, and differential-drive control
+- Pytest, GitHub Actions, seeded scenario runners, and browser-based UAT
 
-## Visual Milestones
+## Repository Guide
 
-Authoritative visual review uses recorded bundles and the browser dashboard with Xpra live view. Native Gazebo/X11 is debug-only.
+| Path | Purpose |
+| --- | --- |
+| [`tools/robot_factory_bridge/`](tools/robot_factory_bridge/) | Physical robot transport, camera, control, safety, and hardware runners |
+| [`scripts/`](scripts/) | Planning, simulation, evaluation, evidence, and operator workflows |
+| [`ros2_scripts/`](ros2_scripts/) | ROS 2 perception and control nodes |
+| [`ros2_config/`](ros2_config/) | Launch files, worlds, parameters, behavior trees, and robot models |
+| [`runtime/`](runtime/) | Runtime contracts, model configuration, and dashboard assets |
+| [`tests/`](tests/) | Unit, integration, safety, and regression coverage |
+| [`docs/`](docs/) | Architecture, hardware, research, and validation records |
 
-1. Recorded evidence: `scripts/run_recorded_visual_demo.ps1`
-2. Dashboard + Xpra live view: open the dashboard, use `Open Xpra` link
-3. Headless milestone progression: `scripts/run_milestone_demo.ps1`
+Start with the
+[Robot Factory Bridge guide](tools/robot_factory_bridge/README.md) for the
+physical stack and
+[LLM Control Architecture](docs/LLM_CONTROL_ARCHITECTURE.md) for the bounded
+AI design.
 
-Operator visual signoff order: single-target M3 first, then multi-target GUI rehearsal.
+## Safety
 
-## Key Directories
-
-| Directory | Purpose |
-|-----------|---------|
-| `scripts/` | Orchestration, UAT runners, brain supervisor (~90 Python files) |
-| `ros2_scripts/` | ROS 2 nodes, detectors, relays (~90 Python files) |
-| `ros2_config/` | Launch files, configs, URDFs, worlds, behavior trees |
-| `containers/` | Docker container definitions (core-kilted, sim-gate, dashboard, etc.) |
-| `telegram_wait_bridge/` | Repo-local Telegram wait bridge and MCP runtime |
-| `runtime/` | Runtime contracts, TensorRT config, dashboard assets |
-| `compose/` | Docker Compose image lock |
-| `launch/` | Top-level launch files |
-| `artifacts/` | Session outputs, UAT results, demo evidence |
-
-## Documentation
-
-See [docs/README.md](docs/README.md) for the full documentation index.
-
-Key docs:
-- [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md) — canonical workflow and UAT sequencing
-- [docs/LLM_CONTROL_ARCHITECTURE.md](docs/LLM_CONTROL_ARCHITECTURE.md) — layered control architecture
-- [docs/FIRST_UAT_RUNBOOK.md](docs/FIRST_UAT_RUNBOOK.md) — first operator UAT procedure
-- [docs/TELEGRAM_MCP.md](docs/TELEGRAM_MCP.md) — repo-local Telegram wait bridge and MCP setup
-- [AGENTS.md](AGENTS.md) — coding agent execution guidance
+Chasebot is an active prototype. Physical operation requires a clear room,
+an available hard power stop, conservative command caps, and a successful
+preflight. Physical operation remains supervised even after all repository
+safety gates pass.
