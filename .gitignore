@@ -34,3 +34,16 @@ dashboard_validation/playwright-report/
 test-results/
 .tmp/
 .env
+operator_events.jsonl
+.playwright-mcp/
+
+# hw-v0 bringup: vendored YOLO weights + codex deps (do not commit)
+runtime/yolo/
+.codex_yolo_deps/
+.codex-remote-attachments/
+
+# Local agent and operator coordination
+.claude/
+AGENTS.md
+FRESH_THREAD_CONTINUATION_*.md
+docs/handoffs/

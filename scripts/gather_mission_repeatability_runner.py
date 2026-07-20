@@ -40,11 +40,37 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "pre_stage_path_tracker_v1",
     "pre_stage_trajectory_owner_v1",
     "nav2_follow_path_reacquire_v1",
+    "nav2_mppi_follow_path_reacquire_v1",
+    "nav2_followpath_corridor_push_v1",
+    "object_centric_gather_policy_v1",
+    "ai_push_coast_servo_v1",
 )
+ALLOWED_MISSION_OBJECTIVES = ("gather_here", "fetch_to_pose")
+ALLOWED_FETCH_GATE_MODES = ("full_mission", "contact_ready")
+ALLOWED_AI_PUSH_COAST_MODES = ("shadow", "guarded_live")
+
+
+def dashboard_state_timeout_s(default_s: float) -> float:
+    raw_value = os.environ.get("CHASECAR_DASHBOARD_STATE_TIMEOUT_S", "").strip()
+    if not raw_value:
+        return max(float(default_s), 0.1)
+    try:
+        return max(float(default_s), float(raw_value), 0.1)
+    except ValueError:
+        return max(float(default_s), 0.1)
 
 
 def current_utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def optional_float_arg(value: object) -> float | None:
+    if value in {None, ""}:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(f"invalid float value: {value!r}") from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,6 +78,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dashboard-url", default=os.environ.get("CHASECAR_DASHBOARD_URL", "http://127.0.0.1:8860"))
     parser.add_argument("--scenario-id", default="corral_single_ball_place")
     parser.add_argument("--scenario-label", default="Corral Single Ball Place")
+    parser.add_argument("--mission-objective", choices=ALLOWED_MISSION_OBJECTIVES, default=os.environ.get("CHASECAR_MISSION_OBJECTIVE", "gather_here"))
+    parser.add_argument("--fetch-gate-mode", choices=ALLOWED_FETCH_GATE_MODES, default=os.environ.get("CHASECAR_FETCH_GATE_MODE", "full_mission"))
+    parser.add_argument("--fetch-target-x", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_X", "")))
+    parser.add_argument("--fetch-target-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Y", "")))
+    parser.add_argument("--fetch-target-z", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Z", "")))
+    parser.add_argument("--fetch-delivery-radius-m", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_DELIVERY_RADIUS_M", 0.762)))
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--campaign-id", default="")
     parser.add_argument("--timeout-s", type=float, default=30.0)
@@ -61,11 +93,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gather-runtime-json", default=os.environ.get("CHASECAR_GATHER_RUNTIME_PATH", ""))
     parser.add_argument("--world-file", default=os.environ.get("WORLD_FILE", ""))
     parser.add_argument("--surface-profile", default=os.environ.get("CHASECAR_SURFACE_PROFILE", ""))
+    parser.add_argument("--target-model-name", default="")
+    parser.add_argument("--target-model-sdf", default="")
+    parser.add_argument("--zone-model-name", default="")
+    parser.add_argument("--zone-model-sdf", default="")
+    parser.add_argument("--artifact-kind", default="")
     parser.add_argument("--target-layout-json", default="", help="Test-only target layout override for direct-mode gather runs.")
     parser.add_argument("--execution-mode", choices=("dashboard_scenario", "direct"), default="dashboard_scenario")
     parser.add_argument("--promotion-gate-mode", choices=("strict", "pass_only"), default="pass_only")
     parser.add_argument("--max-retries-per-target", type=int, default=2)
     parser.add_argument("--gather-control-family", choices=ALLOWED_GATHER_CONTROL_FAMILIES, default="baseline")
+    parser.add_argument("--ai-push-coast-mode", choices=ALLOWED_AI_PUSH_COAST_MODES, default=os.environ.get("CHASECAR_AI_PUSH_COAST_MODE", "shadow"))
     return parser.parse_args()
 
 
@@ -73,7 +111,7 @@ def wait_for_dashboard(dashboard_url: str, timeout_s: float) -> None:
     deadline = time.monotonic() + max(timeout_s, 5.0)
     while time.monotonic() < deadline:
         try:
-            status, _ = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=5.0)
+            status, _ = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=dashboard_state_timeout_s(5.0))
             if status == 200:
                 return
         except Exception:
@@ -83,11 +121,24 @@ def wait_for_dashboard(dashboard_url: str, timeout_s: float) -> None:
 
 
 def _environment_request_payload(args: argparse.Namespace) -> dict[str, object]:
+    mission_objective = str(getattr(args, "mission_objective", "gather_here") or "gather_here")
     payload: dict[str, object] = {"scenario_id": args.scenario_id}
+    if mission_objective != "gather_here":
+        payload["mission_objective"] = mission_objective
     if str(args.world_file or "").strip():
         payload["world_file"] = str(args.world_file).strip()
     if str(args.surface_profile or "").strip():
         payload["surface_profile"] = str(args.surface_profile).strip()
+    if mission_objective == "fetch_to_pose":
+        for arg_name, payload_name in (
+            ("fetch_target_x", "fetch_target_x"),
+            ("fetch_target_y", "fetch_target_y"),
+            ("fetch_target_z", "fetch_target_z"),
+            ("fetch_delivery_radius_m", "fetch_delivery_radius_m"),
+        ):
+            raw_value = getattr(args, arg_name, "")
+            if raw_value is not None and str(raw_value).strip():
+                payload[payload_name] = float(raw_value)
     return payload
 
 
@@ -100,7 +151,7 @@ def wait_for_environment_ready(
     deadline = time.monotonic() + max(timeout_s, 30.0)
     last_state: dict[str, object] = {}
     while time.monotonic() < deadline:
-        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
         if status == 200:
             last_state = current_state
             current_environment_state = str(current_state.get("environment_state", "") or "").strip().lower()
@@ -118,7 +169,7 @@ def wait_for_environment_ready(
 
 def ensure_environment_ready(dashboard_url: str, timeout_s: float, *, startup_payload: dict[str, object] | None = None) -> None:
     base_url = dashboard_url.rstrip("/")
-    status, state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+    status, state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
     if status != 200:
         raise RuntimeError("Unable to fetch dashboard state before gather repeatability run.")
     environment_state = str(state.get("environment_state", "") or "").strip().lower()
@@ -142,7 +193,7 @@ def wait_for_dashboard_slot(dashboard_url: str, timeout_s: float) -> None:
     last_state: dict[str, object] = {}
     while time.monotonic() < deadline:
         ensure_environment_ready(dashboard_url, timeout_s=min(max(timeout_s, 5.0), 30.0))
-        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
         if status == 200:
             last_state = current_state
             environment_state = str(current_state.get("environment_state", "") or "").strip().lower()
@@ -173,6 +224,116 @@ def _float_list_from_runs(runs: list[dict[str, object]], key: str) -> list[float
         except (TypeError, ValueError):
             continue
     return values
+
+
+def _fetch_to_pose_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
+    times = _float_list_from_runs(runs, "fetch_to_pose_time_s")
+    reasons = sorted(
+        {
+            str(item.get("fetch_to_pose_failure_reason", "") or "").strip()
+            for item in runs
+            if str(item.get("fetch_to_pose_failure_reason", "") or "").strip()
+        }
+    )
+    pass_count = sum(1 for item in runs if bool(item.get("fetch_to_pose_pass", item.get("fetch_to_pose_reached", False))))
+    return {
+        "fetch_to_pose_pass_count": pass_count,
+        "fetch_to_pose_fail_count": max(len(runs) - pass_count, 0),
+        "fetch_to_pose_failure_reasons": reasons,
+        "fetch_to_pose_time_avg_s": round(sum(times) / len(times), 6) if times else 0.0,
+        "fetch_to_pose_time_min_s": round(min(times), 6) if times else 0.0,
+        "fetch_to_pose_time_max_s": round(max(times), 6) if times else 0.0,
+    }
+
+
+def _run_model_provenance(run: dict[str, object]) -> dict[str, object]:
+    candidates: list[dict[str, object]] = [run]
+    mission_verdict = run.get("mission_verdict", {})
+    if isinstance(mission_verdict, dict):
+        candidates.append(mission_verdict)
+        mission_shot = mission_verdict.get("shot_outcome", {})
+        if isinstance(mission_shot, dict):
+            candidates.append(mission_shot)
+    shot_outcome = run.get("shot_outcome", {})
+    if isinstance(shot_outcome, dict):
+        candidates.append(shot_outcome)
+    for candidate in candidates:
+        provenance = candidate.get("model_provenance", {})
+        if isinstance(provenance, dict) and provenance:
+            return dict(provenance)
+        payload: dict[str, object] = {}
+        for key in (
+            "target_model_sdf",
+            "zone_model_sdf",
+            "target_model_radius_m",
+            "target_model_classification",
+            "zone_model_radius_m",
+            "zone_model_classification",
+            "model_provenance_valid",
+            "model_provenance_reason",
+            "model_provenance_required",
+        ):
+            if key in candidate:
+                payload[key] = candidate.get(key)
+        if payload:
+            return payload
+    return {}
+
+
+def _model_provenance_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
+    fetch_runs = [
+        run
+        for run in runs
+        if str(run.get("mission_objective", "") or "") == "fetch_to_pose"
+    ]
+    if not fetch_runs:
+        return {
+            "model_provenance_valid": True,
+            "model_provenance_valid_count": 0,
+            "model_provenance_invalid_count": 0,
+            "model_provenance_missing_count": 0,
+            "target_model_classifications": [],
+            "zone_model_classifications": [],
+        }
+    valid_count = 0
+    invalid_count = 0
+    missing_count = 0
+    target_classes: set[str] = set()
+    zone_classes: set[str] = set()
+    first_payload: dict[str, object] = {}
+    for run in fetch_runs:
+        payload = _run_model_provenance(run)
+        if payload and not first_payload:
+            first_payload = dict(payload)
+        if not payload:
+            missing_count += 1
+            invalid_count += 1
+            continue
+        target_class = str(payload.get("target_model_classification", "") or "").strip()
+        zone_class = str(payload.get("zone_model_classification", "") or "").strip()
+        if target_class:
+            target_classes.add(target_class)
+        if zone_class:
+            zone_classes.add(zone_class)
+        if bool(payload.get("model_provenance_valid", False)):
+            valid_count += 1
+        else:
+            invalid_count += 1
+    return {
+        "model_provenance": first_payload,
+        "model_provenance_valid": bool(fetch_runs and valid_count == len(fetch_runs) and missing_count == 0),
+        "model_provenance_valid_count": valid_count,
+        "model_provenance_invalid_count": invalid_count,
+        "model_provenance_missing_count": missing_count,
+        "target_model_sdf": str(first_payload.get("target_model_sdf", "") or ""),
+        "zone_model_sdf": str(first_payload.get("zone_model_sdf", "") or ""),
+        "target_model_radius_m": first_payload.get("target_model_radius_m"),
+        "target_model_classification": str(first_payload.get("target_model_classification", "") or ""),
+        "zone_model_radius_m": first_payload.get("zone_model_radius_m"),
+        "zone_model_classification": str(first_payload.get("zone_model_classification", "") or ""),
+        "target_model_classifications": sorted(target_classes),
+        "zone_model_classifications": sorted(zone_classes),
+    }
 
 
 def _clean_text(value: object, default: str = "") -> str:
@@ -694,6 +855,14 @@ def _enrich_run_with_approach_side_fields(run_summary: dict[str, object]) -> dic
             "latest_approach_progress": latest_approach_progress,
             "approach_side_pass": bool(latest_approach_progress.get("pass", False)),
             "approach_side_reason": _clean_text(latest_approach_progress.get("reason")),
+            "mission_objective": str(merged.get("mission_objective", run_summary.get("mission_objective", "gather_here")) or "gather_here"),
+            "fetch_to_pose_reached": bool(merged.get("fetch_to_pose_reached", run_summary.get("fetch_to_pose_reached", False))),
+            "fetch_to_pose_pass": bool(merged.get("fetch_to_pose_pass", run_summary.get("fetch_to_pose_pass", False))),
+            "fetch_to_pose_time_s": _float_value(merged.get("fetch_to_pose_time_s", run_summary.get("fetch_to_pose_time_s", 0.0))),
+            "fetch_to_pose_failure_reason": _clean_text(merged.get("fetch_to_pose_failure_reason", run_summary.get("fetch_to_pose_failure_reason", ""))),
+            "fetch_pose_world": _dict_value(merged.get("fetch_pose_world", run_summary.get("fetch_pose_world", {}))),
+            "fetch_delivery_radius_m": _float_value(merged.get("fetch_delivery_radius_m", run_summary.get("fetch_delivery_radius_m", 0.0))),
+            "shot_outcome": _dict_value(merged.get("shot_outcome", run_summary.get("shot_outcome", {}))),
             **legacy_fields,
         }
     )
@@ -749,6 +918,28 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "ball_stopped_in_corral": bool(verdict.get("ball_stopped_in_corral", summary.get("ball_stopped_in_corral", False))),
         "rolled_away_after_release": bool(verdict.get("rolled_away_after_release", summary.get("rolled_away_after_release", False))),
         "settled_in_corral_pass": bool(verdict.get("settled_in_corral_pass", summary.get("settled_in_corral_pass", False))),
+        "mission_objective": str(verdict.get("mission_objective", summary.get("mission_objective", "gather_here")) or "gather_here"),
+        "fetch_to_pose_reached": bool(verdict.get("fetch_to_pose_reached", summary.get("fetch_to_pose_reached", False))),
+        "fetch_to_pose_pass": bool(verdict.get("fetch_to_pose_pass", summary.get("fetch_to_pose_pass", False))),
+        "fetch_to_pose_time_s": float(verdict.get("fetch_to_pose_time_s", summary.get("fetch_to_pose_time_s", 0.0)) or 0.0),
+        "fetch_to_pose_failure_reason": str(verdict.get("fetch_to_pose_failure_reason", summary.get("fetch_to_pose_failure_reason", "")) or ""),
+        "fetch_pose_world": verdict.get("fetch_pose_world", summary.get("fetch_pose_world", {}))
+        if isinstance(verdict.get("fetch_pose_world", summary.get("fetch_pose_world", {})), dict)
+        else {},
+        "fetch_delivery_radius_m": float(verdict.get("fetch_delivery_radius_m", summary.get("fetch_delivery_radius_m", 0.0)) or 0.0),
+        "model_provenance": verdict.get("model_provenance", summary.get("model_provenance", {}))
+        if isinstance(verdict.get("model_provenance", summary.get("model_provenance", {})), dict)
+        else {},
+        "model_provenance_valid": bool(verdict.get("model_provenance_valid", summary.get("model_provenance_valid", False))),
+        "target_model_sdf": str(verdict.get("target_model_sdf", summary.get("target_model_sdf", "")) or ""),
+        "zone_model_sdf": str(verdict.get("zone_model_sdf", summary.get("zone_model_sdf", "")) or ""),
+        "target_model_radius_m": verdict.get("target_model_radius_m", summary.get("target_model_radius_m")),
+        "target_model_classification": str(verdict.get("target_model_classification", summary.get("target_model_classification", "")) or ""),
+        "zone_model_radius_m": verdict.get("zone_model_radius_m", summary.get("zone_model_radius_m")),
+        "zone_model_classification": str(verdict.get("zone_model_classification", summary.get("zone_model_classification", "")) or ""),
+        "shot_outcome": verdict.get("shot_outcome", summary.get("shot_outcome", {}))
+        if isinstance(verdict.get("shot_outcome", summary.get("shot_outcome", {})), dict)
+        else {},
         "final_corral_audit": verdict.get("final_corral_audit", summary.get("final_corral_audit", {}))
         if isinstance(verdict.get("final_corral_audit", summary.get("final_corral_audit", {})), dict)
         else {},
@@ -792,7 +983,17 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
 
 def _latest_mission_verdict_path(state: dict[str, object]) -> str:
     artifacts = state.get("latest_artifacts", {}) if isinstance(state.get("latest_artifacts"), dict) else {}
-    return str(artifacts.get("mission_verdict", "") or "")
+    return _host_repo_path(str(artifacts.get("mission_verdict", "") or ""))
+
+
+def _host_repo_path(raw_path: str) -> str:
+    cleaned = str(raw_path or "").strip()
+    prefix = "/workspaces/chasecar/"
+    if cleaned == "/workspaces/chasecar":
+        return str(REPO_ROOT)
+    if cleaned.startswith(prefix):
+        return str(REPO_ROOT / cleaned[len(prefix) :])
+    return cleaned
 
 
 def _fresh_dashboard_result_available(
@@ -817,16 +1018,32 @@ def _fresh_dashboard_result_available(
 
 
 def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> tuple[dict[str, object], str]:
-    status, before_state = http_json(f"{args.dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+    status, before_state = http_json(
+        f"{args.dashboard_url.rstrip('/')}/api/state",
+        timeout_s=dashboard_state_timeout_s(10.0),
+    )
     if status != 200:
         raise RuntimeError(f"Unable to fetch dashboard state before run {run_index}.")
     previous_session_id = str(before_state.get("session_id", "") or "")
     previous_mission_verdict_path = _latest_mission_verdict_path(before_state)
+    mission_objective = str(getattr(args, "mission_objective", "gather_here") or "gather_here")
     payload = {"scenario_id": args.scenario_id}
+    if mission_objective != "gather_here":
+        payload["mission_objective"] = mission_objective
     if args.world_file.strip():
         payload["world_file"] = args.world_file.strip()
     if args.surface_profile.strip():
         payload["surface_profile"] = args.surface_profile.strip()
+    if mission_objective == "fetch_to_pose":
+        for arg_name, payload_name in (
+            ("fetch_target_x", "fetch_target_x"),
+            ("fetch_target_y", "fetch_target_y"),
+            ("fetch_target_z", "fetch_target_z"),
+            ("fetch_delivery_radius_m", "fetch_delivery_radius_m"),
+        ):
+            raw_value = getattr(args, arg_name, "")
+            if raw_value is not None and str(raw_value).strip():
+                payload[payload_name] = float(raw_value)
     status, response = http_json(
         f"{args.dashboard_url.rstrip('/')}/api/scenario/run",
         method="POST",
@@ -839,7 +1056,10 @@ def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> 
     deadline = time.monotonic() + max(args.scenario_timeout_s, 30.0)
     last_state: dict[str, object] = {}
     while time.monotonic() < deadline:
-        status, current_state = http_json(f"{args.dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+        status, current_state = http_json(
+            f"{args.dashboard_url.rstrip('/')}/api/state",
+            timeout_s=dashboard_state_timeout_s(10.0),
+        )
         if status != 200:
             time.sleep(1.0)
             continue
@@ -873,7 +1093,7 @@ def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> 
 def prepare_direct_environment(args: argparse.Namespace) -> dict[str, object]:
     base_url = args.dashboard_url.rstrip("/")
     payload = _environment_request_payload(args)
-    status, state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+    status, state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
     if status != 200:
         raise RuntimeError("Unable to fetch dashboard state before direct gather run.")
     environment_state = str(state.get("environment_state", "") or "").strip().lower()
@@ -898,7 +1118,7 @@ def prepare_direct_environment(args: argparse.Namespace) -> dict[str, object]:
             timeout_s=max(args.timeout_s, 120.0),
             startup_payload=payload,
         )
-        status, ready_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+        status, ready_state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
         if status != 200:
             raise RuntimeError("Unable to fetch dashboard state after direct gather environment start.")
         return ready_state
@@ -912,14 +1132,14 @@ def prepare_direct_environment(args: argparse.Namespace) -> dict[str, object]:
         raise RuntimeError(f"Dashboard environment stop rejected before direct gather run: {stop_response}")
     deadline = time.monotonic() + 180.0
     while time.monotonic() < deadline:
-        status, current_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+        status, current_state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
         if status == 200 and str(current_state.get("environment_state", "") or "").strip().lower() == "stopped":
             ensure_environment_ready(
                 args.dashboard_url,
                 timeout_s=max(args.timeout_s, 120.0),
                 startup_payload=payload,
             )
-            status, ready_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+            status, ready_state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
             if status != 200:
                 raise RuntimeError("Unable to fetch dashboard state after restarting direct gather environment.")
             return ready_state
@@ -959,11 +1179,20 @@ def main() -> int:
                     "scorecard_path": "",
                     "placed_count": 0,
                     "capture_loss_count": 0,
+                    "mission_objective": args.mission_objective,
+                    "fetch_gate_mode": args.fetch_gate_mode,
                     "surface_profile": args.surface_profile.strip(),
                     "final_settle_distance_m": 0.0,
                     "max_overshoot_distance_m": 0.0,
                     "settle_time_s": 0.0,
                     "release_recontact_count": 0,
+                    "fetch_to_pose_reached": False,
+                    "fetch_to_pose_pass": False,
+                    "fetch_to_pose_time_s": 0.0,
+                    "fetch_to_pose_failure_reason": str(exc),
+                    "fetch_pose_world": {},
+                    "fetch_delivery_radius_m": 0.0,
+                    "shot_outcome": {},
                     "mission_time_s": 0.0,
                     "route_order": [],
                     "target_results": [],
@@ -989,11 +1218,34 @@ def main() -> int:
                 args.scenario_id,
                 "--scenario-label",
                 args.scenario_label,
+                "--mission-objective",
+                args.mission_objective,
+                "--fetch-gate-mode",
+                args.fetch_gate_mode,
             ]
+            for arg_name, option_name in (
+                ("fetch_target_x", "--fetch-target-x"),
+                ("fetch_target_y", "--fetch-target-y"),
+                ("fetch_target_z", "--fetch-target-z"),
+                ("fetch_delivery_radius_m", "--fetch-delivery-radius-m"),
+            ):
+                raw_value = getattr(args, arg_name, "")
+                if raw_value is not None and str(raw_value).strip():
+                    command.extend([option_name, str(raw_value)])
             if args.world_file.strip():
                 command.extend(["--world-file", args.world_file.strip()])
             if args.surface_profile.strip():
                 command.extend(["--surface-profile", args.surface_profile.strip()])
+            for attr_name, option_name in (
+                ("target_model_name", "--target-model-name"),
+                ("target_model_sdf", "--target-model-sdf"),
+                ("zone_model_name", "--zone-model-name"),
+                ("zone_model_sdf", "--zone-model-sdf"),
+                ("artifact_kind", "--artifact-kind"),
+            ):
+                raw_value = str(getattr(args, attr_name, "") or "").strip()
+                if raw_value:
+                    command.extend([option_name, raw_value])
             if args.visit_runtime_json.strip():
                 command.extend(["--visit-runtime-json", args.visit_runtime_json.strip()])
             if args.gather_runtime_json.strip():
@@ -1002,6 +1254,7 @@ def main() -> int:
                 command.extend(["--target-layout-json", args.target_layout_json.strip()])
             command.extend(["--max-retries-per-target", str(args.max_retries_per_target)])
             command.extend(["--gather-control-family", str(args.gather_control_family)])
+            command.extend(["--ai-push-coast-mode", str(args.ai_push_coast_mode)])
             proc = subprocess.run(
                 command,
                 cwd=str(REPO_ROOT),
@@ -1020,6 +1273,8 @@ def main() -> int:
 
     rollup = summarize_runs(runs)
     approach_side_rollup = _approach_side_rollup(runs)
+    fetch_to_pose_rollup = _fetch_to_pose_rollup(runs)
+    model_provenance_rollup = _model_provenance_rollup(runs)
     promotion_gate_pass = promotion_gate_pass_for_runs(runs, mode=args.promotion_gate_mode)
     summary = {
         "generated_utc": utc_now(),
@@ -1027,16 +1282,27 @@ def main() -> int:
         "campaign_id": campaign_id,
         "scenario_id": args.scenario_id,
         "scenario_label": args.scenario_label,
+        "mission_objective": args.mission_objective,
+        "fetch_gate_mode": args.fetch_gate_mode,
         "execution_mode": args.execution_mode,
         "requested_world_file": args.world_file.strip(),
         "requested_surface_profile": args.surface_profile.strip(),
         "requested_target_layout_json": args.target_layout_json.strip(),
+        "ai_push_coast_mode": str(getattr(args, "ai_push_coast_mode", "shadow")),
+        "requested_fetch_pose_world": {
+            "x": float(args.fetch_target_x) if getattr(args, "fetch_target_x", None) is not None else None,
+            "y": float(args.fetch_target_y) if getattr(args, "fetch_target_y", None) is not None else None,
+            "z": float(args.fetch_target_z) if getattr(args, "fetch_target_z", None) is not None else None,
+            "radius_m": float(args.fetch_delivery_radius_m) if getattr(args, "fetch_delivery_radius_m", None) is not None else None,
+        },
         "required_green_runs": max(args.runs, 1),
         "promotion_gate_mode": args.promotion_gate_mode,
         "promotion_gate_pass": promotion_gate_pass,
         "history_path": str(history_path),
         "runs": runs,
         **approach_side_rollup,
+        **fetch_to_pose_rollup,
+        **model_provenance_rollup,
         **rollup,
     }
     write_json(campaign_root / "campaign_run_summary.json", summary)

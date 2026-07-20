@@ -1,0 +1,42 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <model name="ball_roll_ramp_fixture">
+    <static>true</static>
+    <link name="ramp_link">
+      <pose>-0.55 0 0.060 0 0.16 0</pose>
+      <collision name="ramp_collision">
+        <geometry>
+          <box>
+              <size>0.85 0.24 0.02</size>
+          </box>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>4.0</mu>
+              <mu2>4.0</mu2>
+              <slip1>0.0</slip1>
+              <slip2>0.0</slip2>
+            </ode>
+          </friction>
+          <bounce>
+            <restitution_coefficient>0.0</restitution_coefficient>
+            <threshold>0.05</threshold>
+          </bounce>
+        </surface>
+      </collision>
+      <visual name="ramp_visual">
+        <geometry>
+          <box>
+            <size>0.85 0.24 0.02</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.20 0.25 0.24 1</ambient>
+          <diffuse>0.20 0.25 0.24 1</diffuse>
+          <specular>0.08 0.08 0.08 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

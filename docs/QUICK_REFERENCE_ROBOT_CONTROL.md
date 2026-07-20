@@ -1,6 +1,23 @@
 # ChaseBot Quick Reference - Robot Control
 
-## 🎯 Current Status: FULLY OPERATIONAL
+## ⚠ 2026-07 current controls (real robot)
+
+This file below the divider is the **2025 WSL/sim era** and is kept as an
+archive. Current robot control is the hardware bench stack:
+
+- **Dashboard (operator)**: http://127.0.0.1:8791/ — GO / RESET / STOP,
+  PULSE|ARC steering toggle, 2D jog pad. See the header of
+  `docs/DASHBOARD_OPERATOR_GUIDE.md`.
+- **Bridge (robot, boots locked)**: `http://192.168.1.11:8765` — /health,
+  /camera.jpg, /motion, /cmd_vel, /stop. Deploy:
+  `scripts/deploy_robot_factory_bridge.ps1 -RobotHost 192.168.1.11 -RobotUser jetson -Start -Camera -TurnGain 1.0`
+- **Onboard brain**: `/home/jetson/chasecar_onboard/chasecar_onboard_fetch.py`
+  (Python 3.6; `--selftest` and `--dry-run` are the no-motion smokes).
+- **Full current state**: `docs/handoffs/2026-07-04-codex-56-sol-handoff.md`
+
+---
+
+## 🎯 (2025 archive) Current Status: FULLY OPERATIONAL
 
 ### Launch Simulation
 ```bash

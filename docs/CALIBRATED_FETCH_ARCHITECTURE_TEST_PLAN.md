@@ -6,13 +6,18 @@ same control loop under different names. The active UAT baseline remains
 research portfolio should deliberately test wider designs that may generalize
 better, reduce telemetry fragility, or simplify eventual hardware transfer.
 
-Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
-no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
-the route class, Nav2 owns as much real-time robot motion as the corrected
-evidence supports, and a thin fetch adapter monitors corrected delivery
-geometry, object progress, escape, stale state, and replanning triggers.
-Custom contact routines and AI/model proposal layers remain fallback lanes that
-earn live authority only from corrected, reproducible stage-gap evidence.
+Next major milestone: Deliver Multi-Ball Retrieval v1, a robot-owned field
+behavior that identifies multiple balls on a bounded soccer-field or
+putting-green surface, plans an efficient retrieval order, and executes repeated
+setup/capture/push-to-target cycles through the current open-field
+`fetch_to_pose` primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1
+is the local primitive underneath this milestone: an LLM/world-state planner
+solves field-like setup geometry, deterministic validators compile the maneuver
+plan, Nav2/setup/local route owners execute accepted motion, and the fetch
+adapter monitors corrected delivery geometry, object progress, escape, stale
+state, and replanning triggers. Custom contact routines and AI/model proposal
+layers remain fallback lanes that earn live authority only from corrected,
+reproducible stage-gap evidence.
 
 May 31, 2026 evidence reset: the delivery-marker geometry issue changed the
 meaning of recent fetch metrics. A fetch result is architecture evidence only
@@ -25,6 +30,48 @@ with geometry audit
 `artifacts/session/fetch_geometry_evidence_audit_postfix_20260531/fetch_geometry_evidence_audit/scorecard.md`.
 This reset moves the active comparison back to a corrected Nav2/LLM-first
 baseline before expanding custom contact or AI control.
+
+June 1, 2026 provenance reset: architecture evidence also requires calibrated
+model provenance. Direct `fetch_to_pose` artifacts must record
+`model_provenance_valid=true`, target model `calibrated_golf_ball`, target
+radius `0.021336m`, and marker model `golf_ball_delivery_zone_marker`.
+Commit `680e393 Use calibrated ball for fetch direct runs` is the direct-run
+boundary. Older direct artifacts without explicit model provenance are
+diagnostic until rerun. Use `scripts/fetch_model_provenance_audit.py` before
+carrying prior direct repeatability results into a findings matrix.
+
+June 1, 2026 contact-buffer handoff update: operator video review correctly
+identified a real stop-short failure. Commit `02a4c12 Fix Nav2 contact-buffer
+fetch handoff` tightens corridor-push goal checking, adds the missing depth scan
+TF, and adds a monitored `contact_buffer_handoff` from Nav2 to the deterministic
+first-contact servo. The one-run `zero` proof at
+`artifacts/session/live_contact_buffer_monitor_servo_zero_probe_20260601/gather_mission_repeatability/campaign_run_summary.json`
+passed `fetch_to_pose` with `0.179959m` closest delivery distance, Nav2 handoff
+at `0.195671m` robot-ball separation, and `0.046811m` measured first-contact
+ball motion. Treat this as the current staged local fetch baseline and as
+one-run evidence only.
+
+Later June 1 saved-anchor requalification: planner handoff passed `5/5`, and
+the staged baseline passed `zero` plus `left05` one-run with corrected geometry
+and model provenance. `right05` failed at `capture_entry_timeout`, and
+`artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+classifies it as a setup/capture blocker. The next evidence gate is a broad
+stage-owner comparison before targeted repair. The comparison includes current
+staged Nav2/contact-buffer behavior, May 27 object-centric fetch, Nav2
+corridor-push, corrected direct `right05`, and prior acquisition or goal-side
+setup evidence. Score by lifecycle stage before selecting a repair branch.
+
+Later June 1 clip-review alignment: the follow-on
+`ai_push_coast_servo_v1` guarded-live saved-anchor rebuild produced a clean
+centerline pass and two off-axis failures:
+`artifacts/session/audit_ai_push_coast_capture_yaw_saved_layout_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+The videos and telemetry agree that `left05` and `right05` fail through
+capture/handoff instability before terminal correction is a fair target. The
+architecture contract is now the straightforward staged algorithm: compute the
+ball-target delivery line, compute and reach the capture pose, gate standoff
+plus lateral/yaw error, hand off a clean setup to Nav2 corridor push, then let
+the monitor classify success, escape, stale state, action abort, timeout, or a
+near-contract terminal miss.
 
 May 29, 2026 update: keep the runtime architecture no-shoot. The
 `nav2_followpath_corridor_push_v1` spike showed Nav2 can own useful real-time
@@ -54,8 +101,10 @@ Treat these as different levels of evidence:
 
 0. Evidence validity floor:
    - corrected delivery marker geometry matches `fetch_pose_world`
+   - calibrated model provenance records `model_provenance_valid=true`
    - same-session browser-watchable onboard and context video exists
-   - pre-fix or marker-mismatched results are labeled diagnostic
+   - pre-fix, marker-mismatched, legacy-model, or missing-provenance results are
+     labeled diagnostic
 1. Control-family screen:
    - same mission shell and fetch objective, different `--gather-control-family`
      implementation
@@ -89,21 +138,29 @@ dashboard observation showed that a policy can pass saved centerline/off-axis
 layouts while still failing when robot, target, and ball ordering changes. Use
 that as a reminder that saved-layout gates measure regression stability; they
 do not by themselves prove target-relative side selection or generalization.
+The June 2, 2026 opposite-side rerun added a concrete regression rule: direct
+`fetch_to_pose` setup must use the requested delivery pose as the active control
+target, while the legacy corral zone remains reporting context. The fixed layout
+`ros2_config/target_layouts/golf_ball_circle_delivery_opposite_side_01.json`
+passed `1/1` after that correction:
+`artifacts/session/live_fetch_opposite_side_probe_fetch_zone_fix_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+This expands direct subsystem coverage; planner-gated broad UAT still requires
+an executable `nav2_reposition_first` handoff path.
 
 Planner handoff is a separate evidence layer. Random scenes that are outside the
 local fetch envelope should not be handed directly to `fetch_to_pose` and scored
-as subsystem failures. The planner layer must first classify each scene as one
-of: `fetch_ready_local`, `nav2_reposition_first`, `scan_or_perceive_first`,
-`recovery_or_reaim`, or `ambiguous_or_unsafe_no_go`. A local fetch failure is
-only subsystem evidence after a correct `fetch_ready_local` handoff. A correct
-abstain, scan, reposition, or no-go on an out-of-envelope scene is planner
-success, not missing fetch capability.
+as subsystem failures. The planner layer must first produce an executable
+maneuver plan, a route-family label, validator decisions, and push-ready
+handoff requirements. A local fetch failure is subsystem evidence only after a
+correct measured push-ready handoff. A correct scan, reposition, wraparound,
+recovery, or no-go on a difficult field setup is planner success.
 
 ## Architecture Portfolio
 
 | Family | Why test it | First evidence gate | Promotion question |
 | --- | --- | --- | --- |
-| Corrected Nav2/LLM-first fetch baseline | Tests the simplest reusable architecture after the geometry reset: planner route selection, Nav2-first execution, and a thin geometry monitor/adapter | Corrected saved-layout `zero`/`left05`/`right05` one-run, then `3/3`, with same-session video | How much of fetch stays inside Nav2/planner-owned subsystem behavior before custom contact code is justified? |
+| Corrected Nav2/LLM-first staged fetch baseline | Tests the simplest reusable architecture after the geometry reset: planner route selection, explicit ball-path/capture setup, Nav2-first execution, and a thin geometry monitor/adapter | Capture-geometry one-run rebuild on corrected saved-layout `zero`/`left05`/`right05` with same-session video | How much of fetch stays inside planner, capture-geometry, and Nav2-owned subsystem behavior before custom contact code is justified? |
+| Nav2 contact-buffer handoff baseline | Keeps Nav2 in the stages it can own while giving first contact to a bounded deterministic servo after a monitored close/aligned stop | Prior `zero` and `left05` one-runs are green; latest off-axis clips show setup/capture instability; next gate is capture-geometry repair | Does explicit capture setup remove off-axis churn without adding broad custom control or hiding setup/capture failures? |
 | Current object-centric fetch baseline | Known implementation and reference telemetry; corrected rerun required for post-reset claims | Rerun against the May 31 evidence floor | Does any new design beat its margin, stability, or simplicity under corrected metrics? |
 | Runnable legacy control-family screen | Checks whether old branches become viable under calibrated physics | `scripts/calibrated_fetch_architecture_revisit.py --screen-scope runnable_control_family_screen --fast-screen --short-circuit-on-failure` | Did any old implementation clear `zero` cheaply enough to justify canonical rerun? |
 | Contact-aware geometric shooter | Physics-probe evidence for roll windows, delivery margins, and feasible coast geometry; not the preferred runtime path | Offline shot-model replay or direct-velocity probe only | Does it teach useful push/coast targets without becoming non-robot-owned control? |
@@ -115,9 +172,132 @@ success, not missing fetch capability.
 | Passive mechanical guide/funnel | Tests whether a wider physical interaction envelope is simpler than software-only precision | Sim model smoke plus calibrated `zero`/off-axis one-run | Does it improve robustness without hiding unstable approach telemetry? |
 | Learned residual or maneuver proposer | Learns residual corrections or proposes setup pocket, handoff, push duration, coast timing, and recovery side behind deterministic gates | Offline replay/shadow evaluation before live control | Does it add measurable margin while abstaining on out-of-distribution states? |
 | LM/VLA high-level supervisor | Uses language or robot-foundation-model reasoning for task mode, failure interpretation, and maneuver choice without owning fast control | Contract/dry-run prompt replay over frozen state digests | Does it improve recover/give-up decisions while leaving local contact to guarded controllers? |
-| Planner-gated fetch handoff | Tests whether the LLM/world-state planner recognizes when local fetch is applicable versus when to scan, reposition, recover, or no-go | Mixed-scene dry-run over frozen scene descriptors with expected route labels | Does it avoid dispatching local fetch outside its envelope while still choosing fetch on valid local cases? |
+| Planner-gated fetch handoff | Tests whether the LLM/world-state planner recognizes when local fetch is applicable versus when to scan, reposition, recover, or no-go | `scripts/fetch_planner_handoff_gate.py --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json` | Does it avoid dispatching local fetch outside its envelope while still choosing fetch on valid local cases? |
+| Open-field maneuver planner | Tests whether the LLM/world-state planner can solve soccer-field or putting-green-like setup challenges by proposing bounded maneuver sequences before route owners execute | `scripts/fetch_planner_handoff_gate.py --scene-set broad_spatial_fetch_generalization_v1 --random-cases 18`, then browser-watchable live route-owner UAT | Does it produce executable scan/reposition/wraparound/re-aim/push-ready/fetch/no-go plans, including true opposite-side starts, while preserving measured push-ready handoff before local fetch? |
 | Portfolio supervisor/switcher | Chooses push, coast, re-aim, hold, or give-up from measured uncertainty | Offline counterfactual replay, then live A/B on hard layouts | Does switching reduce tail failures without adding opaque behavior? |
 | Perception-first target-pose fetch | Replaces truth-state assumptions with sensed ball/target pose once pose delivery is stable | Shadow perception parity against truth-state UAT traces | Does it preserve success when truth-state shortcuts are removed? |
+
+June 3 route-owner UAT update: planner-gated fetch handoff now has a corrected
+fresh-session replay harness. The seed `20260608` six-scene analyzer passed two
+`fetch_ready_local`, two `nav2_reposition_first`, and two `recovery_or_reaim`
+layouts with same-session browser-watchable packages:
+`artifacts/session/route_uat_seed20260608_six_fresh_sessions_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+Use this as broad visual UAT and route-owner evidence. Promotion still requires
+the canonical saved-layout and seeded-random gates, because all six runs carry
+contact-quality watches around pre-contact lateral/yaw posture.
+
+June 3 route-quality scorer update: planner-gated fetch handoff now emits a
+route-quality score and first-contact risk before execution, and the route UAT
+analyzer preserves predicted-vs-actual contact quality. The roughest live
+executable replay from seed `20260613` passed `3/3` across recovery, Nav2
+reposition, and fetch-ready route owners:
+`artifacts/session/live_route_quality_roughest_fresh_replay_20260603/fetch_planner_route_replay_batch/scorecard.md`.
+The analyzer
+`artifacts/session/route_uat_route_quality_roughest_live_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+classifies the result as visual UAT green with `promotion_evidence=false`.
+Treat the high-risk recovery case as the next contact-smoothing target; treat
+the clean-first-contact Nav2 run as supporting evidence for Nav2 setup
+ownership inside the broader planner-routed architecture.
+
+June 4 readyfix evidence strengthens the planner-gated candidate. Planner child
+`live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_planner`
+passed `30/30`; mission replay
+`live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_replay`
+passed `6/6` and included a Nav2-first abort that left the ball unmoved before
+bounded local recovery delivered at `0.197m`. Browser-visual replay
+`live_planner_seeded_generalization_gate_visual_recheck_20260604` passed `4/4`
+with same-session browser-watchable packages and reviewed keyframe sheets.
+Classify this as route-owner UAT green. The canonical parent seeded gate still
+owns promotion evidence.
+
+June 4 seed `20260629` boundary repairs: the planner child passed `30/30` with
+`0` wrong fetch-ready dispatches, then the first live `nav2_reposition_first`
+row aborted before fetch with no first-contact trace. The clean abort moved the
+ball `0.0m`, so it classifies as a setup-owner resilience gap. The fallback gate
+now admits otherwise-safe clean pre-contact Nav2 aborts out to `1.300m`
+robot-ball separation while preserving ball-motion, lateral, yaw, and
+ball-target bounds. The exact row passed in
+`live_seed20260629_scene01_nav2_abort_fallback_repro_20260604`, with closest
+approach `0.195562m`, clean first-contact flags, stable contact approach, and
+browser-watchable visual proof. The resumed parent gate then exposed
+`seed20260629_scene05_recovery_or_reaim`: high setup debt consumed about a
+minute before first contact, leaving too little push time. The longer bounded
+recovery window repaired that row while preserving delivery-stop behavior. The
+final parent gate
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+is promotion-green with `30/30` planner routing, `6/6` live missions, `6/6`
+visual packages, clean analyzer status, and `0` first-contact blockers.
+
+June 4 mixed-family route-owner evidence now covers two rough seeds. Seed
+`20260633` and seed `20260632` each passed the two-live-samples-per-route UAT
+surface across `fetch_ready_local`, `nav2_reposition_first`,
+`recovery_or_reaim`, `scan_or_perceive_first`, and
+`ambiguous_or_unsafe_no_go`. The latest analyzer is
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_uat_analyzer/scorecard.md`:
+route contracts `10/10`, visual packages `10/10`, executable deliveries `6/6`,
+route-only proofs `4/4`, clean analyzer status, and first-contact blockers
+`0`. Treat this as route-family visual UAT. The next gate should deliberately
+stress hard geometry and planner refusal boundaries before additional contact
+controller work.
+
+June 4 hard mixed-scenario route-owner evidence now closes that next gate.
+`hard_mixed_fetch_planner_v1` is the named two-per-route pressure matrix for
+wide-angle local fetch, opposite-side Nav2-first setup, large-angle
+recovery/re-aim, scan/defer, and safe no-go. The live replay analyzer is
+`artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It passed route contracts `10/10`, visual packages `10/10`, executable
+deliveries `6/6`, route-only proofs `4/4`, clean analyzer status, and
+first-contact blockers `0`, with executable closest approaches in
+`0.194m..0.197m`. Treat this as hard route-family visual UAT and architecture
+support. Promotion still requires the canonical saved-layout and seeded-gate
+ladder for any changed executor.
+
+June 4 LLM-shadow hard-matrix evidence adds high-level planner support:
+`artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The real provider matched the deterministic guard `10/10`, provider status was
+`ok` on all ten rows, wrong fetch-ready dispatches were `0`, and
+`llm_shadow_ready=True`. Treat this as shadow-only route-selection evidence.
+The next calibrated architecture work repeats shadow comparison on rough mixed
+seeds and the seven-seed manifest while hardware-transfer packaging starts.
+
+The first rough-seed LLM-shadow rollup is green:
+`artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+It aggregates the hard matrix and rough mixed seeds `20260632` / `20260633`,
+with `70/70` provider-ok classifications, `70/70` guard agreement, route
+pass/fail `70/0`, and wrong fetch-ready dispatches `0`. The remaining
+calibrated planner work is seven-seed shadow expansion plus hardware-transfer
+packaging.
+
+The full hard-plus-seven-seed LLM-shadow manifest is green at
+`artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+It covers eight gates and `220` total scenes, with provider `ok` on `220/220`,
+guard agreement `220/220`, route pass/fail `220/0`, and wrong fetch-ready
+dispatches `0`. Seed `20260630` required a longer-timeout rerun after one
+transient provider read timeout. Treat this as shadow route-selection evidence;
+live authority still requires a supervised threshold and fallback policy.
+
+The first supervised guard proof is green:
+`artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+`llm_supervised_guarded` accepted `10/10` hard-matrix proposals, vetoed `0`,
+matched the deterministic guard `10/10`, and produced wrong fetch-ready
+dispatches `0`. Treat this as dry supervised route-selection evidence; the next
+calibrated gate is supervised dry scoring over the seven-seed manifest.
+
+The supervised hard-plus-seven-seed rollup is also green:
+`artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md`.
+It covers `220` provider-backed cases with route pass/fail `220/0`, provider
+`ok` `220/220`, guard agreement `220/220`, wrong fetch-ready dispatches `0`,
+and supervised accept/veto `217/3`. The three vetoes were all
+`confidence_below_threshold`, so the calibrated interpretation is guarded
+fallback readiness rather than strict all-accepted live authority.
+
+The first supervised hard route-owner live UAT is green:
+`artifacts/session/analysis_supervised_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It uses the supervised hard planner gate and verifies route contracts `10/10`,
+visual packages `10/10`, executable deliveries `6/6`, and route-only proofs
+`4/4`. Treat this as live route-owner UAT evidence; canonical promotion still
+requires saved-layout repeatability and seeded-random gates after broader live
+supervised batches.
 
 ## Research Thread Output
 
@@ -276,6 +456,23 @@ branch strategy changes are propagated back to `main`.
   `STATUS_SUCCEEDED`, `0.451645m` closest approach, and about `0.121m` ball
   displacement. Treat this as evidence that Nav2 can keep the ball bounded but
   cannot be promoted as the sole contact owner.
+- Planner-routed route-owner evidence:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+  is the current supervised promotion proof for the planner-gated architecture.
+  The provider-backed planner child routed `30/30` scenes with guard agreement
+  `30/30` and wrong fetch dispatches `0`; the executable replay delivered
+  `6/6` missions and `6/6` visual packages across Nav2-first, recovery/re-aim,
+  and fetch-ready route owners; the analyzer reports clean execution, setup,
+  contact, and first-contact quality. Scene03's earlier no-motion failure is
+  now handled as infrastructure evidence by a base-controller preflight before
+  executable fetch scoring.
+- Multi-ball route-diverse setup boundary:
+  `artifacts/session/live_multiball_route_diverse_seed20260644_s01_relative_setup_no_refine_20260607/fetch_multiball_retrieval_gate/scorecard.md`
+  passes the first two balls cleanly and fails ball_3 before local fetch
+  dispatch on measured push-ready handoff. Treat earlier seed20260644 `12/12`
+  visual UAT as provisional route-owner progress; the corrected evidence says
+  front-side/target-side starts need an explicit measured free-space
+  `wraparound_setup_v1` owner before close setup/capture and guarded fetch.
 - Corrected May 31 geometry/video reference:
   `artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`
   passed saved `zero` with `fetch_to_pose_pass=true`,
@@ -286,6 +483,15 @@ branch strategy changes are propagated back to `main`.
   confirms browser-watchable onboard, topdown, and world-stream video. Treat
   this as the post-fix UAT reference for the metric path and as the starting
   point for corrected saved-layout requalification.
+- Push-readiness gate requalification:
+  `artifacts/session/live_push_readiness_gate_saved_anchor_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+  failed saved-anchor `zero`, `left05`, and `right05` one-run requalification.
+  The corrected audit
+  `artifacts/session/audit_push_readiness_gate_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+  reports `0` guarded-live terminal candidates. `zero` and `right05` failed
+  before Nav2 dispatch on measured push-readiness; `left05` passed readiness
+  and then failed during corridor push. Treat this as setup/contact evidence
+  that pauses terminal correction and routes the next work to setup/reacquire.
 - Seeded random/generalization status:
   not yet run for Nav2 corridor-push. Do not claim generalized behavior until
   the next candidate clears saved-anchor repeatability and then runs

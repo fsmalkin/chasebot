@@ -25,6 +25,12 @@ FAILURE_LABELS = (
     "nav2_goal_timeout",
     "ball_contact_during_reacquire",
     "post_reacquire_not_handoff_ready",
+    "path_clearance_guard",
+    "no_controller_progress",
+    "slow_controller_convergence",
+    "handoff_gate_mismatch",
+    "ball_motion_guard",
+    "action_error",
     "stage_timeout_after_prestage",
     "local_planner_progress_insufficient",
     "local_planner_release_not_reached",
@@ -50,6 +56,9 @@ FAILURE_LABELS = (
     "pre_stage_trajectory_owner_timeout_without_ball_contact",
 )
 BLOCKED_CANDIDATE_BRANCHES = {"region_funnel_v1", "nav2_reacquire_v1"}
+NAV2_FOLLOW_PATH_BRANCH = "nav2_follow_path_reacquire_v1"
+NAV2_MPPI_FOLLOW_PATH_BRANCH = "nav2_mppi_follow_path_reacquire_v1"
+NAV2_FOLLOW_PATH_BRANCHES = {NAV2_FOLLOW_PATH_BRANCH, NAV2_MPPI_FOLLOW_PATH_BRANCH}
 CONSTRAINED_LOCAL_PLANNER_BRANCH = "constrained_local_planner_v1"
 DOCKING_REACQUIRE_BRANCH = "docking_reacquire_v1"
 HANDOFF_YAW_SERVO_BRANCH = "handoff_yaw_servo_v1"
@@ -353,6 +362,152 @@ def _nav2_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _nav2_follow_path_debug_summary(rows: list[dict[str, Any]], mission_verdict: dict[str, Any]) -> dict[str, Any]:
+    dispatch_rows = [row for row in rows if row.get("event_type") == "nav2_follow_path_reacquire_dispatch"]
+    complete_rows = [row for row in rows if row.get("event_type") == "nav2_follow_path_reacquire_complete"]
+    blocked_rows = [row for row in rows if row.get("event_type") == "nav2_follow_path_reacquire_plan_blocked"]
+    statuses: list[str] = []
+    status_texts: list[str] = []
+    errors: list[str] = []
+    robot_motion_values: list[float | None] = []
+    ball_motion_values: list[float | None] = []
+    terminal_distance_values: list[float | None] = []
+    terminal_yaw_values: list[float | None] = []
+    progress_terminal_distance_values: list[float | None] = []
+    progress_terminal_yaw_values: list[float | None] = []
+    odom_delta_values: list[float | None] = []
+    handoff_ready_values: list[bool | None] = []
+    feedback_counts: list[int] = []
+    timeout_count = 0
+    action_error_count = 0
+    cancel_requested_count = 0
+    feedback_sample_count = 0
+    cmd_vel_sample_count = 0
+    cmd_vel_topic_counts: dict[str, int] = {}
+    odom_count_max = 0
+    controller_log_excerpt: list[str] = []
+
+    for row in complete_rows:
+        result = _dict_value(row.get("nav2_follow_path_result"))
+        diagnostics = _dict_value(row.get("nav2_follow_path_diagnostics"))
+        dispatch_status = str(
+            diagnostics.get("dispatch_status")
+            or row.get("nav2_follow_path_dispatch_status")
+            or result.get("dispatch_status")
+            or ""
+        )
+        if dispatch_status:
+            statuses.append(dispatch_status)
+        status_text = str(diagnostics.get("status_text") or result.get("status_text") or "")
+        if status_text:
+            status_texts.append(status_text)
+        error = str(diagnostics.get("error") or result.get("error") or "")
+        if error:
+            errors.append(error)
+        if dispatch_status == "goal_result_timeout" or _boolish(result.get("timed_out")) is True:
+            timeout_count += 1
+        if dispatch_status and dispatch_status not in {"goal_succeeded", "goal_result_timeout"}:
+            action_error_count += 1
+        if _boolish(result.get("cancel_requested")) is True or _boolish(diagnostics.get("cancel_requested")) is True:
+            cancel_requested_count += 1
+        feedback_count = _int_value(diagnostics.get("feedback_count", result.get("feedback_count")))
+        feedback_counts.append(feedback_count)
+        feedback_sample_count += len(_list_value(result.get("feedback_samples")))
+        cmd_vel_sample_count += len(_list_value(diagnostics.get("cmd_vel_samples", result.get("cmd_vel_samples"))))
+        cmd_counts = _dict_value(diagnostics.get("cmd_vel_counts", result.get("cmd_vel_counts")))
+        for topic, count in cmd_counts.items():
+            cmd_vel_topic_counts[str(topic)] = cmd_vel_topic_counts.get(str(topic), 0) + _int_value(count)
+        odom_count_max = max(
+            odom_count_max,
+            _int_value(diagnostics.get("odom_count", result.get("odom_count"))),
+        )
+        odom_delta = _dict_value(diagnostics.get("odom_delta", result.get("odom_delta")))
+        odom_delta_values.append(_finite_float(odom_delta.get("distance_m")))
+        progress_rows = _list_value(
+            diagnostics.get("path_progress_samples", result.get("path_progress_samples"))
+        )
+        progress_last = _dict_value(diagnostics.get("path_progress_last", result.get("path_progress_last")))
+        for progress in progress_rows + ([progress_last] if progress_last else []):
+            progress_payload = _dict_value(progress)
+            progress_terminal_distance_values.append(_finite_float(progress_payload.get("terminal_path_distance_m")))
+            progress_terminal_yaw_values.append(_finite_float(progress_payload.get("terminal_yaw_error_deg")))
+        log_payload = _dict_value(diagnostics.get("controller_log_excerpt", result.get("controller_log_excerpt")))
+        for line in _list_value(log_payload.get("excerpt")):
+            text = str(line)
+            if text and text not in controller_log_excerpt:
+                controller_log_excerpt.append(text)
+        robot_motion_values.append(
+            _finite_float(diagnostics.get("robot_motion_m", row.get("nav2_follow_path_robot_motion_m")))
+        )
+        ball_motion_values.append(
+            _finite_float(diagnostics.get("ball_motion_m", row.get("nav2_follow_path_ball_motion_m")))
+        )
+        terminal_distance_values.append(
+            _finite_float(
+                diagnostics.get(
+                    "completion_terminal_path_distance_m",
+                    row.get("nav2_follow_path_terminal_path_distance_m"),
+                )
+            )
+        )
+        terminal_yaw_values.append(
+            _finite_float(
+                diagnostics.get(
+                    "completion_terminal_yaw_error_deg",
+                    row.get("nav2_follow_path_terminal_yaw_error_deg"),
+                )
+            )
+        )
+        parsed_handoff = _boolish(
+            diagnostics.get("measured_handoff_ready", row.get("nav2_follow_path_measured_handoff_ready"))
+        )
+        if parsed_handoff is not None:
+            handoff_ready_values.append(parsed_handoff)
+
+    mission_failure_reason = str(mission_verdict.get("failure_reason", "") or "")
+    path_clearance_guard_count = sum(
+        1
+        for row in blocked_rows
+        if str(row.get("nav2_follow_path_dispatch_status", "") or "") == "follow_path_clearance_guard"
+        or str(_dict_value(row.get("nav2_follow_path_plan")).get("reason", "") or "") == "follow_path_clearance_guard"
+    )
+    if mission_failure_reason == "nav2_follow_path_path_clearance_guard":
+        path_clearance_guard_count += 1
+    max_robot_motion_m = _max_number(robot_motion_values) or 0.0
+    max_ball_motion_m = _max_number(ball_motion_values) or 0.0
+    min_terminal_path_distance_m = _min_number(terminal_distance_values)
+    min_abs_terminal_yaw_error_deg = _min_number([abs(value) if value is not None else None for value in terminal_yaw_values])
+    return {
+        "nav2_follow_path_dispatch_count": len(dispatch_rows),
+        "nav2_follow_path_complete_count": len(complete_rows),
+        "nav2_follow_path_plan_blocked_count": len(blocked_rows),
+        "nav2_follow_path_statuses": _ordered_unique(statuses),
+        "nav2_follow_path_status_texts": _ordered_unique(status_texts),
+        "nav2_follow_path_errors": _ordered_unique(errors),
+        "nav2_follow_path_timeout_count": timeout_count,
+        "nav2_follow_path_action_error_count": action_error_count,
+        "nav2_follow_path_path_clearance_guard_count": path_clearance_guard_count,
+        "nav2_follow_path_cancel_requested_count": cancel_requested_count,
+        "nav2_follow_path_feedback_count_max": max(feedback_counts, default=0),
+        "nav2_follow_path_feedback_sample_count": feedback_sample_count,
+        "nav2_follow_path_cmd_vel_sample_count": cmd_vel_sample_count,
+        "nav2_follow_path_cmd_vel_topic_counts": dict(sorted(cmd_vel_topic_counts.items())),
+        "nav2_follow_path_odom_count_max": int(odom_count_max),
+        "nav2_follow_path_odom_delta_max_m": _max_number(odom_delta_values),
+        "nav2_follow_path_progress_min_terminal_path_distance_m": _min_number(progress_terminal_distance_values),
+        "nav2_follow_path_progress_min_abs_terminal_yaw_error_deg": _min_number(
+            [abs(value) if value is not None else None for value in progress_terminal_yaw_values]
+        ),
+        "nav2_follow_path_controller_log_excerpt": controller_log_excerpt[-20:],
+        "nav2_follow_path_robot_motion_max_m": round(float(max_robot_motion_m), 6),
+        "nav2_follow_path_ball_motion_max_m": round(float(max_ball_motion_m), 6),
+        "nav2_follow_path_min_terminal_path_distance_m": min_terminal_path_distance_m,
+        "nav2_follow_path_min_abs_terminal_yaw_error_deg": min_abs_terminal_yaw_error_deg,
+        "nav2_follow_path_handoff_ready_count": sum(value is True for value in handoff_ready_values),
+        "nav2_follow_path_handoff_not_ready_count": sum(value is False for value in handoff_ready_values),
+    }
+
+
 def _snapshot_number(snapshot: dict[str, Any], key: str) -> float | None:
     return _finite_float(_dict_value(snapshot).get(key))
 
@@ -391,6 +546,314 @@ def _min_number(values: list[float | None]) -> float | None:
     if not finite_values:
         return None
     return round(min(finite_values), 6)
+
+
+def _capture_entry_debug_summary(rows: list[dict[str, Any]], mission_verdict: dict[str, Any]) -> dict[str, Any]:
+    capture_rows = [row for row in rows if row.get("phase") == "capture_entry"]
+    command_modes: list[str] = []
+    manager_directives: list[str] = []
+    timeout_causes: list[str] = []
+    ball_x_values: list[float | None] = []
+    ball_y_values: list[float | None] = []
+    bearing_values: list[float | None] = []
+    robot_longitudinal_values: list[float | None] = []
+    robot_lateral_values: list[float | None] = []
+    robot_delta_values: list[float | None] = []
+    ball_delta_values: list[float | None] = []
+    elapsed_values: list[float | None] = []
+    ready_observed_count = 0
+    ready_latched_count = 0
+    final_snapshot: dict[str, Any] = {}
+    final_diagnostics: dict[str, Any] = {}
+
+    def _record_snapshot(snapshot: dict[str, Any]) -> None:
+        ball_x_values.append(_finite_float(snapshot.get("ball_x_m")))
+        ball_y_values.append(_finite_float(snapshot.get("ball_y_m")))
+        bearing_values.append(_finite_float(snapshot.get("bearing_rad")))
+        robot_longitudinal_values.append(_finite_float(snapshot.get("robot_longitudinal_projection_m")))
+        robot_lateral_values.append(_finite_float(snapshot.get("robot_lateral_error_m")))
+
+    def _record_diagnostics(diagnostics: dict[str, Any]) -> None:
+        cause = str(diagnostics.get("timeout_cause", "") or "")
+        if cause:
+            timeout_causes.append(cause)
+        directive = str(diagnostics.get("manager_directive", "") or "")
+        if directive:
+            manager_directives.append(directive)
+        command = _dict_value(diagnostics.get("selected_command"))
+        command_mode = str(diagnostics.get("selected_command_mode") or command.get("mode") or "")
+        if command_mode:
+            command_modes.append(command_mode)
+        robot_delta_values.append(_finite_float(diagnostics.get("robot_delta_from_handoff_m")))
+        ball_delta_values.append(_finite_float(diagnostics.get("ball_delta_from_handoff_m")))
+        elapsed_values.append(_finite_float(diagnostics.get("elapsed_s")))
+
+    for row in capture_rows:
+        snapshot = _dict_value(row.get("capture_entry"))
+        diagnostics = _dict_value(row.get("capture_entry_diagnostics"))
+        diagnostic_snapshot = _dict_value(diagnostics.get("capture_entry_snapshot"))
+        snapshot_source = diagnostic_snapshot or snapshot
+        if snapshot_source:
+            final_snapshot = snapshot_source
+            _record_snapshot(snapshot_source)
+        if diagnostics:
+            final_diagnostics = diagnostics
+            _record_diagnostics(diagnostics)
+        if _boolish(snapshot_source.get("capture_entry_reached", diagnostics.get("ready_signal"))) is True:
+            ready_observed_count += 1
+        if _boolish(diagnostics.get("ready_latched")) is True:
+            ready_latched_count += 1
+        directive = str(row.get("manager_directive", "") or "")
+        if directive:
+            manager_directives.append(directive)
+        command = _dict_value(row.get("selected_command"))
+        command_mode = str(command.get("mode", "") or "")
+        if command_mode:
+            command_modes.append(command_mode)
+
+    verdict_snapshot = _dict_value(mission_verdict.get("capture_entry_snapshot"))
+    verdict_diagnostics = _dict_value(mission_verdict.get("capture_entry_diagnostics"))
+    if verdict_snapshot:
+        final_snapshot = verdict_snapshot
+        _record_snapshot(verdict_snapshot)
+    if verdict_diagnostics:
+        final_diagnostics = verdict_diagnostics
+        _record_diagnostics(verdict_diagnostics)
+        diagnostic_snapshot = _dict_value(verdict_diagnostics.get("capture_entry_snapshot"))
+        if diagnostic_snapshot and not verdict_snapshot:
+            final_snapshot = diagnostic_snapshot
+            _record_snapshot(diagnostic_snapshot)
+
+    def _final_metric(key: str) -> float | None:
+        value = _finite_float(final_diagnostics.get(key))
+        if value is None:
+            value = _finite_float(final_snapshot.get(key))
+        return _round_number(value)
+
+    mission_failure_stage = str(mission_verdict.get("failure_stage", "") or "")
+    mission_failure_reason = str(mission_verdict.get("failure_reason", "") or "")
+    approach_failure_reason = str(mission_verdict.get("approach_failure_reason", "") or "")
+    timeout_count = (
+        1
+        if (
+            mission_failure_reason == "capture_entry_timeout"
+            or approach_failure_reason == "capture_entry_timeout"
+            or (
+                mission_failure_stage == "capture_entry"
+                and mission_failure_reason in {"", "capture_entry_timeout"}
+            )
+        )
+        else 0
+    )
+    goal_side_loss_count = (
+        1
+        if (
+            mission_failure_reason == "capture_entry_goal_side_loss"
+            or approach_failure_reason == "capture_entry_goal_side_loss"
+        )
+        else 0
+    )
+    return {
+        "capture_entry_row_count": len(capture_rows),
+        "capture_entry_ready_observed_count": ready_observed_count,
+        "capture_entry_ready_latched_count": ready_latched_count,
+        "capture_entry_timeout_count": timeout_count,
+        "capture_entry_goal_side_loss_count": goal_side_loss_count,
+        "capture_entry_timeout_causes": _ordered_unique(timeout_causes),
+        "capture_entry_command_modes": _ordered_unique(command_modes),
+        "capture_entry_manager_directives": _ordered_unique(manager_directives),
+        "capture_entry_elapsed_max_s": _max_number(elapsed_values),
+        "capture_entry_final_ball_x_m": _final_metric("ball_x_m"),
+        "capture_entry_final_ball_y_m": _final_metric("ball_y_m"),
+        "capture_entry_final_bearing_rad": _final_metric("bearing_rad"),
+        "capture_entry_final_robot_longitudinal_projection_m": _final_metric(
+            "robot_longitudinal_projection_m"
+        ),
+        "capture_entry_final_robot_lateral_error_m": _final_metric("robot_lateral_error_m"),
+        "capture_entry_min_abs_ball_y_m": _min_number(
+            [abs(value) if value is not None else None for value in ball_y_values]
+        ),
+        "capture_entry_min_abs_bearing_rad": _min_number(
+            [abs(value) if value is not None else None for value in bearing_values]
+        ),
+        "capture_entry_min_ball_x_m": _min_number(ball_x_values),
+        "capture_entry_max_ball_x_m": _max_number(ball_x_values),
+        "capture_entry_min_abs_robot_lateral_error_m": _min_number(
+            [abs(value) if value is not None else None for value in robot_lateral_values]
+        ),
+        "capture_entry_min_robot_longitudinal_projection_m": _min_number(robot_longitudinal_values),
+        "capture_entry_max_robot_longitudinal_projection_m": _max_number(robot_longitudinal_values),
+        "capture_entry_robot_delta_from_handoff_max_m": _max_number(robot_delta_values),
+        "capture_entry_ball_delta_from_handoff_max_m": _max_number(ball_delta_values),
+        "capture_entry_final_snapshot": final_snapshot,
+        "capture_entry_final_diagnostics": final_diagnostics,
+    }
+
+
+def _capture_debug_summary(rows: list[dict[str, Any]], mission_verdict: dict[str, Any]) -> dict[str, Any]:
+    capture_rows = [row for row in rows if row.get("phase") == "capture"]
+    command_modes: list[str] = []
+    command_sources: list[str] = []
+    command_limit_reasons: list[str] = []
+    terminal_causes: list[str] = []
+    ball_x_values: list[float | None] = []
+    ball_y_values: list[float | None] = []
+    bearing_values: list[float | None] = []
+    linear_values: list[float | None] = []
+    angular_values: list[float | None] = []
+    target_speed_values: list[float | None] = []
+    first_contact_values: list[float | None] = []
+    robot_delta_values: list[float | None] = []
+    ball_delta_values: list[float | None] = []
+    command_limited_count = 0
+    captured_count = 0
+    secure_ready_count = 0
+    soft_handoff_ready_count = 0
+    zone_entry_ready_count = 0
+    first_contact_alignment_count = 0
+    final_snapshot: dict[str, Any] = {}
+    final_diagnostics: dict[str, Any] = {}
+
+    def _record_snapshot(snapshot: dict[str, Any]) -> None:
+        ball_x_values.append(_finite_float(snapshot.get("ball_x_m")))
+        ball_y_values.append(_finite_float(snapshot.get("ball_y_m")))
+        bearing_values.append(_finite_float(snapshot.get("bearing_rad")))
+
+    def _record_diagnostics(
+        diagnostics: dict[str, Any],
+        fallback_command: dict[str, Any],
+        *,
+        count_state_flags: bool = True,
+    ) -> None:
+        nonlocal command_limited_count
+        nonlocal captured_count
+        nonlocal secure_ready_count
+        nonlocal soft_handoff_ready_count
+        nonlocal zone_entry_ready_count
+        nonlocal first_contact_alignment_count
+
+        command = _dict_value(diagnostics.get("selected_command")) or fallback_command
+        command_mode = str(diagnostics.get("selected_command_mode") or command.get("mode") or "")
+        if command_mode:
+            command_modes.append(command_mode)
+        command_source = str(diagnostics.get("command_source", "") or "")
+        if command_source:
+            command_sources.append(command_source)
+        limit_reason = str(diagnostics.get("command_limit_reason", "") or "")
+        if limit_reason:
+            command_limit_reasons.append(limit_reason)
+        terminal_cause = str(diagnostics.get("terminal_cause", "") or "")
+        if terminal_cause:
+            terminal_causes.append(terminal_cause)
+        if count_state_flags and _boolish(diagnostics.get("command_limited")) is True:
+            command_limited_count += 1
+        if count_state_flags and _boolish(diagnostics.get("captured_now")) is True:
+            captured_count += 1
+        if count_state_flags and _boolish(diagnostics.get("secure_capture_ready")) is True:
+            secure_ready_count += 1
+        if count_state_flags and _boolish(diagnostics.get("soft_capture_handoff_ready")) is True:
+            soft_handoff_ready_count += 1
+        if count_state_flags and _boolish(diagnostics.get("zone_entry_handoff_ready")) is True:
+            zone_entry_ready_count += 1
+        alignment_value = _finite_float(diagnostics.get("first_contact_push_alignment_deg"))
+        if count_state_flags and (
+            _boolish(diagnostics.get("first_contact_alignment_seen")) is True
+            or alignment_value is not None
+        ):
+            first_contact_alignment_count += 1
+        first_contact_values.append(alignment_value)
+        robot_delta_values.append(_finite_float(diagnostics.get("robot_delta_from_capture_entry_handoff_m")))
+        ball_delta_values.append(_finite_float(diagnostics.get("ball_delta_from_capture_entry_handoff_m")))
+        linear_values.append(_finite_float(diagnostics.get("linear_x", command.get("linear_x"))))
+        angular_values.append(_finite_float(diagnostics.get("angular_z", command.get("angular_z"))))
+        target_speed_values.append(_finite_float(diagnostics.get("target_speed_scale", command.get("target_speed_scale"))))
+
+    for row in capture_rows:
+        snapshot = _dict_value(row.get("capture"))
+        diagnostics = _dict_value(row.get("capture_diagnostics"))
+        diagnostic_snapshot = _dict_value(diagnostics.get("capture_snapshot"))
+        snapshot_source = diagnostic_snapshot or snapshot
+        if snapshot_source:
+            final_snapshot = snapshot_source
+            _record_snapshot(snapshot_source)
+        fallback_command = _dict_value(row.get("selected_command"))
+        if diagnostics:
+            final_diagnostics = diagnostics
+            _record_diagnostics(diagnostics, fallback_command)
+        elif fallback_command:
+            command_mode = str(fallback_command.get("mode", "") or "")
+            if command_mode:
+                command_modes.append(command_mode)
+            linear_values.append(_finite_float(fallback_command.get("linear_x")))
+            angular_values.append(_finite_float(fallback_command.get("angular_z")))
+            target_speed_values.append(_finite_float(fallback_command.get("target_speed_scale")))
+        if not diagnostics and _boolish(snapshot_source.get("captured")) is True:
+            captured_count += 1
+
+    verdict_snapshot = _dict_value(mission_verdict.get("capture_state"))
+    verdict_diagnostics = _dict_value(mission_verdict.get("capture_diagnostics"))
+    if verdict_snapshot:
+        final_snapshot = verdict_snapshot
+        _record_snapshot(verdict_snapshot)
+    if verdict_diagnostics:
+        final_diagnostics = verdict_diagnostics
+        diagnostic_snapshot = _dict_value(verdict_diagnostics.get("capture_snapshot"))
+        if diagnostic_snapshot and not verdict_snapshot:
+            final_snapshot = diagnostic_snapshot
+            _record_snapshot(diagnostic_snapshot)
+        _record_diagnostics(
+            verdict_diagnostics,
+            _dict_value(verdict_diagnostics.get("selected_command")),
+            count_state_flags=False,
+        )
+
+    mission_failure_stage = str(mission_verdict.get("failure_stage", "") or "")
+    mission_failure_reason = str(mission_verdict.get("failure_reason", "") or "")
+    if mission_failure_stage == "capture" and mission_failure_reason:
+        terminal_causes.append(mission_failure_reason)
+
+    def _final_metric(key: str) -> float | None:
+        value = _finite_float(final_diagnostics.get(key))
+        if value is None:
+            value = _finite_float(final_snapshot.get(key))
+        return _round_number(value)
+
+    return {
+        "capture_row_count": len(capture_rows),
+        "capture_command_modes": _ordered_unique(command_modes),
+        "capture_command_sources": _ordered_unique(command_sources),
+        "capture_command_limited_count": command_limited_count,
+        "capture_command_limit_reasons": _ordered_unique(command_limit_reasons),
+        "capture_linear_x_max": _max_number(linear_values),
+        "capture_max_abs_angular_z": _max_number(
+            [abs(value) if value is not None else None for value in angular_values]
+        ),
+        "capture_target_speed_scale_max": _max_number(target_speed_values),
+        "capture_captured_count": captured_count,
+        "capture_secure_ready_count": secure_ready_count,
+        "capture_soft_handoff_ready_count": soft_handoff_ready_count,
+        "capture_zone_entry_ready_count": zone_entry_ready_count,
+        "capture_first_contact_alignment_count": first_contact_alignment_count,
+        "capture_first_contact_alignment_final_deg": _last_number(first_contact_values),
+        "capture_first_contact_alignment_min_deg": _min_number(first_contact_values),
+        "capture_first_contact_alignment_max_deg": _max_number(first_contact_values),
+        "capture_terminal_causes": _ordered_unique(terminal_causes),
+        "capture_final_ball_x_m": _final_metric("ball_x_m"),
+        "capture_final_ball_y_m": _final_metric("ball_y_m"),
+        "capture_final_bearing_rad": _final_metric("bearing_rad"),
+        "capture_min_ball_x_m": _min_number(ball_x_values),
+        "capture_max_ball_x_m": _max_number(ball_x_values),
+        "capture_min_abs_ball_y_m": _min_number(
+            [abs(value) if value is not None else None for value in ball_y_values]
+        ),
+        "capture_min_abs_bearing_rad": _min_number(
+            [abs(value) if value is not None else None for value in bearing_values]
+        ),
+        "capture_robot_delta_from_capture_entry_handoff_max_m": _max_number(robot_delta_values),
+        "capture_ball_delta_from_capture_entry_handoff_max_m": _max_number(ball_delta_values),
+        "capture_final_snapshot": final_snapshot,
+        "capture_final_diagnostics": final_diagnostics,
+    }
 
 
 def _local_planner_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1110,6 +1573,7 @@ def _case_labels(
     capture_entry: dict[str, Any],
     mission_verdict: dict[str, Any],
     nav2_debug: dict[str, Any],
+    nav2_follow_path_debug: dict[str, Any],
     local_planner_debug: dict[str, Any],
     docking_debug: dict[str, Any],
     handoff_yaw_servo_debug: dict[str, Any],
@@ -1126,6 +1590,11 @@ def _case_labels(
     if int(nav2_debug.get("nav2_goal_timeout_count", 0) or 0) > 0:
         labels.append("nav2_goal_timeout")
     if float(nav2_debug.get("ball_drift_max_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
+        labels.append("ball_contact_during_reacquire")
+    if (
+        float(nav2_follow_path_debug.get("nav2_follow_path_ball_motion_max_m", 0.0) or 0.0)
+        >= BALL_DRIFT_CONTACT_THRESHOLD_M
+    ):
         labels.append("ball_contact_during_reacquire")
     if float(local_planner_debug.get("local_planner_max_ball_motion_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
         labels.append("ball_contact_during_reacquire")
@@ -1150,6 +1619,45 @@ def _case_labels(
         labels.append("ball_contact_during_reacquire")
     if int(nav2_debug.get("post_reacquire_not_handoff_ready_count", 0) or 0) > 0:
         labels.append("post_reacquire_not_handoff_ready")
+    if str(branch_name or "") in NAV2_FOLLOW_PATH_BRANCHES:
+        follow_path_failure_reason = str(mission_verdict.get("failure_reason", "") or "")
+        follow_path_timeout_count = int(nav2_follow_path_debug.get("nav2_follow_path_timeout_count", 0) or 0)
+        follow_path_action_error_count = int(
+            nav2_follow_path_debug.get("nav2_follow_path_action_error_count", 0) or 0
+        )
+        follow_path_motion_m = float(
+            nav2_follow_path_debug.get("nav2_follow_path_robot_motion_max_m", 0.0) or 0.0
+        )
+        follow_path_ball_motion_m = float(
+            nav2_follow_path_debug.get("nav2_follow_path_ball_motion_max_m", 0.0) or 0.0
+        )
+        follow_path_handoff_not_ready_count = int(
+            nav2_follow_path_debug.get("nav2_follow_path_handoff_not_ready_count", 0) or 0
+        )
+        follow_path_terminal_distance = _finite_float(
+            nav2_follow_path_debug.get("nav2_follow_path_min_terminal_path_distance_m")
+        )
+        if follow_path_timeout_count > 0:
+            labels.append("nav2_goal_timeout")
+        if int(nav2_follow_path_debug.get("nav2_follow_path_path_clearance_guard_count", 0) or 0) > 0:
+            labels.append("path_clearance_guard")
+        if follow_path_ball_motion_m >= BALL_DRIFT_CONTACT_THRESHOLD_M:
+            labels.append("ball_motion_guard")
+        if follow_path_timeout_count > 0 and follow_path_motion_m < 0.05:
+            labels.append("no_controller_progress")
+        if (
+            follow_path_timeout_count > 0
+            and follow_path_motion_m >= 0.05
+            and follow_path_ball_motion_m < BALL_DRIFT_CONTACT_THRESHOLD_M
+        ):
+            labels.append("slow_controller_convergence")
+        if (
+            follow_path_handoff_not_ready_count > 0
+            and (follow_path_terminal_distance is not None and follow_path_terminal_distance <= 0.25)
+        ) or follow_path_failure_reason == "nav2_follow_path_post_action_not_handoff_ready":
+            labels.append("handoff_gate_mismatch")
+        if follow_path_action_error_count > 0 or follow_path_failure_reason == "nav2_follow_path_failed":
+            labels.append("action_error")
     if str(branch_name or "") == CONSTRAINED_LOCAL_PLANNER_BRANCH:
         local_active_count = int(local_planner_debug.get("local_planner_active_row_count", 0) or 0)
         local_release_count = int(local_planner_debug.get("local_planner_release_reason_count", 0) or 0)
@@ -1294,6 +1802,9 @@ def build_case_failure_summary(
     if state_history_path is not None:
         state_history_status, state_rows = _load_jsonl(state_history_path)
     nav2_debug = _nav2_debug_summary(state_rows)
+    nav2_follow_path_debug = _nav2_follow_path_debug_summary(state_rows, mission_verdict)
+    capture_entry_debug = _capture_entry_debug_summary(state_rows, mission_verdict)
+    capture_debug = _capture_debug_summary(state_rows, mission_verdict)
     local_planner_debug = _local_planner_debug_summary(state_rows)
     docking_debug = _docking_debug_summary(state_rows)
     handoff_yaw_servo_debug = _handoff_yaw_servo_debug_summary(state_rows)
@@ -1314,6 +1825,7 @@ def build_case_failure_summary(
         capture_entry=capture_entry,
         mission_verdict=mission_verdict,
         nav2_debug=nav2_debug,
+        nav2_follow_path_debug=nav2_follow_path_debug,
         local_planner_debug=local_planner_debug,
         docking_debug=docking_debug,
         handoff_yaw_servo_debug=handoff_yaw_servo_debug,
@@ -1346,6 +1858,9 @@ def build_case_failure_summary(
         "state_history_status": state_history_status,
         "missing_evidence": missing_evidence,
         "nav2_debug": nav2_debug,
+        "nav2_follow_path_debug": nav2_follow_path_debug,
+        "capture_entry_debug": capture_entry_debug,
+        "capture_debug": capture_debug,
         "local_planner_debug": local_planner_debug,
         "docking_debug": docking_debug,
         "handoff_yaw_servo_debug": handoff_yaw_servo_debug,
@@ -1505,6 +2020,39 @@ def build_failure_audit_summary(
     }
 
 
+def _scorecard_repro_debug_cell(case: dict[str, Any]) -> str:
+    nav2_follow_path = _dict_value(case.get("nav2_follow_path_debug"))
+    capture_entry = _dict_value(case.get("capture_entry_debug"))
+    capture = _dict_value(case.get("capture_debug"))
+    statuses = ",".join(_ordered_unique([str(value) for value in _list_value(nav2_follow_path.get("nav2_follow_path_statuses"))]))
+    errors = ",".join(_ordered_unique([str(value) for value in _list_value(nav2_follow_path.get("nav2_follow_path_errors"))]))
+    if not statuses:
+        statuses = "none"
+    if not errors:
+        errors = "none"
+    terminal_distance = _round_number(
+        _finite_float(nav2_follow_path.get("nav2_follow_path_min_terminal_path_distance_m"))
+    )
+    yaw_error = _round_number(
+        _finite_float(nav2_follow_path.get("nav2_follow_path_min_abs_terminal_yaw_error_deg"))
+    )
+    robot_motion = _round_number(_finite_float(nav2_follow_path.get("nav2_follow_path_robot_motion_max_m")))
+    ball_motion = _round_number(_finite_float(nav2_follow_path.get("nav2_follow_path_ball_motion_max_m")))
+    handoff_ready = _int_value(nav2_follow_path.get("nav2_follow_path_handoff_ready_count"))
+    handoff_not_ready = _int_value(nav2_follow_path.get("nav2_follow_path_handoff_not_ready_count"))
+    capture_entry_rows = _int_value(capture_entry.get("capture_entry_row_count"))
+    capture_rows = _int_value(capture.get("capture_row_count"))
+    return (
+        f"fp={statuses}/{errors}; "
+        f"dist={terminal_distance if terminal_distance is not None else 'n/a'}; "
+        f"yaw={yaw_error if yaw_error is not None else 'n/a'}; "
+        f"robot={robot_motion if robot_motion is not None else 'n/a'}; "
+        f"ball={ball_motion if ball_motion is not None else 'n/a'}; "
+        f"handoff={handoff_ready}/{handoff_not_ready}; "
+        f"rows={capture_entry_rows}/{capture_rows}"
+    )
+
+
 def build_scorecard_markdown(summary: dict[str, Any]) -> str:
     lines = [
         "# Gather Control Failure Audit",
@@ -1513,8 +2061,8 @@ def build_scorecard_markdown(summary: dict[str, Any]) -> str:
         f"- status: `{summary.get('status', '')}`",
         f"- recommended_next_action: `{summary.get('recommended_next_action', '')}`",
         "",
-        "| branch | primary handoff blocked | zero handoff | plus45 handoff | labels | missing evidence | zero reason | plus45 reason |",
-        "|---|---:|---:|---:|---|---:|---|---|",
+        "| branch | primary handoff blocked | zero handoff | plus45 handoff | labels | missing evidence | zero reason | plus45 reason | zero FollowPath/capture | plus45 FollowPath/capture |",
+        "|---|---:|---:|---:|---|---:|---|---|---|---|",
     ]
     for branch in _list_value(summary.get("branches")):
         if not isinstance(branch, dict):
@@ -1540,7 +2088,9 @@ def build_scorecard_markdown(summary: dict[str, Any]) -> str:
             f"`{', '.join(str(label) for label in branch.get('labels', [])) or 'none'}` | "
             f"{missing_evidence_count} | "
             f"`{zero.get('fresh_attempt_reason', '') or 'none'}` | "
-            f"`{plus45.get('fresh_attempt_reason', '') or 'none'}` |"
+            f"`{plus45.get('fresh_attempt_reason', '') or 'none'}` | "
+            f"`{_scorecard_repro_debug_cell(zero)}` | "
+            f"`{_scorecard_repro_debug_cell(plus45)}` |"
         )
     lines.append("")
     return "\n".join(lines)

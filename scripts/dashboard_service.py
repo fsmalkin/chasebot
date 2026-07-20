@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import os
+import random
 import re
 import shlex
 import shutil
@@ -21,10 +22,11 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import yaml
 
+import fetch_planner_handoff_gate as fetch_planner_gate
 from brain_supervisor_policy import build_policy_snapshot
 from brain_supervisor_policy import intent_readiness_snapshot
 from llm_supervisor_core import load_supervisor_runtime_state as load_shadow_runtime_state
@@ -58,6 +60,7 @@ DEFAULT_WORLD_FILE = "yolo_test_world_v6_clean_uat.world"
 DEFAULT_SURFACE_PROFILE = "baseline"
 SHORT_TURF_WORLD_FILE = "yolo_test_world_v6_clean_uat_short_turf.world"
 SHORT_GRASS_WORLD_FILE = "yolo_test_world_v6_clean_uat_short_grass.world"
+CALIBRATED_GOLF_TURF_WORLD_FILE = "yolo_test_world_v6_calibrated_golf_turf.world"
 DEFAULT_WORLD_NAME = "yolo_test_world"
 DEFAULT_INFERENCE_BACKEND = "tensorrt_int8"
 DEFAULT_GATE_PROFILE = "compat"
@@ -65,6 +68,8 @@ DEFAULT_INFERENCE_DEVICE = "cuda:0"
 DEFAULT_MULTI_TARGET_CONFIG = "ros2_config/config/multi_target_nav2_fidelity.yaml"
 DEFAULT_NAV2_CONFIG = "ros2_config/config/nav2_readiness_fidelity.yaml"
 TARGET_MODEL_SDF = "ros2_config/frisbee_target_ball.sdf"
+CALIBRATED_GOLF_BALL_SDF = "ros2_config/calibrated_golf_ball.sdf"
+GOLF_BALL_DELIVERY_ZONE_SDF = "ros2_config/golf_ball_delivery_zone_marker.sdf"
 BASELINE_ROBOT_SDF_NAME = "jetbot_core_ignition_v1.6.0.sdf"
 CORRAL_ROBOT_SDF_NAME = "jetbot_core_ignition_v1.7.0.sdf"
 TARGET_MODEL_NAME_NAV2 = "uat_nav2_target"
@@ -79,14 +84,25 @@ TRUTH_TARGET_MODEL_NAMES = (
 TRUTH_TARGET_MODEL_PREFIX = "visit_mission_target_"
 WORLD_STREAM_RESTART_COOLDOWN_S = 20.0
 WORLD_STREAM_RESTART_MAX_ATTEMPTS = 3
+TRUTH_PROBE_READY_TIMEOUT_S = 420.0
+VISUAL_OBSERVER_READY_TIMEOUT_S = 90.0
 WORLD_STREAM_STALE_DEBOUNCE_S = 3.0
 WORLD_STREAM_WATCHDOG_POLL_S = 1.0
 WORLD_STREAM_TRANSPORT_WINDOW_S = 5.0
 WORLD_STREAM_TRANSPORT_MIN_FRAMES = 3
 WORLD_STREAM_TRANSPORT_MAX_AGE_S = 4.0
 WORLD_STREAM_RENDERABLE_GRACE_S = 10.0
+DEFAULT_IDLE_SHUTDOWN_AFTER_S = 30.0 * 60.0
+IDLE_SHUTDOWN_WATCHDOG_POLL_S = 15.0
+FETCH_PROGRESS_CACHE_TTL_S = 5.0
+LATEST_SESSION_ARTIFACT_DIR_CACHE_TTL_S = 2.0
+LATEST_SESSION_ARTIFACT_SCAN_LIMIT = 400
+FETCH_PROGRESS_MILESTONE = "Generalized Fetch-To-Pose v1"
+VISUAL_UAT_PACKAGE_KIND = "fetch_visual_uat_package"
+STAGE_QUALITY_AUDIT_KIND = "fetch_saved_anchor_setup_contact_audit"
 GATE_SERVICE_READY_TIMEOUT_S = 25.0
 GATE_SERVICE_POLL_S = 0.5
+COMPOSE_UP_PROCESS_TIMEOUT_S = 420.0
 DEFAULT_CONTROL_MODE = "host_powershell"
 DEFAULT_SIM_LANE = "jetty_gate"
 DEFAULT_BRIDGE_ROS_DISTRO = "jazzy"
@@ -98,8 +114,71 @@ OPERATOR_VIEW_PORT_START = 14500
 OPERATOR_VIEW_PORT_END = 14520
 OPERATOR_VIEW_HEARTBEAT_STALE_S = 5.0
 REQUIRED_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack", "operator-view")
+CORE_GATE_SERVICES = ("sim-gate", "gate-stack")
+VISUAL_EVIDENCE_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack")
 HEADLESS_SOAK_GATE_SERVICES = ("sim-gate", "gate-stack")
-SELF_CONTAINED_SCENARIO_IDS = {"visit_route_planning", "corral_single_ball_place", "gather_three_ball_zone"}
+SELF_CONTAINED_SCENARIO_IDS = {
+    "visit_route_planning",
+    "corral_single_ball_place",
+    "gather_three_ball_zone",
+    "object_centric_zero_saved_layout",
+    "golf_ball_circle_delivery_uat",
+}
+OBJECT_CENTRIC_ZERO_SCENARIO_ID = "object_centric_zero_saved_layout"
+OBJECT_CENTRIC_ZERO_TARGET_LAYOUT_JSON = (
+    "artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_diag_rerun_20260503/"
+    "gather_goal_side_matrix/target_layouts/zero.json"
+)
+GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID = "golf_ball_circle_delivery_uat"
+GOLF_BALL_CIRCLE_DELIVERY_TARGET_LAYOUT_JSON = "ros2_config/target_layouts/golf_ball_circle_delivery_zero.json"
+GOLF_BALL_CIRCLE_DELIVERY_RANDOM_LAYOUT_ID = "bounded_random_golf_ball_circle_delivery"
+GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT = "corridor_contact_v1"
+GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL = "local_visual_v1"
+GOLF_BALL_PLANNER_GATED_SCENE_SET = fetch_planner_gate.DEFAULT_SCENE_SET
+GOLF_BALL_RANDOM_PROFILES = {
+    GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT,
+    GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL,
+}
+ALLOWED_DASHBOARD_GATHER_CONTROL_OVERRIDES = {
+    "object_centric_gather_policy_v1",
+    "ai_push_coast_servo_v1",
+}
+ALLOWED_DASHBOARD_AI_PUSH_COAST_MODES = {"shadow", "guarded_live"}
+ARTIFACT_MEDIA_TYPES = {
+    ".json": "application/json; charset=utf-8",
+    ".md": "text/markdown; charset=utf-8",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".mp4": "video/mp4",
+}
+GOLF_BALL_CIRCLE_DELIVERY_RANDOM_BOUNDS = {
+    "forward_min_m": 0.30,
+    "forward_max_m": 0.62,
+    "lateral_min_m": -0.18,
+    "lateral_max_m": 0.18,
+    "min_initial_delivery_margin_m": 0.04,
+}
+GOLF_BALL_CIRCLE_DELIVERY_LOCAL_VISUAL_BOUNDS = {
+    "distance_min_m": 0.45,
+    "distance_max_m": 0.75,
+    "angle_min_deg": -35.0,
+    "angle_max_deg": 35.0,
+    "robot_standoff_min_m": 0.26,
+    "robot_standoff_max_m": 0.45,
+    "robot_lateral_min_m": -0.10,
+    "robot_lateral_max_m": 0.10,
+    "robot_yaw_error_min_deg": -15.0,
+    "robot_yaw_error_max_deg": 15.0,
+    "min_initial_delivery_margin_m": 0.04,
+    "min_robot_ball_separation_m": 0.24,
+    "world_x_min_m": -0.15,
+    "world_x_max_m": 1.10,
+    "world_y_min_m": -0.55,
+    "world_y_max_m": 0.55,
+}
+GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ROBOT_STANDOFF_M = 0.32
+GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND = "golf_ball_circle_delivery_random"
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 POWERSHELL_EXE = shutil.which("powershell.exe") or shutil.which("powershell") or "powershell.exe"
@@ -121,6 +200,17 @@ class ScenarioDefinition:
     target_x: float = 1.10
     target_y: float = 0.00
     target_z: float = 0.05
+    runner_scenario_id: str = ""
+    mission_objective: str = ""
+    fetch_target_x: Optional[float] = None
+    fetch_target_y: Optional[float] = None
+    fetch_target_z: Optional[float] = None
+    fetch_delivery_radius_m: Optional[float] = None
+    gather_control_family: str = ""
+    target_layout_json: str = ""
+    target_model_sdf: str = ""
+    zone_model_sdf: str = ""
+    max_retries_per_target: int = 2
 
     def to_api(self) -> Dict[str, Any]:
         return asdict(self)
@@ -240,6 +330,46 @@ SCENARIOS = [
         featured=True,
     ),
     ScenarioDefinition(
+        id=OBJECT_CENTRIC_ZERO_SCENARIO_ID,
+        phase="corral_single_ball_place",
+        target_id="ball_1",
+        label="Object-Centric Zero",
+        description="Saved-layout zero run for object_centric_gather_policy_v1.",
+        mode="gather_mission",
+        robot_sdf_name=CORRAL_ROBOT_SDF_NAME,
+        world_file=SHORT_TURF_WORLD_FILE,
+        surface_profile="short_turf",
+        runner_scenario_id="corral_single_ball_place",
+        gather_control_family="object_centric_gather_policy_v1",
+        target_layout_json=OBJECT_CENTRIC_ZERO_TARGET_LAYOUT_JSON,
+        max_retries_per_target=2,
+    ),
+    ScenarioDefinition(
+        id=GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        phase="golf_ball_circle_delivery_uat",
+        target_id="ball_1",
+        label="Golf Ball Circle Delivery",
+        description="Calibrated golf-ball fetch-to-pose UAT with a visible delivery circle.",
+        mode="gather_mission",
+        robot_sdf_name=CORRAL_ROBOT_SDF_NAME,
+        world_file=CALIBRATED_GOLF_TURF_WORLD_FILE,
+        surface_profile="calibrated_golf_turf",
+        target_x=0.38,
+        target_y=0.0,
+        target_z=0.021336,
+        runner_scenario_id="corral_single_ball_place",
+        mission_objective="fetch_to_pose",
+        fetch_target_x=0.95,
+        fetch_target_y=0.0,
+        fetch_target_z=0.001,
+        fetch_delivery_radius_m=0.30,
+        gather_control_family="object_centric_gather_policy_v1",
+        target_layout_json=GOLF_BALL_CIRCLE_DELIVERY_TARGET_LAYOUT_JSON,
+        target_model_sdf=CALIBRATED_GOLF_BALL_SDF,
+        zone_model_sdf=GOLF_BALL_DELIVERY_ZONE_SDF,
+        max_retries_per_target=0,
+    ),
+    ScenarioDefinition(
         id="corral_single_ball_place",
         phase="corral_single_ball_place",
         target_id="ball_1",
@@ -286,6 +416,160 @@ def parse_utc_timestamp(value: str) -> Optional[datetime]:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
+
+
+def env_bool(name: str, default: bool) -> bool:
+    raw_value = os.environ.get(name, "").strip().lower()
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def truthy_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "random"}
+
+
+def env_float(name: str, default: float) -> float:
+    raw_value = os.environ.get(name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        return float(raw_value)
+    except ValueError:
+        return default
+
+
+def bounded_golf_fetch_random_draw(
+    *,
+    seed: int | None = None,
+    profile: str = GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT,
+    fetch_target_x: float = 0.95,
+    fetch_target_y: float = 0.0,
+    fetch_target_z: float = 0.001,
+    delivery_radius_m: float = 0.30,
+) -> Dict[str, Any]:
+    clean_seed = int(seed if seed is not None else (time.time_ns() & 0x7FFFFFFF))
+    clean_profile = str(profile or GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT).strip()
+    if clean_profile not in GOLF_BALL_RANDOM_PROFILES:
+        raise ValueError(f"unknown random_profile: {clean_profile}")
+    rng = random.Random(clean_seed)
+
+    def _in_world_envelope(x_value: float, y_value: float, bounds_payload: Dict[str, Any]) -> bool:
+        if "world_x_min_m" not in bounds_payload:
+            return True
+        return (
+            float(bounds_payload["world_x_min_m"]) <= float(x_value) <= float(bounds_payload["world_x_max_m"])
+            and float(bounds_payload["world_y_min_m"]) <= float(y_value) <= float(bounds_payload["world_y_max_m"])
+        )
+
+    rejection_count = 0
+    robot_lateral_offset_m = 0.0
+    yaw_error_deg = 0.0
+    ball_target_angle_deg = 0.0
+
+    if clean_profile == GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL:
+        bounds = dict(GOLF_BALL_CIRCLE_DELIVERY_LOCAL_VISUAL_BOUNDS)
+        for _attempt in range(128):
+            target_distance = rng.uniform(float(bounds["distance_min_m"]), float(bounds["distance_max_m"]))
+            ball_target_angle_deg = rng.uniform(float(bounds["angle_min_deg"]), float(bounds["angle_max_deg"]))
+            angle_rad = math.radians(ball_target_angle_deg)
+            push_ux = math.cos(angle_rad)
+            push_uy = math.sin(angle_rad)
+            ball_x = float(fetch_target_x) - (target_distance * push_ux)
+            ball_y = float(fetch_target_y) - (target_distance * push_uy)
+            standoff = rng.uniform(float(bounds["robot_standoff_min_m"]), float(bounds["robot_standoff_max_m"]))
+            robot_lateral_offset_m = rng.uniform(float(bounds["robot_lateral_min_m"]), float(bounds["robot_lateral_max_m"]))
+            yaw_error_deg = rng.uniform(float(bounds["robot_yaw_error_min_deg"]), float(bounds["robot_yaw_error_max_deg"]))
+            perp_x = -push_uy
+            perp_y = push_ux
+            robot_x = ball_x - (standoff * push_ux) + (robot_lateral_offset_m * perp_x)
+            robot_y = ball_y - (standoff * push_uy) + (robot_lateral_offset_m * perp_y)
+            robot_yaw = angle_rad + math.radians(yaw_error_deg)
+            robot_ball_separation = math.hypot(robot_x - ball_x, robot_y - ball_y)
+            if target_distance < float(delivery_radius_m) + float(bounds["min_initial_delivery_margin_m"]):
+                rejection_count += 1
+                continue
+            if robot_ball_separation < float(bounds["min_robot_ball_separation_m"]):
+                rejection_count += 1
+                continue
+            if not _in_world_envelope(ball_x, ball_y, bounds) or not _in_world_envelope(robot_x, robot_y, bounds):
+                rejection_count += 1
+                continue
+            break
+        else:
+            raise RuntimeError("unable to draw bounded local_visual_v1 golf fetch layout")
+    else:
+        bounds = dict(GOLF_BALL_CIRCLE_DELIVERY_RANDOM_BOUNDS)
+        forward_min = float(bounds["forward_min_m"])
+        forward_max = float(bounds["forward_max_m"])
+        lateral_min = float(bounds["lateral_min_m"])
+        lateral_max = float(bounds["lateral_max_m"])
+        min_margin = float(bounds["min_initial_delivery_margin_m"])
+        ball_x = forward_min
+        ball_y = 0.0
+        for _attempt in range(64):
+            ball_x = rng.uniform(forward_min, forward_max)
+            ball_y = rng.uniform(lateral_min, lateral_max)
+            target_distance = math.hypot(float(fetch_target_x) - ball_x, float(fetch_target_y) - ball_y)
+            if target_distance >= float(delivery_radius_m) + min_margin:
+                break
+            rejection_count += 1
+        target_dx = float(fetch_target_x) - ball_x
+        target_dy = float(fetch_target_y) - ball_y
+        target_distance = max(math.hypot(target_dx, target_dy), 1.0e-6)
+        push_ux = target_dx / target_distance
+        push_uy = target_dy / target_distance
+        standoff = float(GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ROBOT_STANDOFF_M)
+        robot_x = ball_x - (standoff * push_ux)
+        robot_y = ball_y - (standoff * push_uy)
+        robot_yaw = math.atan2(push_uy, push_ux)
+        robot_ball_separation = math.hypot(robot_x - ball_x, robot_y - ball_y)
+        ball_target_angle_deg = math.degrees(math.atan2(push_uy, push_ux))
+
+    return {
+        "layout_id": GOLF_BALL_CIRCLE_DELIVERY_RANDOM_LAYOUT_ID,
+        "random_profile": clean_profile,
+        "seed": clean_seed,
+        "bounds": bounds,
+        "target_pose": {
+            "x": round(float(fetch_target_x), 6),
+            "y": round(float(fetch_target_y), 6),
+            "z": round(float(fetch_target_z), 6),
+            "radius_m": round(float(delivery_radius_m), 6),
+        },
+        "ball_pose": {
+            "x": round(float(ball_x), 6),
+            "y": round(float(ball_y), 6),
+            "z": 0.021336,
+        },
+        "robot_pose": {
+            "x": round(float(robot_x), 6),
+            "y": round(float(robot_y), 6),
+            "yaw": round(float(robot_yaw), 6),
+        },
+        "ball_target_distance_m": round(float(target_distance), 6),
+        "ball_target_angle_deg": round(float(ball_target_angle_deg), 6),
+        "robot_standoff_m": round(float(standoff), 6),
+        "robot_lateral_offset_m": round(float(robot_lateral_offset_m), 6),
+        "robot_yaw_error_deg": round(float(yaw_error_deg), 6),
+        "robot_ball_separation_m": round(float(robot_ball_separation), 6),
+        "rejection_count": int(rejection_count),
+    }
+
+
+def as_utc_datetime(value: str) -> Optional[datetime]:
+    parsed = parse_utc_timestamp(value)
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _truth_world_xy(pose: Dict[str, Any]) -> Optional[Dict[str, float]]:
@@ -431,6 +715,8 @@ class DashboardController:
         self.intent_ack_path = self.runtime_dir / "intent_ack.json"
         self.peer_project_cleanup = peer_project_cleanup if peer_project_cleanup in {"exclusive", "none"} else "exclusive"
         self.headless_worker_mode = bool(headless_worker_mode)
+        self.operator_view_required = True
+        self.visual_evidence_required = not self.headless_worker_mode
         self.control_mode = (os.environ.get("CHASECAR_DASHBOARD_CONTROL_MODE", DEFAULT_CONTROL_MODE).strip() or DEFAULT_CONTROL_MODE)
         try:
             self.docker = choose_docker_cli()
@@ -438,10 +724,21 @@ class DashboardController:
             self.docker = ""
         warm_services_raw = os.environ.get("CHASECAR_DASHBOARD_WARM_SERVICES", ",".join(DEFAULT_WARM_SERVICES)).strip()
         self.warm_services = tuple(item.strip() for item in warm_services_raw.split(",") if item.strip()) or DEFAULT_WARM_SERVICES
+        self.idle_shutdown_after_s = max(0.0, env_float("CHASECAR_DASHBOARD_IDLE_SHUTDOWN_S", DEFAULT_IDLE_SHUTDOWN_AFTER_S))
+        self.idle_shutdown_enabled = (
+            self.idle_shutdown_after_s > 0.0
+            and env_bool("CHASECAR_DASHBOARD_IDLE_SHUTDOWN_ENABLED", True)
+        )
+        self.idle_shutdown_poll_s = max(1.0, env_float("CHASECAR_DASHBOARD_IDLE_SHUTDOWN_POLL_S", IDLE_SHUTDOWN_WATCHDOG_POLL_S))
         self.compose_file = REPO_ROOT / "docker-compose.yml"
         self.launcher_project = ""
         self.host_repo_mount_source = os.environ.get("HOST_REPO_MOUNT_SOURCE", "").strip()
         self._control_plane_checked_at = 0.0
+        self._fetch_progress_cache_at = 0.0
+        self._fetch_progress_cache: Dict[str, Any] = {}
+        self._latest_session_dirs_cache_at = 0.0
+        self._latest_session_dirs_cache_root = ""
+        self._latest_session_dirs_cache: list[Path] = []
         self.contract = self._load_contract()
         self.frozen_intents = {intent["name"]: intent for intent in self.contract.get("intents", [])}
         self.state_lock = threading.RLock()
@@ -450,11 +747,13 @@ class DashboardController:
         self.intent_lock = threading.Lock()
         self.lifecycle_cancel = threading.Event()
         self.scenario_cancel = threading.Event()
+        self.idle_shutdown_cancel = threading.Event()
         self.world_stream_watchdog_cancel = threading.Event()
 
         self.lifecycle_thread: Optional[threading.Thread] = None
         self.scenario_thread: Optional[threading.Thread] = None
         self.intent_thread: Optional[threading.Thread] = None
+        self.idle_shutdown_thread: Optional[threading.Thread] = None
         self.world_stream_watchdog_thread: Optional[threading.Thread] = None
 
         self.active_env_proc: Optional[subprocess.Popen[str]] = None
@@ -466,7 +765,8 @@ class DashboardController:
         self.world_viewer_container_id = ""
         self.operator_view_container_id = ""
         self.pending_scenario_id = ""
-        self.pending_scenario_overrides: Dict[str, str] = {}
+        self.pending_scenario_overrides: Dict[str, Any] = {}
+        self.active_scenario_overrides: Dict[str, Any] = {}
         self.build_on_next_start = True
         self.world_stream_restart_lock = threading.Lock()
         self._world_stream_stale_since_monotonic = 0.0
@@ -529,6 +829,7 @@ class DashboardController:
                 "remaining_targets": [],
                 "last_visit_result": {},
                 "mission_verdict": {},
+                "planner_handoff": {},
                 "gather_phase": "idle",
                 "capture_state": {},
                 "zone_pose": {},
@@ -550,6 +851,8 @@ class DashboardController:
                 "operator_view_ready": False,
                 "operator_view_status": "disabled",
                 "operator_view_failure_class": "",
+                "operator_view_required": True,
+                "visual_evidence_required": self.visual_evidence_required,
                 "validation_dir": "",
                 "command_history_path": "",
                 "multi_target_progress_path": "",
@@ -563,6 +866,19 @@ class DashboardController:
                 "world_stream_restart_in_progress": False,
                 "world_stream_restart_cooldown_s": WORLD_STREAM_RESTART_COOLDOWN_S,
                 "world_stream_restart_max_attempts": WORLD_STREAM_RESTART_MAX_ATTEMPTS,
+                "idle_shutdown_enabled": self.idle_shutdown_enabled,
+                "idle_shutdown_after_s": self.idle_shutdown_after_s,
+                "idle_shutdown_poll_s": self.idle_shutdown_poll_s,
+                "idle_shutdown_state": "watching" if self.idle_shutdown_enabled else "disabled",
+                "idle_shutdown_blocker": "",
+                "idle_shutdown_idle_since_utc": "",
+                "idle_shutdown_deadline_utc": "",
+                "idle_shutdown_remaining_s": None,
+                "idle_shutdown_triggered_utc": "",
+                "idle_shutdown_last_checked_utc": "",
+                "idle_shutdown_last_error": "",
+                "last_operator_activity_utc": utc_now(),
+                "last_operator_activity_reason": "service_start",
                 "startup_retry_count": 0,
                 "startup_cleanup_count": 0,
                 "startup_last_cleanup_projects": [],
@@ -582,6 +898,12 @@ class DashboardController:
             daemon=True,
         )
         self.world_stream_watchdog_thread.start()
+        self.idle_shutdown_thread = threading.Thread(
+            target=self._idle_shutdown_watchdog_loop,
+            name="dashboard-idle-shutdown-watchdog",
+            daemon=True,
+        )
+        self.idle_shutdown_thread.start()
 
     def _load_contract(self) -> Dict[str, Any]:
         contract_path = REPO_ROOT / "runtime" / "contracts" / "llm_control_contract.yaml"
@@ -672,11 +994,196 @@ class DashboardController:
             self.state.update(updates)
             self._persist_state_locked()
 
+    def _mark_operator_activity(self, reason: str) -> None:
+        self._update_state(
+            last_operator_activity_utc=utc_now(),
+            last_operator_activity_reason=str(reason or "operator_action"),
+            idle_shutdown_idle_since_utc="",
+            idle_shutdown_deadline_utc="",
+            idle_shutdown_remaining_s=None,
+            idle_shutdown_blocker="",
+            idle_shutdown_last_error="",
+            idle_shutdown_state="watching" if getattr(self, "idle_shutdown_enabled", False) else "disabled",
+        )
+
     def _lifecycle_busy(self) -> bool:
         thread = self.lifecycle_thread
         if thread is not None and not thread.is_alive():
             self.lifecycle_thread = None
         return self.lifecycle_lock.locked()
+
+    @staticmethod
+    def _process_alive(proc: Optional[subprocess.Popen[str]]) -> bool:
+        if proc is None:
+            return False
+        try:
+            return proc.poll() is None
+        except Exception:
+            return True
+
+    def _idle_shutdown_runtime_blocker(self) -> str:
+        try:
+            proof_runtime = self._llm_proof_runtime_state()
+        except Exception:
+            proof_runtime = {}
+        try:
+            visit_runtime = self._visit_mission_runtime_state()
+        except Exception:
+            visit_runtime = {}
+        try:
+            gather_runtime = self._gather_mission_runtime_state()
+        except Exception:
+            gather_runtime = {}
+
+        runtime_items = (
+            ("proof_runtime_running", proof_runtime),
+            ("visit_runtime_running", visit_runtime),
+            ("gather_runtime_running", gather_runtime),
+        )
+        for blocker, runtime in runtime_items:
+            if isinstance(runtime, dict) and bool(runtime.get("running", False)):
+                return blocker
+
+        active_statuses = {"running", "setup"}
+        mission_statuses = {
+            str(visit_runtime.get("mission_status", "") or "").lower() if isinstance(visit_runtime, dict) else "",
+            str(gather_runtime.get("mission_status", "") or "").lower() if isinstance(gather_runtime, dict) else "",
+            str(proof_runtime.get("proof_state", "") or "").lower() if isinstance(proof_runtime, dict) else "",
+        }
+        if mission_statuses & active_statuses:
+            return "mission_runtime_active"
+        return ""
+
+    def _idle_shutdown_blocker(self) -> str:
+        if not getattr(self, "idle_shutdown_enabled", False):
+            return "disabled"
+        with self.state_lock:
+            environment_state = str(self.state.get("environment_state", "stopped") or "stopped")
+            scenario_state = str(self.state.get("scenario_state", "idle") or "idle")
+            mission_status = str(self.state.get("mission_status", "idle") or "idle")
+            gather_phase = str(self.state.get("gather_phase", "idle") or "idle")
+        if environment_state != "environment_ready":
+            return f"environment_{environment_state}"
+        if self._lifecycle_busy():
+            return "lifecycle_busy"
+        if scenario_state == "running":
+            return "scenario_running"
+        if self.scenario_thread is not None and self.scenario_thread.is_alive():
+            return "scenario_thread_running"
+        if self.intent_thread is not None and self.intent_thread.is_alive():
+            return "intent_thread_running"
+        if self._process_alive(self.active_scenario_proc):
+            return "scenario_process_running"
+        if self._process_alive(self.active_intent_proc):
+            return "intent_process_running"
+        if mission_status.lower() in {"running", "setup"}:
+            return "mission_status_active"
+        if gather_phase.lower() in {"setup", "running"}:
+            return "gather_phase_active"
+        return self._idle_shutdown_runtime_blocker()
+
+    def _queue_idle_shutdown_stop(self, now_utc: str) -> bool:
+        self._refresh_control_plane_state(force=True)
+        with self.state_lock:
+            if not self.state.get("control_plane_ready", False):
+                self.state.update(
+                    {
+                        "idle_shutdown_state": "blocked",
+                        "idle_shutdown_blocker": "control_plane_unavailable",
+                        "idle_shutdown_last_checked_utc": now_utc,
+                    }
+                )
+                self._persist_state_locked()
+                return False
+        blocker = self._idle_shutdown_blocker()
+        if blocker:
+            state_name = "disabled" if blocker == "disabled" else ("inactive" if blocker.startswith("environment_") else "busy")
+            self._update_state(
+                idle_shutdown_state=state_name,
+                idle_shutdown_blocker=blocker,
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_last_checked_utc=now_utc,
+            )
+            return False
+        if self._lifecycle_busy():
+            self._update_state(
+                idle_shutdown_state="busy",
+                idle_shutdown_blocker="lifecycle_busy",
+                idle_shutdown_last_checked_utc=now_utc,
+            )
+            return False
+        self.pending_scenario_id = ""
+        self.pending_scenario_overrides = {}
+        self._update_state(
+            idle_shutdown_state="queued",
+            idle_shutdown_triggered_utc=now_utc,
+            idle_shutdown_last_checked_utc=now_utc,
+            idle_shutdown_last_error="",
+            environment_message="idle shutdown queued",
+        )
+        idle_after_s = float(getattr(self, "idle_shutdown_after_s", DEFAULT_IDLE_SHUTDOWN_AFTER_S) or 0.0)
+        idle_label = f"{idle_after_s / 60.0:.0f} minutes" if idle_after_s >= 60.0 else f"{idle_after_s:.0f} seconds"
+        self._record_operator_event(f"Environment auto-stop queued after {idle_label} idle.", category="environment")
+        self.lifecycle_thread = threading.Thread(target=self._stop_environment_worker, name="dashboard-idle-stop", daemon=True)
+        self.lifecycle_thread.start()
+        return True
+
+    def _evaluate_idle_shutdown(self) -> None:
+        now_utc = utc_now()
+        now_dt = as_utc_datetime(now_utc) or datetime.now(timezone.utc)
+        blocker = self._idle_shutdown_blocker()
+        if blocker:
+            state_name = "disabled" if blocker == "disabled" else ("inactive" if blocker.startswith("environment_") else "busy")
+            self._update_state(
+                idle_shutdown_enabled=getattr(self, "idle_shutdown_enabled", False),
+                idle_shutdown_after_s=getattr(self, "idle_shutdown_after_s", DEFAULT_IDLE_SHUTDOWN_AFTER_S),
+                idle_shutdown_poll_s=getattr(self, "idle_shutdown_poll_s", IDLE_SHUTDOWN_WATCHDOG_POLL_S),
+                idle_shutdown_state=state_name,
+                idle_shutdown_blocker=blocker,
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_last_checked_utc=now_utc,
+            )
+            return
+
+        with self.state_lock:
+            idle_since_text = str(self.state.get("idle_shutdown_idle_since_utc", "") or "")
+        idle_since_dt = as_utc_datetime(idle_since_text)
+        if idle_since_dt is None:
+            idle_since_dt = now_dt
+            idle_since_text = idle_since_dt.isoformat()
+
+        idle_after_s = max(0.0, float(getattr(self, "idle_shutdown_after_s", DEFAULT_IDLE_SHUTDOWN_AFTER_S) or 0.0))
+        deadline_dt = idle_since_dt.timestamp() + idle_after_s
+        remaining_s = max(0.0, deadline_dt - now_dt.timestamp())
+        deadline_text = datetime.fromtimestamp(deadline_dt, tz=timezone.utc).isoformat()
+        if remaining_s > 0.0:
+            self._update_state(
+                idle_shutdown_enabled=True,
+                idle_shutdown_after_s=idle_after_s,
+                idle_shutdown_poll_s=getattr(self, "idle_shutdown_poll_s", IDLE_SHUTDOWN_WATCHDOG_POLL_S),
+                idle_shutdown_state="idle",
+                idle_shutdown_blocker="",
+                idle_shutdown_idle_since_utc=idle_since_text,
+                idle_shutdown_deadline_utc=deadline_text,
+                idle_shutdown_remaining_s=remaining_s,
+                idle_shutdown_last_checked_utc=now_utc,
+                idle_shutdown_last_error="",
+            )
+            return
+
+        self._update_state(
+            idle_shutdown_state="expired",
+            idle_shutdown_blocker="",
+            idle_shutdown_idle_since_utc=idle_since_text,
+            idle_shutdown_deadline_utc=deadline_text,
+            idle_shutdown_remaining_s=0.0,
+            idle_shutdown_last_checked_utc=now_utc,
+        )
+        self._queue_idle_shutdown_stop(now_utc)
 
     def _scenario_requires_clean_reset(self, scenario: ScenarioDefinition) -> bool:
         return scenario.id in SELF_CONTAINED_SCENARIO_IDS
@@ -720,11 +1227,13 @@ class DashboardController:
         pending_scenario_id = str(self.pending_scenario_id or "").strip()
         if not pending_scenario_id:
             return
+        pending_overrides = dict(getattr(self, "pending_scenario_overrides", {}) or {})
         self.pending_scenario_id = ""
         self.pending_scenario_overrides = {}
         scenario = SCENARIOS_BY_ID.get(pending_scenario_id)
         if scenario is None:
             return
+        self.active_scenario_overrides = pending_overrides
         self._record_operator_event(f"{scenario.label} auto-starting after sim reset.", category="scenario")
         self._launch_scenario_thread(scenario)
 
@@ -1098,7 +1607,15 @@ class DashboardController:
         return stale_projects
 
     def _required_gate_services(self) -> tuple[str, ...]:
-        return HEADLESS_SOAK_GATE_SERVICES if self.headless_worker_mode else REQUIRED_GATE_SERVICES
+        if self.headless_worker_mode:
+            return HEADLESS_SOAK_GATE_SERVICES
+        if bool(getattr(self, "operator_view_required", True)):
+            return REQUIRED_GATE_SERVICES
+        if bool(getattr(self, "visual_evidence_required", True)):
+            return VISUAL_EVIDENCE_GATE_SERVICES
+        if not bool(getattr(self, "operator_view_required", True)):
+            return CORE_GATE_SERVICES
+        return REQUIRED_GATE_SERVICES
 
     def _extract_host_port_bind_failure_port(self, output: str) -> Optional[int]:
         match = HOST_PORT_BIND_FAILURE_RE.search(output or "")
@@ -1337,6 +1854,739 @@ class DashboardController:
             "same_session_partition": same_session_partition,
         }
 
+    def _latest_session_artifact_json(
+        self,
+        relative_parts: tuple[str, ...],
+        *,
+        predicate: Optional[Any] = None,
+    ) -> tuple[Optional[Path], Dict[str, Any]]:
+        if not SESSION_ROOT.is_dir():
+            return None, {}
+        candidates: list[tuple[float, Path]] = []
+        for session_dir in self._recent_session_dirs():
+            path = session_dir.joinpath(*relative_parts)
+            if not path.is_file():
+                continue
+            try:
+                candidates.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+        for _mtime, path in sorted(candidates, key=lambda item: item[0], reverse=True):
+            payload = read_json(path)
+            if not payload:
+                continue
+            if predicate is not None and not predicate(payload):
+                continue
+            return path, payload
+        return None, {}
+
+    def _recent_session_dirs(self) -> list[Path]:
+        if not SESSION_ROOT.is_dir():
+            return []
+        root_key = str(SESSION_ROOT.resolve())
+        now = time.monotonic()
+        cached_root = str(getattr(self, "_latest_session_dirs_cache_root", "") or "")
+        cached_at = float(getattr(self, "_latest_session_dirs_cache_at", 0.0) or 0.0)
+        cached = list(getattr(self, "_latest_session_dirs_cache", []) or [])
+        if (
+            cached
+            and cached_root == root_key
+            and now - cached_at < LATEST_SESSION_ARTIFACT_DIR_CACHE_TTL_S
+        ):
+            return cached
+
+        candidates: list[tuple[float, Path]] = []
+        try:
+            iterator = SESSION_ROOT.iterdir()
+        except OSError:
+            return []
+        for session_dir in iterator:
+            if not session_dir.is_dir():
+                continue
+            try:
+                candidates.append((session_dir.stat().st_mtime, session_dir))
+            except OSError:
+                continue
+        limit = max(int(LATEST_SESSION_ARTIFACT_SCAN_LIMIT), 1)
+        recent = [path for _mtime, path in sorted(candidates, key=lambda item: item[0], reverse=True)[:limit]]
+        self._latest_session_dirs_cache_root = root_key
+        self._latest_session_dirs_cache_at = now
+        self._latest_session_dirs_cache = recent
+        return list(recent)
+
+    @staticmethod
+    def _artifact_display_path(path: Optional[Path]) -> str:
+        if path is None:
+            return ""
+        try:
+            return str(path.resolve().relative_to(REPO_ROOT))
+        except ValueError:
+            return str(path)
+
+    @staticmethod
+    def _artifact_url(path: Optional[Path]) -> str:
+        if path is None:
+            return ""
+        try:
+            relative = path.resolve().relative_to(SESSION_ROOT.resolve())
+        except ValueError:
+            return ""
+        return "/artifacts/session/" + relative.as_posix()
+
+    def _resolve_repo_json_path(self, raw_path: str, *, field_name: str) -> str:
+        text = str(raw_path or "").strip()
+        if not text:
+            return ""
+        path = Path(text)
+        if not path.is_absolute():
+            path = REPO_ROOT / path
+        resolved = path.resolve()
+        try:
+            resolved.relative_to(REPO_ROOT.resolve())
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must stay under repo root") from exc
+        if resolved.suffix.lower() != ".json":
+            raise ValueError(f"{field_name} must point to a json file")
+        if not resolved.is_file():
+            raise ValueError(f"{field_name} does not exist: {text}")
+        return self._artifact_display_path(resolved)
+
+    def resolve_session_artifact_path(self, url_suffix: str) -> Optional[Path]:
+        relative = unquote(str(url_suffix or "")).lstrip("/")
+        if not relative:
+            return None
+        candidate = (SESSION_ROOT / relative).resolve()
+        try:
+            candidate.relative_to(SESSION_ROOT.resolve())
+        except ValueError:
+            return None
+        if not candidate.is_file():
+            return None
+        if candidate.suffix.lower() not in ARTIFACT_MEDIA_TYPES:
+            return None
+        return candidate
+
+    def _latest_visual_uat_package_state(self) -> Dict[str, Any]:
+        def _is_visual_uat_package(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == VISUAL_UAT_PACKAGE_KIND
+
+        package_path, package = self._latest_session_artifact_json(
+            (VISUAL_UAT_PACKAGE_KIND, "package_summary.json"),
+            predicate=_is_visual_uat_package,
+        )
+        if not package:
+            return {}
+        videos = []
+        for video in package.get("videos", []) if isinstance(package.get("videos"), list) else []:
+            if not isinstance(video, dict):
+                continue
+            item = dict(video)
+            can_publish_video_url = bool(
+                item.get("browser_playable", item.get("playable_candidate", False))
+                and item.get("browser_compatible", False)
+            )
+            if not can_publish_video_url:
+                item["url"] = ""
+            elif not item.get("url") and item.get("path"):
+                item["url"] = self._artifact_url(REPO_ROOT / str(item.get("path", "")))
+            videos.append(item)
+        return {
+            "campaign_id": str(package.get("campaign_id", "") or ""),
+            "path": self._artifact_display_path(package_path),
+            "scorecard_path": str(package.get("scorecard_path", "") or ""),
+            "pass": bool(package.get("pass", False)),
+            "mobile_watchable": bool(package.get("mobile_watchable", False)),
+            "planner_gate_green": bool(package.get("planner_gate_green", False)),
+            "local_fetch_pass_seen": bool(package.get("local_fetch_pass_seen", False)),
+            "raw_local_fetch_pass_seen": bool(package.get("raw_local_fetch_pass_seen", False)),
+            "fetch_model_provenance_invalid_seen": bool(package.get("fetch_model_provenance_invalid_seen", False)),
+            "promotion_evidence": bool(package.get("promotion_evidence", False)),
+            "milestone_interpretation": str(package.get("milestone_interpretation", "") or ""),
+            "stage_quality_green": bool(package.get("stage_quality_green", False)),
+            "stage_quality_status": str(package.get("stage_quality_status", "") or ""),
+            "stage_quality_audits": list(package.get("stage_quality_audits", [])) if isinstance(package.get("stage_quality_audits"), list) else [],
+            "warnings": list(package.get("warnings", [])) if isinstance(package.get("warnings"), list) else [],
+            "planner_gates": list(package.get("planner_gates", [])) if isinstance(package.get("planner_gates"), list) else [],
+            "seeded_evidence": list(package.get("seeded_evidence", [])) if isinstance(package.get("seeded_evidence"), list) else [],
+            "missions": list(package.get("missions", [])) if isinstance(package.get("missions"), list) else [],
+            "videos": videos,
+        }
+
+    def _latest_fetch_progress_state(self) -> Dict[str, Any]:
+        now = time.monotonic()
+        cached_at = float(getattr(self, "_fetch_progress_cache_at", 0.0) or 0.0)
+        cached = getattr(self, "_fetch_progress_cache", {})
+        if cached and now - cached_at < FETCH_PROGRESS_CACHE_TTL_S:
+            return json.loads(json.dumps(cached))
+
+        def _is_seeded_gate_evidence(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == "fetch_seeded_gate_evidence_analyzer"
+
+        evidence_path, evidence = self._latest_session_artifact_json(
+            ("fetch_seeded_gate_evidence_analyzer", "evidence_summary.json"),
+            predicate=_is_seeded_gate_evidence,
+        )
+        seeded_gate_payload = evidence.get("seeded_shadow_gate", evidence.get("seeded_gate", {}))
+        seeded_gate = seeded_gate_payload if isinstance(seeded_gate_payload, dict) else {}
+        saved_context = evidence.get("saved_anchor_context", {}) if isinstance(evidence.get("saved_anchor_context"), dict) else {}
+
+        saved_layouts: Dict[str, Dict[str, Any]] = {}
+        candidate_rows = saved_context.get("candidate_rows", [])
+        for row in candidate_rows if isinstance(candidate_rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            layout_id = str(row.get("layout_id", "") or "").strip()
+            if not layout_id or layout_id in saved_layouts:
+                continue
+            row_model_valid = bool(row.get("model_provenance_valid", False))
+            saved_layouts[layout_id] = {
+                "layout_id": layout_id,
+                "pass": bool(row.get("pass", False)) and row_model_valid,
+                "raw_pass": bool(row.get("pass", False)),
+                "closest_m": row.get("worst_closest_approach_distance_m"),
+                "summary_path": str(row.get("summary_path", "") or ""),
+                "model_provenance_valid": row_model_valid,
+                "model_provenance_reason": str(row.get("model_provenance_reason", "") or ""),
+                "target_model_classification": str(row.get("target_model_classification", "") or ""),
+            }
+        saved_total = len(saved_layouts)
+        saved_pass = sum(1 for row in saved_layouts.values() if row.get("pass"))
+        saved_invalid_model_count = sum(1 for row in saved_layouts.values() if not row.get("model_provenance_valid"))
+        saved_green = saved_total > 0 and saved_pass == saved_total
+
+        def _is_guarded_fetch_probe(payload: Dict[str, Any]) -> bool:
+            return (
+                str(payload.get("mission_objective", "") or "") == "fetch_to_pose"
+                and str(payload.get("ai_push_coast_mode", "") or "") == "guarded_live"
+            )
+
+        probe_path, probe = self._latest_session_artifact_json(
+            ("gather_mission_repeatability", "campaign_run_summary.json"),
+            predicate=_is_guarded_fetch_probe,
+        )
+        probe_pass_count = int(probe.get("fetch_to_pose_pass_count", 0) or 0) if probe else 0
+        probe_fail_count = int(probe.get("fetch_to_pose_fail_count", 0) or 0) if probe else 0
+        probe_pass = bool(probe and probe_pass_count > 0 and probe_fail_count == 0)
+        probe_model_valid = bool(probe.get("model_provenance_valid", False)) if probe else False
+        probe_model_reason = str(probe.get("model_provenance_reason", "") or "") if probe else ""
+        probe_target_model = str(probe.get("target_model_classification", "") or "") if probe else ""
+
+        def _is_planner_handoff_gate(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == "fetch_planner_handoff_gate"
+
+        planner_path, planner = self._latest_session_artifact_json(
+            ("fetch_planner_handoff_gate", "gate_summary.json"),
+            predicate=_is_planner_handoff_gate,
+        )
+        planner_pass = bool(planner.get("pass", False)) if planner else False
+        planner_total = int(planner.get("random_cases", 0) or 0) if planner else 0
+        planner_pass_count = int(planner.get("pass_count", 0) or 0) if planner else 0
+        planner_fail_count = int(planner.get("fail_count", 0) or 0) if planner else 0
+        planner_wrong_fetch_dispatch_count = int(planner.get("wrong_fetch_dispatch_count", 0) or 0) if planner else 0
+        planner_fetch_dispatch_count = int(planner.get("fetch_dispatch_count", 0) or 0) if planner else 0
+
+        def _is_planner_seeded_gate(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == "fetch_planner_seeded_generalization_gate"
+
+        planner_seeded_path, planner_seeded = self._latest_session_artifact_json(
+            ("fetch_planner_seeded_generalization_gate", "gate_summary.json"),
+            predicate=_is_planner_seeded_gate,
+        )
+        planner_seeded_pass = bool(planner_seeded.get("pass", False)) if planner_seeded else False
+        planner_seeded_dry_run = bool(planner_seeded.get("dry_run", False)) if planner_seeded else False
+        planner_seeded_promotion = bool(planner_seeded.get("promotion_evidence", False)) if planner_seeded else False
+        planner_seeded_first_failure = (
+            planner_seeded.get("replay_first_failure", {})
+            if planner_seeded and isinstance(planner_seeded.get("replay_first_failure"), dict)
+            else {}
+        )
+        planner_seeded_replay_summary = (
+            planner_seeded.get("replay_summary", {})
+            if planner_seeded and isinstance(planner_seeded.get("replay_summary"), dict)
+            else {}
+        )
+        planner_seeded_analyzer_summary = (
+            planner_seeded.get("analyzer_summary", {})
+            if planner_seeded and isinstance(planner_seeded.get("analyzer_summary"), dict)
+            else {}
+        )
+
+        def _is_planner_route_replay_batch(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == "fetch_planner_route_replay_batch"
+
+        route_replay_path, route_replay = self._latest_session_artifact_json(
+            ("fetch_planner_route_replay_batch", "batch_summary.json"),
+            predicate=_is_planner_route_replay_batch,
+        )
+        route_replay_rows = (
+            route_replay.get("rows", [])
+            if route_replay and isinstance(route_replay.get("rows"), list)
+            else []
+        )
+        route_replay_pass = bool(route_replay.get("pass", False)) if route_replay else False
+        route_replay_dry_run = bool(route_replay.get("dry_run", False)) if route_replay else False
+        route_replay_selected_count = int(route_replay.get("selected_count", 0) or 0) if route_replay else 0
+        route_replay_mission_pass_count = int(route_replay.get("mission_pass_count", 0) or 0) if route_replay else 0
+        route_replay_visual_pass_count = int(route_replay.get("visual_package_pass_count", 0) or 0) if route_replay else 0
+
+        def _is_stage_quality_audit(payload: Dict[str, Any]) -> bool:
+            return (
+                str(payload.get("type", "") or "") == STAGE_QUALITY_AUDIT_KIND
+                or str(payload.get("analyzer", "") or "") == STAGE_QUALITY_AUDIT_KIND
+            )
+
+        stage_quality_path, stage_quality_payload = self._latest_session_artifact_json(
+            (STAGE_QUALITY_AUDIT_KIND, "audit_summary.json"),
+            predicate=_is_stage_quality_audit,
+        )
+        stage_quality_rows = (
+            stage_quality_payload.get("saved_anchors", [])
+            if isinstance(stage_quality_payload.get("saved_anchors"), list)
+            else []
+        )
+        stage_quality_total = int(stage_quality_payload.get("saved_anchor_count", len(stage_quality_rows)) or 0) if stage_quality_payload else 0
+        stage_quality_pass_count = int(
+            stage_quality_payload.get("stage_quality_pass_count", stage_quality_payload.get("pass_count", 0)) or 0
+        ) if stage_quality_payload else 0
+        stage_quality_blockers = int(stage_quality_payload.get("setup_contact_blocker_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_push_coast_blockers = int(stage_quality_payload.get("push_coast_blocker_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_setup_capture_blockers = int(stage_quality_payload.get("setup_capture_blocker_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_first_contact_blockers = int(stage_quality_payload.get("first_contact_blocker_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_invalid_model_count = int(stage_quality_payload.get("invalid_model_provenance_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_watch = int(stage_quality_payload.get("saved_anchor_pass_with_contact_watch_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_terminal_candidates = sum(
+            1
+            for row in stage_quality_rows
+            if isinstance(row, dict)
+            and str(row.get("quality_classification", "") or "") == "terminal_arrival_candidate"
+        )
+        stage_quality_green = bool(stage_quality_payload.get("stage_quality_green", False)) and stage_quality_invalid_model_count == 0 if stage_quality_payload else False
+        stage_quality_overall = str(stage_quality_payload.get("overall_interpretation", "") or "") if stage_quality_payload else ""
+        if stage_quality_payload and stage_quality_rows:
+            audit_saved_layouts: Dict[str, Dict[str, Any]] = {}
+            for row in stage_quality_rows:
+                if not isinstance(row, dict):
+                    continue
+                layout_id = str(row.get("layout", "") or "").strip()
+                if not layout_id or layout_id in audit_saved_layouts:
+                    continue
+                row_model_valid = bool(row.get("model_provenance_valid", stage_quality_invalid_model_count == 0))
+                audit_saved_layouts[layout_id] = {
+                    "layout_id": layout_id,
+                    "pass": bool(row.get("pass", False)) and row_model_valid,
+                    "raw_pass": bool(row.get("pass", False)),
+                    "closest_m": row.get("closest_approach_distance_m"),
+                    "summary_path": str(row.get("summary_path", "") or ""),
+                    "model_provenance_valid": row_model_valid,
+                    "model_provenance_reason": str(row.get("model_provenance_reason", "") or ""),
+                    "target_model_classification": str(row.get("target_model_classification", "") or ""),
+                    "quality_classification": str(row.get("quality_classification", "") or ""),
+                    "quality_flags": list(row.get("quality_flags", [])) if isinstance(row.get("quality_flags"), list) else [],
+                }
+            if audit_saved_layouts:
+                saved_context = {"campaign_id": str(stage_quality_payload.get("campaign_id", "") or "")}
+                saved_layouts = audit_saved_layouts
+                saved_total = len(saved_layouts)
+                saved_pass = sum(1 for row in saved_layouts.values() if row.get("pass"))
+                saved_invalid_model_count = sum(1 for row in saved_layouts.values() if not row.get("model_provenance_valid"))
+                saved_green = saved_total > 0 and saved_pass == saved_total
+
+        seeded_pass_count = int(seeded_gate.get("pass_count", 0) or 0) if seeded_gate else 0
+        seeded_fail_count = int(seeded_gate.get("fail_count", 0) or 0) if seeded_gate else 0
+        seeded_total = seeded_pass_count + seeded_fail_count
+        non_repro_count = int(seeded_gate.get("non_repro_failure_count", 0) or 0) if seeded_gate else 0
+        reproduced_count = int(seeded_gate.get("reproduced_failure_count", 0) or 0) if seeded_gate else 0
+        guarded_candidates = int(seeded_gate.get("guarded_live_candidate_count", 0) or 0) if seeded_gate else 0
+        seeded_model_valid = bool(seeded_gate.get("model_provenance_valid", False)) if seeded_gate else False
+        seeded_invalid_model_count = (
+            int(seeded_gate.get("model_provenance_invalid_count", 0) or 0)
+            if "model_provenance_invalid_count" in seeded_gate
+            else seeded_total
+            if seeded_gate
+            else 0
+        )
+        seeded_context_stale_after_stage_audit = False
+        if evidence_path is not None and stage_quality_path is not None and stage_quality_payload and seeded_gate:
+            try:
+                seeded_context_stale_after_stage_audit = (
+                    stage_quality_path.stat().st_mtime > evidence_path.stat().st_mtime
+                    and stage_quality_green
+                    and stage_quality_invalid_model_count == 0
+                    and stage_quality_blockers == 0
+                    and seeded_invalid_model_count > 0
+                    and saved_invalid_model_count == 0
+                )
+            except OSError:
+                seeded_context_stale_after_stage_audit = False
+        planner_seeded_newer_than_fetch_evidence = False
+        if planner_seeded_path is not None and not planner_seeded_dry_run:
+            comparison_paths = [path for path in (evidence_path, stage_quality_path, probe_path) if path is not None]
+            try:
+                if not comparison_paths:
+                    planner_seeded_newer_than_fetch_evidence = True
+                else:
+                    planner_seeded_mtime = planner_seeded_path.stat().st_mtime
+                    planner_seeded_newer_than_fetch_evidence = all(
+                        planner_seeded_mtime >= path.stat().st_mtime for path in comparison_paths
+                    )
+            except OSError:
+                planner_seeded_newer_than_fetch_evidence = False
+        planner_seeded_current_blocking = bool(
+            planner_seeded
+            and planner_seeded_newer_than_fetch_evidence
+            and not planner_seeded_pass
+            and not planner_seeded_dry_run
+        )
+        route_replay_newer_than_planner_seeded = False
+        if route_replay_path is not None and planner_seeded_path is not None:
+            try:
+                route_replay_newer_than_planner_seeded = route_replay_path.stat().st_mtime >= planner_seeded_path.stat().st_mtime
+            except OSError:
+                route_replay_newer_than_planner_seeded = False
+        elif route_replay_path is not None:
+            route_replay_newer_than_planner_seeded = True
+        route_replay_newer_than_fetch_evidence = False
+        if route_replay_path is not None and not route_replay_dry_run:
+            comparison_paths = [path for path in (evidence_path, stage_quality_path, probe_path) if path is not None]
+            try:
+                if not comparison_paths:
+                    route_replay_newer_than_fetch_evidence = True
+                else:
+                    route_replay_mtime = route_replay_path.stat().st_mtime
+                    route_replay_newer_than_fetch_evidence = all(
+                        route_replay_mtime >= path.stat().st_mtime for path in comparison_paths
+                    )
+            except OSError:
+                route_replay_newer_than_fetch_evidence = False
+        route_replay_repairs_seeded_failure = False
+        failed_scene = str(planner_seeded_first_failure.get("scene_id", "") or "")
+        failed_route = str(planner_seeded_first_failure.get("route_label", "") or "")
+        if (
+            planner_seeded_current_blocking
+            and route_replay_pass
+            and not route_replay_dry_run
+            and route_replay_newer_than_planner_seeded
+            and failed_scene
+            and failed_route
+        ):
+            for row in route_replay_rows:
+                if not isinstance(row, dict):
+                    continue
+                mission = row.get("mission") if isinstance(row.get("mission"), dict) else {}
+                package = row.get("visual_package") if isinstance(row.get("visual_package"), dict) else {}
+                if (
+                    str(row.get("scene_id", "") or "") == failed_scene
+                    and str(row.get("route_label", "") or "") == failed_route
+                    and bool(mission.get("pass", False))
+                    and bool(package.get("pass", False))
+                ):
+                    route_replay_repairs_seeded_failure = True
+                    break
+        if route_replay_repairs_seeded_failure:
+            planner_seeded_current_blocking = False
+        route_replay_supersedes_incomplete_seeded_gate = bool(
+            planner_seeded_current_blocking
+            and route_replay_pass
+            and not route_replay_dry_run
+            and route_replay_newer_than_planner_seeded
+            and not failed_scene
+            and route_replay_selected_count > 0
+            and route_replay_mission_pass_count == route_replay_selected_count
+            and route_replay_visual_pass_count == route_replay_selected_count
+        )
+        if route_replay_supersedes_incomplete_seeded_gate:
+            planner_seeded_current_blocking = False
+        route_replay_current_pending_gate = bool(
+            route_replay
+            and route_replay_pass
+            and not route_replay_dry_run
+            and route_replay_newer_than_fetch_evidence
+            and route_replay_newer_than_planner_seeded
+            and not planner_seeded_promotion
+        )
+        promotion_evidence = (
+            bool(evidence.get("promotion_evidence", False))
+            and seeded_model_valid
+            and saved_invalid_model_count == 0
+            and stage_quality_invalid_model_count == 0
+            and not seeded_context_stale_after_stage_audit
+            and not planner_seeded_current_blocking
+            and not route_replay_repairs_seeded_failure
+            and not route_replay_current_pending_gate
+        ) if evidence else False
+        recommended_next_action = str(evidence.get("recommended_next_action", "") or "") if evidence else ""
+        if planner_seeded_current_blocking:
+            recommended_next_action = (
+                "repair_planner_routed_recovery_reaim_executor"
+                if failed_route == fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
+                else "repair_planner_routed_live_executor"
+            )
+        elif route_replay_repairs_seeded_failure:
+            recommended_next_action = "rerun_full_planner_routed_seeded_gate"
+        elif route_replay_current_pending_gate:
+            recommended_next_action = "rerun_full_planner_routed_seeded_gate"
+        if stage_quality_payload and stage_quality_blockers:
+            recommended_next_action = "repair_setup_contact_before_guarded_live"
+        elif stage_quality_payload and stage_quality_terminal_candidates:
+            recommended_next_action = "run_narrow_terminal_correction_probe"
+        elif stage_quality_payload and stage_quality_green:
+            recommended_next_action = (
+                "run_seeded_generalization_gate"
+                if seeded_context_stale_after_stage_audit or seeded_total == 0 or seeded_invalid_model_count > 0
+                else recommended_next_action or "continue_saved_anchor_ladder"
+            )
+        milestone_interpretation = str(evidence.get("milestone_interpretation", "") or "") if evidence else ""
+        if planner_seeded_current_blocking:
+            milestone_interpretation = str(
+                planner_seeded.get("milestone_interpretation", "planner_routed_seeded_generalization_incomplete")
+                or "planner_routed_seeded_generalization_incomplete"
+            )
+        elif route_replay_repairs_seeded_failure:
+            milestone_interpretation = "planner_routed_recovery_reaim_repaired_seeded_gate_pending"
+        elif route_replay_current_pending_gate:
+            milestone_interpretation = "planner_route_replay_green_seeded_gate_pending"
+
+        if planner_seeded_current_blocking:
+            status = "bad"
+            failed_scene = failed_scene or "latest live replay"
+            failed_route = failed_route or "planner-routed"
+            analyzer_status = str(planner_seeded_analyzer_summary.get("execution_quality_status", "") or "")
+            replay_pass_count = int(planner_seeded_replay_summary.get("mission_pass_count", 0) or 0)
+            replay_fail_count = int(planner_seeded_replay_summary.get("mission_fail_count", 0) or 0)
+            quality_text = f" ({analyzer_status})" if analyzer_status else ""
+            headline = (
+                f"Broad planner-routed UAT is incomplete: {failed_route} failed at {failed_scene}; "
+                f"live replay {replay_pass_count}/{replay_pass_count + replay_fail_count}{quality_text}."
+            )
+        elif route_replay_repairs_seeded_failure:
+            status = "warn"
+            headline = (
+                f"Targeted {failed_route} repair passed for {failed_scene}; "
+                "rerun the full planner-routed seeded gate for promotion evidence."
+            )
+        elif route_replay_current_pending_gate:
+            status = "warn"
+            headline = (
+                f"Latest planner-route replay batch passed {route_replay_mission_pass_count}/{route_replay_selected_count}; "
+                "rerun the full planner-routed seeded gate for promotion evidence."
+            )
+        elif stage_quality_payload and stage_quality_invalid_model_count:
+            status = "bad"
+            headline = f"Stage-quality audit has {stage_quality_invalid_model_count} saved anchor lacking calibrated model provenance; rerun saved anchors."
+        elif stage_quality_payload and stage_quality_blockers:
+            status = "bad"
+            if stage_quality_push_coast_blockers:
+                headline = f"Stage-quality audit has {stage_quality_push_coast_blockers} push/coast blocker; repair bounded push/coast before terminal live."
+            elif stage_quality_first_contact_blockers:
+                headline = f"Stage-quality audit has {stage_quality_first_contact_blockers} first-contact blocker; repair contact alignment before terminal live."
+            elif stage_quality_setup_capture_blockers:
+                headline = f"Stage-quality audit has {stage_quality_setup_capture_blockers} setup/capture blocker; repair capture-entry before seeded random."
+            else:
+                headline = f"Stage-quality audit has {stage_quality_blockers} setup/contact blocker; repair stage ownership before seeded random."
+        elif stage_quality_payload and stage_quality_terminal_candidates:
+            status = "warn"
+            headline = (
+                f"Saved-anchor stage quality passed {stage_quality_pass_count}/{stage_quality_total}; "
+                f"{stage_quality_terminal_candidates} terminal-arrival candidate is ready for a narrow correction probe."
+            )
+        elif evidence and not seeded_context_stale_after_stage_audit and (seeded_invalid_model_count > 0 or saved_invalid_model_count > 0):
+            status = "bad"
+            headline = "Saved/seeded fetch evidence lacks calibrated model provenance; rerun the corrected evidence ladder."
+        elif probe and not probe_model_valid:
+            status = "bad"
+            headline = f"Latest guarded fetch probe lacks calibrated model provenance ({probe_model_reason or probe_target_model or 'missing'})."
+        elif planner and planner_wrong_fetch_dispatch_count:
+            status = "bad"
+            headline = f"Planner gate has {planner_wrong_fetch_dispatch_count} wrong fetch-ready dispatch; do not score broad random as local fetch."
+        elif evidence and seeded_model_valid and reproduced_count > 0:
+            status = "bad"
+            headline = (
+                f"Seeded random gate has {reproduced_count} reproduced failure"
+                f"{'s' if reproduced_count != 1 else ''}; freeze layouts before tuning."
+            )
+        elif evidence and seeded_model_valid and seeded_fail_count > 0:
+            status = "warn"
+            headline = f"Seeded random gate passed {seeded_pass_count}/{seeded_total} with {seeded_fail_count} watchlist failure."
+        elif promotion_evidence:
+            status = "ok"
+            headline = f"Saved anchors green; seeded gate {seeded_pass_count}/{seeded_total} is promotion-grade."
+        elif stage_quality_payload and stage_quality_green and stage_quality_watch:
+            status = "warn"
+            headline = (
+                f"Saved anchors stage-quality pass {stage_quality_pass_count}/{stage_quality_total} "
+                f"with {stage_quality_watch} capture-quality watch item; run seeded random gate next."
+            )
+        elif stage_quality_payload and stage_quality_green and (not evidence or seeded_context_stale_after_stage_audit):
+            status = "warn"
+            headline = (
+                f"Saved anchors stage-quality pass {stage_quality_pass_count}/{stage_quality_total}; "
+                "seeded random gate is pending current rerun."
+            )
+        elif not evidence:
+            status = "idle"
+            headline = "No seeded fetch evidence package found yet."
+        elif saved_green and non_repro_count:
+            status = "warn"
+            headline = f"Saved anchors green; seeded shadow {seeded_pass_count}/{seeded_total} has {non_repro_count} non-repro watchlist case."
+        elif saved_green:
+            status = "warn" if seeded_fail_count else "ok"
+            headline = f"Saved anchors green; seeded shadow {seeded_pass_count}/{seeded_total} complete."
+        else:
+            status = "warn" if evidence else "idle"
+            headline = f"Saved anchors {saved_pass}/{saved_total}; seeded shadow {seeded_pass_count}/{seeded_total}."
+
+        payload = {
+            "milestone": FETCH_PROGRESS_MILESTONE,
+            "status": status,
+            "headline": headline,
+            "recommended_next_action": recommended_next_action,
+            "milestone_interpretation": milestone_interpretation,
+            "promotion_evidence": promotion_evidence,
+            "evidence_summary_path": self._artifact_display_path(evidence_path),
+            "saved_anchor": {
+                "campaign_id": str(saved_context.get("campaign_id", "") or ""),
+                "pass_count": saved_pass,
+                "total_count": saved_total,
+                "green": saved_green,
+                "invalid_model_provenance_count": saved_invalid_model_count,
+                "layouts": sorted(saved_layouts.values(), key=lambda item: str(item.get("layout_id", ""))),
+            },
+            "seeded_shadow_gate": {
+                "campaign_id": str(seeded_gate.get("campaign_id", "") or ""),
+                "mode": str(seeded_gate.get("mode", "") or ""),
+                "seed": seeded_gate.get("seed"),
+                "pass_count": seeded_pass_count,
+                "fail_count": seeded_fail_count,
+                "total_count": seeded_total,
+                "non_repro_failure_count": non_repro_count,
+                "reproduced_failure_count": reproduced_count,
+                "guarded_live_candidate_count": guarded_candidates,
+                "model_provenance_valid": seeded_model_valid,
+                "model_provenance_invalid_count": seeded_invalid_model_count,
+                "stale_after_stage_quality_audit": seeded_context_stale_after_stage_audit,
+                "current_blocking": bool(
+                    seeded_gate
+                    and not seeded_context_stale_after_stage_audit
+                    and (seeded_invalid_model_count > 0 or reproduced_count > 0)
+                ),
+                "interpretation": str(seeded_gate.get("interpretation", "") or ""),
+            },
+            "planner_handoff_gate": {
+                "campaign_id": str(planner.get("campaign_id", "") or "") if planner else "",
+                "path": self._artifact_display_path(planner_path),
+                "scene_set": str(planner.get("scene_set", "") or "") if planner else "",
+                "scene_source": str(planner.get("scene_source", "") or "") if planner else "",
+                "planner_mode": str(planner.get("planner_mode", "") or "") if planner else "",
+                "pass": planner_pass,
+                "pass_count": planner_pass_count,
+                "fail_count": planner_fail_count,
+                "total_count": planner_total,
+                "fetch_dispatch_count": planner_fetch_dispatch_count,
+                "wrong_fetch_dispatch_count": planner_wrong_fetch_dispatch_count,
+                "route_counts": planner.get("route_counts", {}) if planner and isinstance(planner.get("route_counts"), dict) else {},
+            },
+            "planner_seeded_gate": {
+                "campaign_id": str(planner_seeded.get("campaign_id", "") or "") if planner_seeded else "",
+                "path": self._artifact_display_path(planner_seeded_path),
+                "scorecard_path": str(planner_seeded.get("scorecard_path", "") or "") if planner_seeded else "",
+                "pass": planner_seeded_pass,
+                "dry_run": planner_seeded_dry_run,
+                "promotion_evidence": planner_seeded_promotion,
+                "current_blocking": planner_seeded_current_blocking,
+                "newer_than_fetch_evidence": planner_seeded_newer_than_fetch_evidence,
+                "seed": planner_seeded.get("seed") if planner_seeded else None,
+                "random_cases": int(planner_seeded.get("random_cases", 0) or 0) if planner_seeded else 0,
+                "expected_executable_count": int(planner_seeded.get("expected_executable_count", 0) or 0) if planner_seeded else 0,
+                "planner_gate_pass": bool(planner_seeded.get("planner_gate_pass", False)) if planner_seeded else False,
+                "replay_pass": bool(planner_seeded.get("replay_pass", False)) if planner_seeded else False,
+                "analyzer_pass": bool(planner_seeded.get("analyzer_pass", False)) if planner_seeded else False,
+                "first_failure": planner_seeded_first_failure,
+                "replay_summary": planner_seeded_replay_summary,
+                "analyzer_summary": planner_seeded_analyzer_summary,
+                "interpretation": str(planner_seeded.get("milestone_interpretation", "") or "") if planner_seeded else "",
+            },
+            "planner_route_replay_batch": {
+                "campaign_id": str(route_replay.get("campaign_id", "") or "") if route_replay else "",
+                "path": self._artifact_display_path(route_replay_path),
+                "scorecard_path": str(route_replay.get("scorecard_path", "") or "") if route_replay else "",
+                "pass": route_replay_pass,
+                "dry_run": route_replay_dry_run,
+                "selected_count": route_replay_selected_count,
+                "mission_pass_count": route_replay_mission_pass_count,
+                "visual_package_pass_count": route_replay_visual_pass_count,
+                "repairs_latest_seeded_failure": route_replay_repairs_seeded_failure,
+                "supersedes_incomplete_seeded_gate": route_replay_supersedes_incomplete_seeded_gate,
+                "newer_than_fetch_evidence": route_replay_newer_than_fetch_evidence,
+                "current_pending_seeded_gate": route_replay_current_pending_gate,
+                "rows": [
+                    {
+                        "scene_id": str(row.get("scene_id", "") or ""),
+                        "route_label": str(row.get("route_label", "") or ""),
+                        "route_executor": str(row.get("route_executor", "") or ""),
+                        "returncode": row.get("returncode"),
+                        "mission_pass": bool((row.get("mission") or {}).get("pass", False))
+                        if isinstance(row.get("mission"), dict)
+                        else False,
+                        "visual_pass": bool((row.get("visual_package") or {}).get("pass", False))
+                        if isinstance(row.get("visual_package"), dict)
+                        else False,
+                    }
+                    for row in route_replay_rows
+                    if isinstance(row, dict)
+                ],
+            },
+            "stage_quality_audit": {
+                "campaign_id": str(stage_quality_payload.get("campaign_id", "") or "") if stage_quality_payload else "",
+                "path": self._artifact_display_path(stage_quality_path),
+                "overall_interpretation": stage_quality_overall,
+                "green": stage_quality_green,
+                "pass_count": stage_quality_pass_count,
+                "total_count": stage_quality_total,
+                "setup_contact_blocker_count": stage_quality_blockers,
+                "setup_capture_blocker_count": stage_quality_setup_capture_blockers,
+                "first_contact_blocker_count": stage_quality_first_contact_blockers,
+                "push_coast_blocker_count": stage_quality_push_coast_blockers,
+                "terminal_arrival_candidate_count": stage_quality_terminal_candidates,
+                "invalid_geometry_count": int(stage_quality_payload.get("invalid_geometry_count", 0) or 0) if stage_quality_payload else 0,
+                "invalid_model_provenance_count": stage_quality_invalid_model_count,
+                "watch_count": stage_quality_watch,
+                "saved_anchors": [
+                    {
+                        "layout": str(row.get("layout", "") or ""),
+                        "pass": bool(row.get("pass", False)),
+                        "delivery_pass": bool(row.get("delivery_pass", False)),
+                        "quality_classification": str(row.get("quality_classification", "") or ""),
+                        "quality_flags": list(row.get("quality_flags", [])) if isinstance(row.get("quality_flags"), list) else [],
+                        "model_provenance_valid": bool(row.get("model_provenance_valid", False)),
+                        "model_provenance_reason": str(row.get("model_provenance_reason", "") or ""),
+                        "target_model_classification": str(row.get("target_model_classification", "") or ""),
+                        "pre_stage_yaw_travel_max_deg": row.get("pre_stage_yaw_travel_max_deg"),
+                        "capture_entry_time_max_s": row.get("capture_entry_time_max_s"),
+                        "closest_approach_distance_m": row.get("closest_approach_distance_m"),
+                    }
+                    for row in stage_quality_rows
+                    if isinstance(row, dict)
+                ],
+            },
+            "latest_guarded_live_probe": {
+                "campaign_id": str(probe.get("campaign_id", "") or "") if probe else "",
+                "path": self._artifact_display_path(probe_path),
+                "pass": probe_pass,
+                "fetch_to_pose_pass_count": probe_pass_count,
+                "fetch_to_pose_fail_count": probe_fail_count,
+                "model_provenance_valid": probe_model_valid,
+                "model_provenance_reason": probe_model_reason,
+                "target_model_classification": probe_target_model,
+                "target_model_sdf": str(probe.get("target_model_sdf", "") or "") if probe else "",
+                "zone_model_sdf": str(probe.get("zone_model_sdf", "") or "") if probe else "",
+                "first_contact_push_alignment_max_deg": probe.get("first_contact_push_alignment_max_deg") if probe else None,
+                "fetch_to_pose_time_max_s": probe.get("fetch_to_pose_time_max_s") if probe else None,
+            },
+        }
+        self._fetch_progress_cache = json.loads(json.dumps(payload))
+        self._fetch_progress_cache_at = now
+        return payload
+
     def get_state(self) -> Dict[str, Any]:
         self._refresh_control_plane_state()
         with self.state_lock:
@@ -1538,6 +2788,7 @@ class DashboardController:
         snapshot["policy"] = build_policy_snapshot(snapshot, sim_gate_ready=bool(self.sim_gate_container_id))
         snapshot["demo_story"] = demo_story
         snapshot["llm_supervisor"] = self._llm_supervisor_state()
+        snapshot["fetch_progress"] = self._latest_fetch_progress_state()
 
         proof_runtime = self._llm_proof_runtime_state()
         visit_runtime = self._visit_mission_runtime_state()
@@ -1644,6 +2895,20 @@ class DashboardController:
         snapshot["capture_state"] = gather_runtime.get("capture_state", snapshot.get("capture_state", {})) if isinstance(gather_runtime.get("capture_state", snapshot.get("capture_state", {})), dict) else {}
         snapshot["zone_pose"] = gather_runtime.get("zone_pose", snapshot.get("zone_pose", {})) if isinstance(gather_runtime.get("zone_pose", snapshot.get("zone_pose", {})), dict) else {}
         snapshot["zone_score"] = gather_runtime.get("zone_score", snapshot.get("zone_score", {})) if isinstance(gather_runtime.get("zone_score", snapshot.get("zone_score", {})), dict) else {}
+        snapshot["last_fetch_to_pose_result"] = gather_runtime.get(
+            "last_fetch_to_pose_result",
+            snapshot.get("last_fetch_to_pose_result", {}),
+        ) if isinstance(
+            gather_runtime.get("last_fetch_to_pose_result", snapshot.get("last_fetch_to_pose_result", {})),
+            dict,
+        ) else {}
+        snapshot["last_approach_contact_metrics"] = gather_runtime.get(
+            "last_approach_contact_metrics",
+            snapshot.get("last_approach_contact_metrics", {}),
+        ) if isinstance(
+            gather_runtime.get("last_approach_contact_metrics", snapshot.get("last_approach_contact_metrics", {})),
+            dict,
+        ) else {}
         snapshot["final_corral_audit"] = gather_runtime.get(
             "final_corral_audit",
             gather_verdict.get("final_corral_audit", snapshot.get("final_corral_audit", {})),
@@ -1672,6 +2937,7 @@ class DashboardController:
             "can_dispatch_intent": controls_enabled and snapshot["environment_state"] == "environment_ready",
         }
         snapshot["available_intents"] = sorted(self.frozen_intents.keys())
+        snapshot["visual_uat_package"] = self._latest_visual_uat_package_state()
         return snapshot
 
     def _llm_supervisor_state(self) -> Dict[str, Any]:
@@ -1746,6 +3012,8 @@ class DashboardController:
         return world_file, surface_profile, robot_sdf_name
 
     def request_start(self, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("env_start")
+        overrides = dict(overrides or {})
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state == "environment_ready":
@@ -1765,6 +3033,13 @@ class DashboardController:
                 pass
             else:
                 return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
+        self.operator_view_required = not (
+            "operator_view_required" in overrides
+            and not truthy_value(overrides.get("operator_view_required"))
+        )
+        self.visual_evidence_required = bool(
+            truthy_value(overrides.get("visual_evidence_required", self.operator_view_required))
+        ) and not self.headless_worker_mode
         self.lifecycle_cancel.clear()
         self._update_state(
             environment_state="starting",
@@ -1782,6 +3057,8 @@ class DashboardController:
             target_transition_active=False,
             world_stream_recovery_state="idle",
             world_stream_restart_in_progress=False,
+            operator_view_required=self.operator_view_required,
+            visual_evidence_required=self.visual_evidence_required,
         )
         self._record_operator_event("Environment starting.", category="environment")
         self.lifecycle_thread = threading.Thread(target=self._start_environment_worker, name="dashboard-start", daemon=True)
@@ -1789,6 +3066,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment start queued"}
 
     def request_stop(self) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("env_stop")
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state == "stopped":
@@ -1812,6 +3090,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment stop queued"}
 
     def request_refresh(self) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("env_refresh")
         self._refresh_control_plane_state(force=True)
         with self.state_lock:
             if not self.state.get("control_plane_ready", False):
@@ -1822,7 +3101,22 @@ class DashboardController:
         self.lifecycle_thread.start()
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment refresh queued"}
 
+    def request_activity(self, payload: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
+        body = dict(payload or {})
+        reason = str(body.get("reason", "") or "operator_activity").strip() or "operator_activity"
+        self._mark_operator_activity(reason)
+        with self.state_lock:
+            return HTTPStatus.OK, {
+                "accepted": True,
+                "message": "activity recorded",
+                "last_operator_activity_utc": self.state.get("last_operator_activity_utc", ""),
+                "last_operator_activity_reason": self.state.get("last_operator_activity_reason", ""),
+                "idle_shutdown_state": self.state.get("idle_shutdown_state", ""),
+                "idle_shutdown_remaining_s": self.state.get("idle_shutdown_remaining_s"),
+            }
+
     def request_reset_sim(self, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("sim_reset")
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state not in {"environment_ready", "error"}:
@@ -1849,6 +3143,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "sim reset queued"}
 
     def request_scenario_run(self, scenario_id: str, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity(f"scenario_run:{scenario_id}")
         scenario = SCENARIOS_BY_ID.get(scenario_id)
         if scenario is None:
             return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown scenario: {scenario_id}"}
@@ -1858,9 +3153,104 @@ class DashboardController:
             surface_profile = self._normalize_surface_profile(str(overrides.get("surface_profile", "") or ""), default_value=scenario.surface_profile)
         except ValueError as exc:
             return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
+        scenario_overrides: Dict[str, Any] = {
+            "world_file": world_file,
+            "surface_profile": surface_profile,
+        }
+        planner_gated_random = bool(
+            scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
+            and truthy_value(overrides.get("planner_gated_random", overrides.get("planner_gate", False)))
+        )
+        golf_random_layout = bool(
+            scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
+            and truthy_value(overrides.get("random_layout", False))
+        )
+        if planner_gated_random or golf_random_layout:
+            seed_value = overrides.get("random_seed", overrides.get("seed", ""))
+            if seed_value not in {None, ""}:
+                try:
+                    scenario_overrides["random_seed"] = int(seed_value)
+                except (TypeError, ValueError):
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": "random_seed must be an integer"}
+        if planner_gated_random:
+            planner_mode = str(overrides.get("planner_mode", fetch_planner_gate.PLANNER_MODE_DETERMINISTIC) or "").strip()
+            if planner_mode not in set(fetch_planner_gate.PLANNER_MODES):
+                return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown planner_mode: {planner_mode}"}
+            scenario_overrides["planner_gated_random"] = True
+            scenario_overrides["planner_mode"] = planner_mode
+            scenario_overrides["planner_scene_set"] = str(
+                overrides.get("planner_scene_set", GOLF_BALL_PLANNER_GATED_SCENE_SET) or GOLF_BALL_PLANNER_GATED_SCENE_SET
+            ).strip()
+            if str(overrides.get("planner_scene_json", "") or "").strip():
+                try:
+                    scenario_overrides["planner_scene_json"] = self._resolve_repo_json_path(
+                        str(overrides.get("planner_scene_json", "") or ""),
+                        field_name="planner_scene_json",
+                    )
+                except ValueError as exc:
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
+            if str(overrides.get("planner_scene_id", "") or "").strip():
+                scenario_overrides["planner_scene_id"] = str(overrides.get("planner_scene_id", "") or "").strip()
+        if golf_random_layout:
+            random_profile = str(overrides.get("random_profile", "") or GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT).strip()
+            if random_profile not in GOLF_BALL_RANDOM_PROFILES:
+                return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown random_profile: {random_profile}"}
+            scenario_overrides["random_layout"] = True
+            scenario_overrides["random_profile"] = random_profile
+        if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID:
+            if str(overrides.get("target_layout_json", "") or "").strip():
+                try:
+                    scenario_overrides["target_layout_json"] = self._resolve_repo_json_path(
+                        str(overrides.get("target_layout_json", "") or ""),
+                        field_name="target_layout_json",
+                    )
+                except ValueError as exc:
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
+            if str(overrides.get("gather_control_family", "") or "").strip():
+                control_family = str(overrides.get("gather_control_family", "") or "").strip().lower()
+                if control_family not in ALLOWED_DASHBOARD_GATHER_CONTROL_OVERRIDES:
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown gather_control_family: {control_family}"}
+                scenario_overrides["gather_control_family"] = control_family
+            if str(overrides.get("ai_push_coast_mode", "") or "").strip():
+                ai_mode = str(overrides.get("ai_push_coast_mode", "") or "").strip()
+                if ai_mode not in ALLOWED_DASHBOARD_AI_PUSH_COAST_MODES:
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown ai_push_coast_mode: {ai_mode}"}
+                scenario_overrides["ai_push_coast_mode"] = ai_mode
+                scenario_overrides.setdefault("gather_control_family", "ai_push_coast_servo_v1")
         with self.state_lock:
             env_state = self.state["environment_state"]
             scenario_state = self.state["scenario_state"]
+        if env_state == "stopped" and scenario.id in {OBJECT_CENTRIC_ZERO_SCENARIO_ID, GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID}:
+            self._refresh_control_plane_state(force=True)
+            with self.state_lock:
+                if not self.state.get("control_plane_ready", False):
+                    return self._control_plane_unavailable_response()
+            if self._lifecycle_busy():
+                if not self._wait_for_lifecycle_idle(2.0):
+                    return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
+            self.pending_scenario_id = scenario_id
+            self.pending_scenario_overrides = dict(scenario_overrides)
+            self.lifecycle_cancel.clear()
+            self._record_operator_event(f"{scenario.label} queued after environment start.", category="scenario")
+            self._update_state(
+                environment_state="starting",
+                scenario_state="idle",
+                environment_message="environment start queued",
+                scenario_message=f"{scenario.label} queued after environment start",
+                world_file=world_file,
+                surface_profile=surface_profile,
+                robot_sdf_name=scenario.robot_sdf_name,
+                target_id="",
+                target_transition_active=False,
+            )
+            self.lifecycle_thread = threading.Thread(target=self._start_environment_worker, name="dashboard-start", daemon=True)
+            self.lifecycle_thread.start()
+            return HTTPStatus.ACCEPTED, {
+                "accepted": True,
+                "message": f"scenario {scenario_id} queued after environment start",
+                "world_file": world_file,
+                "surface_profile": surface_profile,
+            }
         if env_state != "environment_ready":
             return HTTPStatus.CONFLICT, {"accepted": False, "error": "environment not ready"}
         self._refresh_control_plane_state(force=True)
@@ -1873,10 +3263,7 @@ class DashboardController:
             if self._lifecycle_busy():
                 return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
             self.pending_scenario_id = scenario_id
-            self.pending_scenario_overrides = {
-                "world_file": world_file,
-                "surface_profile": surface_profile,
-            }
+            self.pending_scenario_overrides = dict(scenario_overrides)
             self._record_operator_event(f"{scenario.label} queued after sim reset.", category="scenario")
             self._update_state(
                 scenario_message=f"{scenario.label} queued after sim reset",
@@ -1896,10 +3283,12 @@ class DashboardController:
                 "accepted": False,
                 "error": "scenario world override requires a clean-reset scenario",
             }
+        self.active_scenario_overrides = dict(scenario_overrides)
         self._launch_scenario_thread(scenario)
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": f"scenario {scenario_id} queued"}
 
     def request_scenario_stop(self) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("scenario_stop")
         if not (self.scenario_thread and self.scenario_thread.is_alive()):
             return HTTPStatus.OK, {"accepted": False, "message": "no active scenario", "state": self.get_state()}
         self._refresh_control_plane_state(force=True)
@@ -1913,6 +3302,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "scenario stop requested"}
 
     def request_intent_preview(self, body: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("intent_preview")
         try:
             intent_name, args_payload = self._resolve_intent_request(body)
             preview = self._prepare_intent_preview(intent_name, args_payload)
@@ -1928,13 +3318,16 @@ class DashboardController:
         return HTTPStatus.OK, {"accepted": True, "preview": preview}
 
     def request_intent_dispatch(self, body: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("intent_dispatch")
         try:
             intent_name, args_payload = self._resolve_intent_request(body)
         except Exception as exc:
             return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
-        return self.request_intent(intent_name, args_payload)
+        return self.request_intent(intent_name, args_payload, record_activity=False)
 
-    def request_intent(self, intent_name: str, args_payload: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+    def request_intent(self, intent_name: str, args_payload: Dict[str, Any], *, record_activity: bool = True) -> tuple[int, Dict[str, Any]]:
+        if record_activity:
+            self._mark_operator_activity(f"intent:{intent_name}")
         if intent_name not in self.frozen_intents:
             return HTTPStatus.NOT_FOUND, {"accepted": False, "error": f"unknown frozen intent: {intent_name}"}
         try:
@@ -2568,6 +3961,18 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     world_stream_last_restart_error=str(exc),
                 )
 
+    def _idle_shutdown_watchdog_loop(self) -> None:
+        poll_s = max(1.0, float(getattr(self, "idle_shutdown_poll_s", IDLE_SHUTDOWN_WATCHDOG_POLL_S) or 1.0))
+        while not self.idle_shutdown_cancel.wait(poll_s):
+            try:
+                self._evaluate_idle_shutdown()
+            except Exception as exc:
+                self._update_state(
+                    idle_shutdown_state="error",
+                    idle_shutdown_last_checked_utc=utc_now(),
+                    idle_shutdown_last_error=str(exc),
+                )
+
     def _base_env(self, *, session_id: str, world_stream_port: int, operator_view_port: int) -> Dict[str, str]:
         env = self._compose_env()
         env["GAZEBO_PARTITION"] = session_id
@@ -2638,13 +4043,33 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         # Only bring up sim/gate services. In host_powershell mode the
         # dashboard-control and brain-supervisor-shadow run on the host, so
         # starting them inside compose would cause a port conflict on 8860.
-        compose_services = ["sim-gate", "world-viewer", "gate-stack", "dashboard-utility", "operator-view"]
         if self.headless_worker_mode:
             compose_services = ["sim-gate", "gate-stack"]
+        else:
+            compose_services = ["sim-gate"]
+            if bool(getattr(self, "visual_evidence_required", True)):
+                compose_services.append("world-viewer")
+            compose_services.extend(["gate-stack", "dashboard-utility"])
+            if bool(getattr(self, "operator_view_required", True)):
+                compose_services.append("operator-view")
         args.extend(compose_services)
         proc = self._popen_docker_compose(project_name, *args, env=env)
         self.active_env_proc = proc
-        output, _ = proc.communicate()
+        try:
+            output, _ = proc.communicate(timeout=COMPOSE_UP_PROCESS_TIMEOUT_S)
+        except subprocess.TimeoutExpired as exc:
+            output = str(exc.output or "")
+            gate_service_states = self._wait_for_required_gate_services(project_name, GATE_SERVICE_READY_TIMEOUT_S)
+            self._terminate_process(proc)
+            self.active_env_proc = None
+            if self._gate_services_ready(gate_service_states):
+                return 0, (output + "\ncompose_up_timeout_recovered_required_services_running").strip()
+            failure_class, failure_message = self._classify_gate_service_states(gate_service_states)
+            return 124, (
+                output
+                + "\ncompose_up_timeout"
+                + (f"; {failure_class}: {failure_message}" if failure_message else "")
+            ).strip()
         self.active_env_proc = None
         if returncode := proc.returncode:
             return returncode, output
@@ -2670,7 +4095,15 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     f"Cleaned stale dashboard projects before startup: {', '.join(startup_cleanup_projects)}.",
                     category="environment",
                 )
-            operator_view_status = "disabled" if self.headless_worker_mode else "starting"
+            operator_view_status = (
+                "disabled"
+                if self.headless_worker_mode
+                else "starting"
+                if bool(getattr(self, "operator_view_required", True))
+                else "degraded_optional"
+            )
+            operator_view_required = bool(getattr(self, "operator_view_required", True))
+            visual_evidence_required = bool(getattr(self, "visual_evidence_required", True)) and not self.headless_worker_mode
             self._update_state(
                 environment_state="starting",
                 scenario_state="idle",
@@ -2689,6 +4122,8 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                 operator_view_ready=False,
                 operator_view_status=operator_view_status,
                 operator_view_failure_class="",
+                operator_view_required=operator_view_required,
+                visual_evidence_required=visual_evidence_required,
                 validation_dir=str(validation_dir),
                 command_history_path=str(validation_dir / "command_history.jsonl"),
                 multi_target_progress_path=str(validation_dir / "multi_target_progress.json"),
@@ -2738,12 +4173,12 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
             for attempt in range(2):
                 world_stream_port = (
                     0
-                    if self.headless_worker_mode
+                    if self.headless_worker_mode or not visual_evidence_required
                     else find_free_port(8891, 8921, exclude_ports=failed_world_stream_ports)
                 )
                 operator_view_port = (
                     0
-                    if self.headless_worker_mode
+                    if self.headless_worker_mode or not operator_view_required
                     else find_free_port(
                         OPERATOR_VIEW_PORT_START,
                         OPERATOR_VIEW_PORT_END,
@@ -2767,6 +4202,8 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     operator_view_ready=False,
                     operator_view_status=operator_view_status,
                     operator_view_failure_class="",
+                    operator_view_required=operator_view_required,
+                    visual_evidence_required=visual_evidence_required,
                     environment_message="starting authoritative environment",
                     environment_failure_class="",
                     gate_service_states={},
@@ -2855,13 +4292,51 @@ echo "TRUTH_LOG=$LOG_FILE"
                     environment_failure_class="truth_probe_start_failed",
                     gate_service_states=gate_service_states,
                 )
-            if not self._wait_for_truth_ready(20.0):
+            if not self._wait_for_truth_ready(TRUTH_PROBE_READY_TIMEOUT_S):
                 truth_failure_text = self._truth_probe_startup_failure_text()
                 raise EnvironmentStartupError(
                     f"Truth probe did not report ready state. {truth_failure_text} {truth_info['output']}".strip(),
                     environment_failure_class="truth_probe_start_failed",
                     gate_service_states=gate_service_states,
                 )
+
+            if not visual_evidence_required:
+                self._update_state(
+                    environment_state="environment_ready",
+                    scenario_state="ready",
+                    environment_message="environment ready",
+                    environment_failure_class="",
+                    world_file=env.get("WORLD_FILE", DEFAULT_WORLD_FILE),
+                    surface_profile=env.get("CHASECAR_SURFACE_PROFILE", DEFAULT_SURFACE_PROFILE),
+                    gate_service_states=gate_service_states,
+                    scenario_message="ready",
+                    world_stream_url="",
+                    operator_view_backend="disabled",
+                    operator_view_url="",
+                    operator_view_ready=False,
+                    operator_view_status="degraded_optional",
+                    operator_view_failure_class="",
+                    operator_view_required=False,
+                    visual_evidence_required=False,
+                    world_stream_recovery_state="idle",
+                    world_stream_restart_in_progress=False,
+                    world_stream_last_restart_error="",
+                    idle_shutdown_idle_since_utc="",
+                    idle_shutdown_deadline_utc="",
+                    idle_shutdown_remaining_s=None,
+                    idle_shutdown_state="watching" if self.idle_shutdown_enabled else "disabled",
+                )
+                self._record_operator_event("Environment ready (optional visual surfaces disabled).", category="environment")
+                self._write_operator_status(
+                    phase="environment_ready",
+                    target_id="",
+                    target_transition_active=False,
+                    status_text="Environment ready",
+                )
+                self._write_lock_file()
+                self.build_on_next_start = False
+                pending_scenario_ready_to_launch = True
+                return
 
             if self.headless_worker_mode:
                 self._update_state(
@@ -2882,6 +4357,10 @@ echo "TRUTH_LOG=$LOG_FILE"
                     world_stream_recovery_state="idle",
                     world_stream_restart_in_progress=False,
                     world_stream_last_restart_error="",
+                    idle_shutdown_idle_since_utc="",
+                    idle_shutdown_deadline_utc="",
+                    idle_shutdown_remaining_s=None,
+                    idle_shutdown_state="watching" if self.idle_shutdown_enabled else "disabled",
                 )
                 self._record_operator_event("Environment ready (headless soak mode).", category="environment")
                 self._write_operator_status(
@@ -2917,27 +4396,57 @@ echo "TRUTH_LOG=$LOG_FILE"
                 )
 
             dashboard_url = f"http://127.0.0.1:{self.port}/dashboard.html"
-            operator_view_script = self._operator_view_launch_script(
-                session_id=session_id,
-                visual_dir_container=visual_dir_container,
-                dashboard_url=dashboard_url,
-            )
-            operator_view_info = self._run_container_helper(self.operator_view_container_id, operator_view_script, "OPERATOR_VIEW")
-            if int(operator_view_info.get("exit_code", 0) or 0) != 0:
-                raise EnvironmentStartupError(
-                    f"Operator view helper failed. {operator_view_info['output']}".strip(),
-                    environment_failure_class="operator_view_start_failed",
-                    operator_view_failure_class="operator_view_start_failed",
-                    gate_service_states=gate_service_states,
+            operator_view_info: Dict[str, Any] = {"output": ""}
+            if operator_view_required:
+                operator_view_script = self._operator_view_launch_script(
+                    session_id=session_id,
+                    visual_dir_container=visual_dir_container,
+                    dashboard_url=dashboard_url,
                 )
-            if not self._wait_for_operator_view_ready(30.0):
-                operator_view_state = self._operator_view_snapshot(visual_dir, self.state)
+                operator_view_info = self._run_container_helper(self.operator_view_container_id, operator_view_script, "OPERATOR_VIEW")
+                if int(operator_view_info.get("exit_code", 0) or 0) != 0:
+                    raise EnvironmentStartupError(
+                        f"Operator view helper failed. {operator_view_info['output']}".strip(),
+                        environment_failure_class="operator_view_start_failed",
+                        operator_view_failure_class="operator_view_start_failed",
+                        gate_service_states=gate_service_states,
+                    )
+                if not self._wait_for_operator_view_ready(30.0):
+                    operator_view_state = self._operator_view_snapshot(visual_dir, self.state)
+                    operator_view_failure_class = str(
+                        operator_view_state.get("failure_class", "") or "operator_view_start_failed"
+                    )
+                    raise EnvironmentStartupError(
+                        f"Operator view did not become ready. {operator_view_info['output']}".strip(),
+                        environment_failure_class="operator_view_start_failed",
+                        operator_view_failure_class=operator_view_failure_class,
+                        gate_service_states=gate_service_states,
+                    )
+                self._update_state(
+                    operator_view_ready=True,
+                    operator_view_status="ready",
+                    operator_view_failure_class="",
+                )
+            else:
+                self._update_state(
+                    operator_view_ready=False,
+                    operator_view_status="degraded_optional",
+                    operator_view_failure_class="",
+                    operator_view_url="",
+                )
+                self._record_operator_event(
+                    "Recorded visual evidence starting with optional Xpra operator view disabled.",
+                    category="environment",
+                )
+            with self.state_lock:
+                operator_view_ready = bool(self.state.get("operator_view_ready", False))
+                operator_view_status = str(self.state.get("operator_view_status", "") or "")
+                operator_view_failure_class = str(self.state.get("operator_view_failure_class", "") or "")
+            if operator_view_required and not operator_view_ready:
                 raise EnvironmentStartupError(
                     f"Operator view did not become ready. {operator_view_info['output']}".strip(),
                     environment_failure_class="operator_view_start_failed",
-                    operator_view_failure_class=str(
-                        operator_view_state.get("failure_class", "") or "operator_view_start_failed"
-                    ),
+                    operator_view_failure_class=operator_view_failure_class or "operator_view_start_failed",
                     gate_service_states=gate_service_states,
                 )
 
@@ -2960,7 +4469,7 @@ echo "VISUAL_LOG=$LOG_FILE"
                     environment_failure_class="visual_observer_start_failed",
                     gate_service_states=gate_service_states,
                 )
-            if not self._wait_for_visual_ready(20.0):
+            if not self._wait_for_visual_ready(VISUAL_OBSERVER_READY_TIMEOUT_S):
                 raise EnvironmentStartupError(
                     f"Visual observer did not emit dashboard frames. {visual_info['output']}".strip(),
                     environment_failure_class="visual_observer_start_failed",
@@ -2976,13 +4485,19 @@ echo "VISUAL_LOG=$LOG_FILE"
                 scenario_message="ready",
                 world_stream_url=f"http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify",
                 operator_view_backend="xpra",
-                operator_view_url=f"http://127.0.0.1:{operator_view_port}/",
-                operator_view_ready=True,
-                operator_view_status="ready",
-                operator_view_failure_class="",
+                operator_view_url=f"http://127.0.0.1:{operator_view_port}/" if operator_view_port else "",
+                operator_view_ready=operator_view_ready,
+                operator_view_status=operator_view_status or ("ready" if operator_view_ready else "degraded"),
+                operator_view_failure_class=operator_view_failure_class,
+                operator_view_required=operator_view_required,
+                visual_evidence_required=visual_evidence_required,
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
                 world_stream_last_restart_error="",
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_state="watching" if self.idle_shutdown_enabled else "disabled",
             )
             self._record_operator_event("Environment ready.", category="environment")
             self._write_operator_status(
@@ -3080,6 +4595,10 @@ echo "VISUAL_LOG=$LOG_FILE"
                 gate_service_states={},
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_state="inactive" if self.idle_shutdown_enabled else "disabled",
             )
             self._world_stream_stale_since_monotonic = 0.0
             self._record_operator_event("Environment stopping.", category="environment")
@@ -3114,6 +4633,10 @@ echo "VISUAL_LOG=$LOG_FILE"
                 gate_service_states={},
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_state="inactive" if self.idle_shutdown_enabled else "disabled",
             )
             self._clear_llm_proof_runtime_state()
             self._clear_visit_mission_runtime_state()
@@ -3370,6 +4893,7 @@ pkill -f "fluxbox" 2>/dev/null || true
                 remaining_targets=[],
                 last_visit_result={},
                 mission_verdict={},
+                planner_handoff={},
                 gather_phase="setup" if scenario.mode == "gather_mission" else "idle",
                 capture_state={},
                 zone_pose={},
@@ -3415,6 +4939,7 @@ pkill -f "fluxbox" 2>/dev/null || true
                 remaining_targets=result.get("remaining_targets", []),
                 last_visit_result=result.get("last_visit_result", {}),
                 mission_verdict=result.get("mission_verdict", {}),
+                planner_handoff=result.get("planner_handoff", {}),
                 gather_phase=result.get("gather_phase", self.state.get("gather_phase", "idle")),
                 capture_state=result.get("capture_state", self.state.get("capture_state", {})),
                 zone_pose=result.get("zone_pose", self.state.get("zone_pose", {})),
@@ -3453,6 +4978,7 @@ pkill -f "fluxbox" 2>/dev/null || true
                     proof_state="failed" if scenario.mode in {"llm_proof", "visit_mission", "gather_mission"} else self.state.get("proof_state", "waiting"),
                     mission_phase="failed" if scenario.mode in {"visit_mission", "gather_mission"} else self.state.get("mission_phase", "idle"),
                     mission_status="failed" if scenario.mode in {"visit_mission", "gather_mission"} else self.state.get("mission_status", "idle"),
+                    planner_handoff={},
                     search_bias_active=False,
                     gather_phase="failed" if scenario.mode == "gather_mission" else "idle",
                     capture_state={},
@@ -3488,6 +5014,7 @@ pkill -f "fluxbox" 2>/dev/null || true
             self._record_operator_event(f"{scenario.label} scenario failed: {exc}", category="error")
         finally:
             self.active_scenario_proc = None
+            self.active_scenario_overrides = {}
             self.scenario_cancel.clear()
             self._update_state(active_scenario="")
             self.scenario_lock.release()
@@ -3524,6 +5051,182 @@ pkill -f "fluxbox" 2>/dev/null || true
             }
         )
         return env
+
+    def _write_random_golf_fetch_layout(
+        self,
+        scenario: ScenarioDefinition,
+        *,
+        overrides: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        seed_value = overrides.get("random_seed")
+        random_profile = str(overrides.get("random_profile", "") or GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT).strip()
+        draw = bounded_golf_fetch_random_draw(
+            seed=int(seed_value) if seed_value not in {None, ""} else None,
+            profile=random_profile,
+            fetch_target_x=float(scenario.fetch_target_x if scenario.fetch_target_x is not None else 0.95),
+            fetch_target_y=float(scenario.fetch_target_y if scenario.fetch_target_y is not None else 0.0),
+            fetch_target_z=float(scenario.fetch_target_z if scenario.fetch_target_z is not None else 0.001),
+            delivery_radius_m=float(scenario.fetch_delivery_radius_m if scenario.fetch_delivery_radius_m is not None else 0.30),
+        )
+        scenario_dir = self._scenarios_dir() or ensure_dir(
+            self._current_validation_dir()
+            or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation")
+        )
+        layout_path = ensure_dir(scenario_dir / "random_layouts") / f"{draw['layout_id']}_{draw['random_profile']}_{draw['seed']}.json"
+        ball_pose = draw["ball_pose"]
+        write_json(
+            layout_path,
+            {
+                "generated_utc": utc_now(),
+                "scenario_id": scenario.id,
+                "layout_family": draw["layout_id"],
+                "random_profile": draw["random_profile"],
+                "random_draw": draw,
+                "targets": [
+                    {
+                        "id": "ball_1",
+                        "label": "bounded_random_ball",
+                        "start_visible": True,
+                        "forward_m": float(ball_pose["x"]),
+                        "lateral_m": float(ball_pose["y"]),
+                        "z_m": float(ball_pose["z"]),
+                        "visit_tolerance_m": 0.22,
+                        "min_dwell_s": 0.5,
+                    }
+                ],
+            },
+        )
+        return {**draw, "target_layout_json": str(layout_path)}
+
+    def _planner_handoff_root(self, scene_id: str) -> Path:
+        scenario_dir = self._scenarios_dir() or ensure_dir(
+            self._current_validation_dir()
+            or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation")
+        )
+        return ensure_dir(scenario_dir / "planner_handoff_gate" / scene_id)
+
+    def _run_dashboard_planner_handoff(
+        self,
+        *,
+        overrides: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        seed_value = overrides.get("random_seed")
+        scene_set = str(overrides.get("planner_scene_set", GOLF_BALL_PLANNER_GATED_SCENE_SET) or GOLF_BALL_PLANNER_GATED_SCENE_SET)
+        planner_mode = str(overrides.get("planner_mode", fetch_planner_gate.PLANNER_MODE_DETERMINISTIC) or fetch_planner_gate.PLANNER_MODE_DETERMINISTIC)
+        scene_json = str(overrides.get("planner_scene_json", "") or "").strip()
+        scene_id = str(overrides.get("planner_scene_id", "") or "").strip()
+        scene: Dict[str, Any] = {}
+        if scene_json:
+            frozen_scenes = fetch_planner_gate.load_frozen_scenes(
+                scene_descriptor_json=[scene_json],
+                scene_dir="",
+                scene_set=scene_set,
+            )
+            if scene_id:
+                scene = next((item for item in frozen_scenes if str(item.get("scene_id", "") or "") == scene_id), {})
+                if not scene:
+                    raise RuntimeError(f"planner_scene_id not found in planner_scene_json: {scene_id}")
+            elif frozen_scenes:
+                scene = frozen_scenes[0]
+            if not scene:
+                raise RuntimeError(f"planner_scene_json had no scene descriptors: {scene_json}")
+        else:
+            scene = fetch_planner_gate.generate_dashboard_scene(
+                seed=int(seed_value) if seed_value not in {None, ""} else None,
+                scene_set=scene_set,
+            )
+        decision = fetch_planner_gate.decide_scene(
+            scene,
+            planner_mode=planner_mode,
+            openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
+            openai_model=os.environ.get("OPENAI_MODEL", fetch_planner_gate.DEFAULT_OPENAI_MODEL),
+            openai_base_url=os.environ.get("OPENAI_BASE_URL", fetch_planner_gate.DEFAULT_OPENAI_BASE_URL),
+            openai_org_id=os.environ.get("OPENAI_ORG_ID", ""),
+            openai_project_id=os.environ.get("OPENAI_PROJECT_ID", ""),
+            reasoning_effort=os.environ.get("OPENAI_REASONING_EFFORT", fetch_planner_gate.DEFAULT_REASONING_EFFORT),
+        )
+        root = self._planner_handoff_root(str(scene.get("scene_id", "scene") or "scene"))
+        paths = fetch_planner_gate.write_scene_bundle(root, scene, decision)
+        return {
+            "scene": scene,
+            "decision": {key: value for key, value in decision.items() if key not in {"provider_request", "provider_response"}},
+            "paths": paths,
+            "artifact_dir": str(root),
+        }
+
+    def _write_planner_gated_fetch_layout(
+        self,
+        scenario: ScenarioDefinition,
+        *,
+        planner_handoff: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        scene = planner_handoff.get("scene") if isinstance(planner_handoff.get("scene"), dict) else {}
+        decision = planner_handoff.get("decision") if isinstance(planner_handoff.get("decision"), dict) else {}
+        route_label = str(decision.get("route_label", scene.get("expected_route_label", "")) or "").strip()
+        route_executor = str(decision.get("route_executor", fetch_planner_gate.executor_for_route(route_label)) or "").strip()
+        scene_id = str(scene.get("scene_id", "planner_scene") or "planner_scene")
+        scenario_dir = self._scenarios_dir() or ensure_dir(
+            self._current_validation_dir()
+            or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation")
+        )
+        layout_path = ensure_dir(scenario_dir / "planner_fetch_layouts") / f"{scene_id}.json"
+        fetch_planner_gate.write_fetch_ready_layout_from_scene(
+            layout_path,
+            scene,
+            scenario_id=scenario.id,
+            route_label=route_label,
+            route_executor=route_executor,
+        )
+        geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
+        return {
+            "layout_id": "planner_gated_fetch_ready" if route_label == fetch_planner_gate.ROUTE_FETCH_READY else f"planner_gated_{route_label}",
+            "random_profile": fetch_planner_gate.PLANNER_MIXED_PROFILE,
+            "seed": scene.get("seed", ""),
+            "planner_route_label": route_label,
+            "route_executor": route_executor,
+            "target_pose": scene.get("target_pose", {}),
+            "ball_pose": scene.get("ball_pose", {}),
+            "robot_pose": scene.get("robot_pose", {}),
+            "planner_scene": scene,
+            "ball_target_distance_m": geometry.get("ball_target_distance_m"),
+            "ball_target_angle_deg": geometry.get("ball_target_angle_deg"),
+            "robot_ball_separation_m": geometry.get("robot_ball_distance_m"),
+            "robot_lateral_offset_m": geometry.get("robot_lateral_signed_m"),
+            "robot_yaw_error_deg": geometry.get("robot_yaw_error_deg"),
+            "target_layout_json": str(layout_path),
+        }
+
+    def _planner_route_execution_payload(
+        self,
+        decision: Dict[str, Any],
+        *,
+        local_fetch_dispatched: bool,
+        route_executed: bool,
+        outcome: str,
+        reason: str = "",
+        forward_only_pre_contact: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        route_label = str(decision.get("route_label", "") or "").strip()
+        route_executor = str(decision.get("route_executor", fetch_planner_gate.executor_for_route(route_label)) or "").strip()
+        forward_required = route_label in {
+            fetch_planner_gate.ROUTE_FETCH_READY,
+            fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+            fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
+            fetch_planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
+        }
+        if forward_only_pre_contact is None:
+            forward_only_pre_contact = True if not route_executed else None
+        return {
+            "route_label": route_label,
+            "route_executor": route_executor,
+            "route_executable": bool(decision.get("route_executable", route_executor != "unsupported_route")),
+            "route_executed": bool(route_executed),
+            "local_fetch_dispatched": bool(local_fetch_dispatched),
+            "forward_only_pre_contact_required": bool(forward_required),
+            "forward_only_pre_contact": forward_only_pre_contact,
+            "outcome": str(outcome or ""),
+            "reason": str(reason or ""),
+        }
 
     def _run_uat_stage(self, mode: str, scenario: ScenarioDefinition) -> Dict[str, Any]:
         env = self._scenario_env(scenario)
@@ -3875,13 +5578,154 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         scenario_dir = self._scenarios_dir() or ensure_dir(self._current_validation_dir() or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation"))
         log_path = ensure_dir(scenario_dir) / f"{scenario.id}.log"
         env = self._scenario_env(scenario)
+        runner_scenario_id = str(scenario.runner_scenario_id or scenario.id)
+        scenario_overrides = dict(getattr(self, "active_scenario_overrides", {}) or {})
+        effective_gather_control_family = str(
+            scenario_overrides.get("gather_control_family", scenario.gather_control_family) or ""
+        ).strip()
+        effective_ai_push_coast_mode = str(scenario_overrides.get("ai_push_coast_mode", "") or "").strip()
+        use_gather_runner_for_golf = bool(
+            scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
+            and (
+                effective_gather_control_family != scenario.gather_control_family
+                or effective_ai_push_coast_mode
+            )
+        )
+        runner_script = (
+            "golf_ball_circle_delivery_demo_runner.py"
+            if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and not use_gather_runner_for_golf
+            else "gather_mission_runner.py"
+        )
+        random_draw: Dict[str, Any] = {}
+        planner_handoff: Dict[str, Any] = {}
+        planner_route_execution: Dict[str, Any] = {}
+        local_fetch_dispatched = True
+        target_layout_json = str(scenario_overrides.get("target_layout_json", scenario.target_layout_json) or "")
+        artifact_kind = ""
+        if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and truthy_value(scenario_overrides.get("planner_gated_random", False)):
+            planner_handoff = self._run_dashboard_planner_handoff(overrides=scenario_overrides)
+            decision = planner_handoff.get("decision", {}) if isinstance(planner_handoff.get("decision"), dict) else {}
+            route_label = str(decision.get("route_label", "") or "").strip()
+            route_dispatches_local_fetch = route_label in {
+                fetch_planner_gate.ROUTE_FETCH_READY,
+                fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+                fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
+            }
+            if not route_dispatches_local_fetch:
+                local_fetch_dispatched = False
+                pass_flag = bool(decision.get("correct", False))
+                route_executor = str(decision.get("route_executor", fetch_planner_gate.executor_for_route(route_label)) or "")
+                route_executed = route_label in {
+                    fetch_planner_gate.ROUTE_SCAN_OR_PERCEIVE,
+                    fetch_planner_gate.ROUTE_NO_GO,
+                }
+                planner_route_execution = self._planner_route_execution_payload(
+                    decision,
+                    local_fetch_dispatched=False,
+                    route_executed=route_executed,
+                    outcome=f"{route_executor}_selected" if route_executed else f"{route_executor}_selected_placeholder",
+                    reason="planner route did not permit local fetch dispatch",
+                    forward_only_pre_contact=True if route_executed else None,
+                )
+                artifacts = {
+                    "planner_handoff_gate": str(planner_handoff.get("artifact_dir", "")),
+                    "planner_scene": str(planner_handoff.get("paths", {}).get("scene_path", "")) if isinstance(planner_handoff.get("paths"), dict) else "",
+                    "planner_decision": str(planner_handoff.get("paths", {}).get("decision_path", "")) if isinstance(planner_handoff.get("paths"), dict) else "",
+                }
+                payload = {
+                    "scenario_id": scenario.id,
+                    "runner_scenario_id": runner_scenario_id,
+                    "mission_objective": scenario.mission_objective,
+                    "fetch_delivery_radius_m": scenario.fetch_delivery_radius_m,
+                    "gather_control_family": effective_gather_control_family,
+                    "ai_push_coast_mode": effective_ai_push_coast_mode,
+                    "target_layout_json": "",
+                    "random_layout": False,
+                    "random_profile": "",
+                    "random_draw": {},
+                    "planner_gated_random": True,
+                    "planner_scene_set": str(scenario_overrides.get("planner_scene_set", GOLF_BALL_PLANNER_GATED_SCENE_SET) or ""),
+                    "planner_handoff": planner_handoff,
+                    "local_fetch_dispatched": False,
+                    "planner_route_execution": planner_route_execution,
+                    "planner_route_executed": bool(planner_route_execution.get("route_executed", False)),
+                    "route_label": str(planner_route_execution.get("route_label", "")),
+                    "route_executor": str(planner_route_execution.get("route_executor", "")),
+                    "forward_only_pre_contact_required": bool(
+                        planner_route_execution.get("forward_only_pre_contact_required", False)
+                    ),
+                    "forward_only_pre_contact": planner_route_execution.get("forward_only_pre_contact"),
+                    "target_model_sdf": scenario.target_model_sdf,
+                    "zone_model_sdf": scenario.zone_model_sdf,
+                    "phase": scenario.phase,
+                    "pass": pass_flag,
+                    "artifacts": artifacts,
+                    "summary": {},
+                    "mission_verdict": {},
+                    "proof_verdict": {},
+                    "target_results": {},
+                    "message": f"Planner selected {decision.get('route_label', '')}; local fetch not dispatched",
+                    "motion_evidence": False,
+                    "proof_state": "completed" if pass_flag else "failed",
+                    "mission_phase": "planner_handoff",
+                    "mission_status": "completed" if pass_flag else "failed",
+                    "search_bias_active": False,
+                    "current_target_id": "",
+                    "visit_index": 0,
+                    "visited_targets": [],
+                    "remaining_targets": [],
+                    "last_visit_result": {},
+                    "gather_phase": "planner_handoff",
+                    "capture_state": {},
+                    "zone_pose": {},
+                    "zone_score": {},
+                    "final_corral_audit": {},
+                    "placed_targets": [],
+                    "capture_loss_count": 0,
+                    "route_order": [],
+                    "surface_profile": str(env.get("CHASECAR_SURFACE_PROFILE", scenario.surface_profile) or ""),
+                }
+                self._write_scenario_result(scenario.id, payload)
+                return payload
+            random_draw = self._write_planner_gated_fetch_layout(scenario, planner_handoff=planner_handoff)
+            target_layout_json = str(random_draw.get("target_layout_json", target_layout_json))
+            artifact_kind = GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
+            nav2_setup_first_routes = {fetch_planner_gate.ROUTE_NAV2_REPOSITION}
+            planner_route_execution = self._planner_route_execution_payload(
+                decision,
+                local_fetch_dispatched=True,
+                route_executed=True,
+                outcome=(
+                    "nav2_reposition_then_forward_only_fetch_runner_dispatched"
+                    if route_label in nav2_setup_first_routes
+                    else "forward_only_fetch_runner_dispatched"
+                ),
+                reason=(
+                    "planner route required bounded Nav2 setup before local contact fetch"
+                    if route_label in nav2_setup_first_routes
+                    else "planner route permitted bounded local re-aim execution"
+                    if route_label == fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
+                    else "planner route required measured local setup/capture before fetch"
+                    if route_label == fetch_planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
+                    else "planner route permitted bounded local execution"
+                ),
+                forward_only_pre_contact=runner_script == "golf_ball_circle_delivery_demo_runner.py",
+            )
+        if (
+            scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
+            and not planner_handoff
+            and truthy_value(scenario_overrides.get("random_layout", False))
+        ):
+            random_draw = self._write_random_golf_fetch_layout(scenario, overrides=scenario_overrides)
+            target_layout_json = str(random_draw.get("target_layout_json", target_layout_json))
+            artifact_kind = GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
         command = [
             sys.executable,
-            str(SCRIPTS_DIR / "gather_mission_runner.py"),
+            str(SCRIPTS_DIR / runner_script),
             "--dashboard-url",
             str(self.state.get("dashboard_url", f"http://127.0.0.1:{self.port}") or f"http://127.0.0.1:{self.port}"),
             "--scenario-id",
-            scenario.id,
+            scenario.id if runner_script == "golf_ball_circle_delivery_demo_runner.py" else runner_scenario_id,
             "--scenario-label",
             scenario.label,
             "--world-file",
@@ -3894,6 +5738,78 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             str(self.gather_mission_runtime_path),
             "--keep-environment",
         ]
+        if scenario.mission_objective:
+            command.extend(["--mission-objective", scenario.mission_objective])
+        if scenario.fetch_target_x is not None:
+            command.extend(["--fetch-target-x", f"{float(scenario.fetch_target_x):.6f}"])
+        if scenario.fetch_target_y is not None:
+            command.extend(["--fetch-target-y", f"{float(scenario.fetch_target_y):.6f}"])
+        if scenario.fetch_target_z is not None:
+            command.extend(["--fetch-target-z", f"{float(scenario.fetch_target_z):.6f}"])
+        if scenario.fetch_delivery_radius_m is not None:
+            command.extend(["--fetch-delivery-radius-m", f"{float(scenario.fetch_delivery_radius_m):.6f}"])
+        if effective_gather_control_family and runner_script == "gather_mission_runner.py":
+            command.extend(["--gather-control-family", effective_gather_control_family])
+        if effective_ai_push_coast_mode and runner_script == "gather_mission_runner.py":
+            command.extend(["--ai-push-coast-mode", effective_ai_push_coast_mode])
+        if target_layout_json:
+            command.extend(["--target-layout-json", target_layout_json])
+        if random_draw and runner_script == "golf_ball_circle_delivery_demo_runner.py":
+            if (
+                planner_route_execution
+                and str(planner_route_execution.get("route_label", ""))
+                == fetch_planner_gate.ROUTE_NAV2_REPOSITION
+            ):
+                command.extend(["--robot-x", "0.000000"])
+                command.extend(["--robot-y", "0.000000"])
+                command.extend(["--robot-yaw", "0.000000"])
+            else:
+                robot_pose = random_draw.get("robot_pose", {}) if isinstance(random_draw.get("robot_pose"), dict) else {}
+                command.extend(["--robot-x", f"{float(robot_pose.get('x', 0.06)):.6f}"])
+                command.extend(["--robot-y", f"{float(robot_pose.get('y', 0.0)):.6f}"])
+                command.extend(["--robot-yaw", f"{float(robot_pose.get('yaw', 0.0)):.6f}"])
+        if planner_route_execution and runner_script == "golf_ball_circle_delivery_demo_runner.py":
+            command.extend(["--planner-route-label", str(planner_route_execution.get("route_label", ""))])
+            command.extend(["--route-executor", str(planner_route_execution.get("route_executor", ""))])
+            if bool(planner_route_execution.get("forward_only_pre_contact_required", False)):
+                command.append("--forward-only-pre-contact-required")
+            if str(planner_route_execution.get("route_label", "")) in {
+                fetch_planner_gate.ROUTE_FETCH_READY,
+                fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+                fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
+                fetch_planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
+            }:
+                local_setup_route = str(planner_route_execution.get("route_label", "")) in {
+                    fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
+                    fetch_planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
+                }
+                command.extend(["--drive-mode", "line_servo"])
+                command.extend(["--drive-linear-x-mps", "0.100000"])
+                command.extend(["--drive-duration-s", "148.000000" if local_setup_route else "36.000000"])
+                command.extend(["--sample-duration-s", "152.000000" if local_setup_route else "40.000000"])
+                command.extend(["--line-servo-push-linear-x-mps", "0.055000"])
+                command.extend(["--line-servo-max-angular-z-rps", "0.180000"])
+                command.extend(["--line-servo-yaw-gain", "1.200000"])
+                if str(planner_route_execution.get("route_label", "")) == fetch_planner_gate.ROUTE_NAV2_REPOSITION:
+                    command.append("--nav2-reposition-before-fetch")
+                    command.extend(["--nav2-reposition-frame-id", "odom"])
+                    command.extend(["--nav2-reposition-goal-frame-mode", "nav2_relative"])
+                    command.append("--nav2-reposition-transform-layout-to-current-robot")
+                    command.extend(["--nav2-reposition-setup-standoff-m", "0.380000"])
+                    command.extend(["--nav2-reposition-timeout-s", "24.000000"])
+                    command.extend(["--nav2-reposition-server-wait-s", "8.000000"])
+                    command.extend(["--nav2-reposition-pose-wait-s", "3.000000"])
+                command.append("--stop-on-delivery")
+                command.extend(["--delivery-stop-radius-m", "0.200000"])
+                command.extend(["--post-delivery-sample-s", "4.000000"])
+        if artifact_kind:
+            command.extend(["--artifact-kind", artifact_kind])
+        if scenario.target_model_sdf:
+            command.extend(["--target-model-sdf", scenario.target_model_sdf])
+        if scenario.zone_model_sdf:
+            command.extend(["--zone-model-sdf", scenario.zone_model_sdf])
+        if scenario.max_retries_per_target >= 0 and runner_script == "gather_mission_runner.py":
+            command.extend(["--max-retries-per-target", str(scenario.max_retries_per_target)])
 
         with log_path.open("w", encoding="utf-8") as handle:
             proc = subprocess.Popen(
@@ -3917,6 +5833,19 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         summary = read_json(summary_path.with_name("summary.json")) if summary_path and summary_path.exists() else {}
         verdict = read_json(summary_path) if summary_path and summary_path.exists() else {}
         pass_flag = bool(verdict.get("pass")) if verdict else bool(summary.get("pass"))
+        geometry_consistency = (
+            verdict.get("geometry_consistency", {})
+            if isinstance(verdict.get("geometry_consistency"), dict)
+            else summary.get("geometry_consistency", {})
+            if isinstance(summary.get("geometry_consistency"), dict)
+            else {}
+        )
+        if (
+            scenario.mission_objective == "fetch_to_pose"
+            and geometry_consistency
+            and not bool(geometry_consistency.get("pass", False))
+        ):
+            pass_flag = False
         mission_root = summary_path.parent if summary_path and summary_path.exists() else None
         target_results = read_json(mission_root / "target_results.json") if mission_root is not None else {}
         visit_runtime = self._visit_mission_runtime_state()
@@ -3925,6 +5854,9 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "gather_mission": str(mission_root) if mission_root is not None else "",
             "mission_verdict": str(summary_path) if summary_path and summary_path.exists() else "",
             "target_results": str(mission_root / "target_results.json") if mission_root is not None else "",
+            "approach_metrics": str(mission_root / "approach_metrics.json") if mission_root is not None else "",
+            "contact_trace": str(mission_root / "contact_trace.jsonl") if mission_root is not None else "",
+            "ball_trace": str(mission_root / "ball_trace.jsonl") if mission_root is not None else "",
             "scorecard": str(mission_root / "scorecard.md") if mission_root is not None else "",
             "log": str(log_path),
         }
@@ -3933,6 +5865,29 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
 
         payload = {
             "scenario_id": scenario.id,
+            "runner_scenario_id": runner_scenario_id,
+            "mission_objective": scenario.mission_objective,
+            "fetch_delivery_radius_m": scenario.fetch_delivery_radius_m,
+            "gather_control_family": effective_gather_control_family,
+            "ai_push_coast_mode": effective_ai_push_coast_mode,
+            "target_layout_json": target_layout_json,
+            "random_layout": bool(random_draw),
+            "random_profile": str(random_draw.get("random_profile", "")) if random_draw else "",
+            "random_draw": random_draw,
+            "planner_gated_random": bool(planner_handoff),
+            "planner_scene_set": str(scenario_overrides.get("planner_scene_set", "")) if planner_handoff else "",
+            "planner_handoff": planner_handoff,
+            "local_fetch_dispatched": bool(local_fetch_dispatched),
+            "planner_route_execution": planner_route_execution,
+            "planner_route_executed": bool(planner_route_execution.get("route_executed", False)) if planner_route_execution else False,
+            "route_label": str(planner_route_execution.get("route_label", "")) if planner_route_execution else "",
+            "route_executor": str(planner_route_execution.get("route_executor", "")) if planner_route_execution else "",
+            "forward_only_pre_contact_required": bool(
+                planner_route_execution.get("forward_only_pre_contact_required", False)
+            ) if planner_route_execution else False,
+            "forward_only_pre_contact": planner_route_execution.get("forward_only_pre_contact") if planner_route_execution else None,
+            "target_model_sdf": scenario.target_model_sdf,
+            "zone_model_sdf": scenario.zone_model_sdf,
             "phase": scenario.phase,
             "pass": pass_flag,
             "artifacts": artifacts,
@@ -3940,6 +5895,14 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "mission_verdict": verdict,
             "proof_verdict": verdict,
             "target_results": target_results,
+            "geometry_consistency": geometry_consistency,
+            "visible_delivery_marker_pose": (
+                verdict.get("visible_delivery_marker_pose", {})
+                if isinstance(verdict.get("visible_delivery_marker_pose"), dict)
+                else summary.get("visible_delivery_marker_pose", {})
+                if isinstance(summary.get("visible_delivery_marker_pose"), dict)
+                else {}
+            ),
             "message": "Gather mission passed" if pass_flag else "Gather mission failed",
             "motion_evidence": bool(pass_flag or gather_runtime.get("latest_control_command")),
             "proof_state": str(visit_runtime.get("proof_state", "completed" if pass_flag else "failed") or ("completed" if pass_flag else "failed")),
@@ -4175,6 +6138,61 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_artifact_file(self, path: Path) -> None:
+        content_type = ARTIFACT_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
+        file_size = path.stat().st_size
+        range_header = str(self.headers.get("Range", "") or "").strip()
+
+        start = 0
+        end = file_size - 1
+        partial = False
+        if path.suffix.lower() == ".mp4" and range_header.startswith("bytes="):
+            match = re.match(r"bytes=(\d*)-(\d*)$", range_header)
+            if not match:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            raw_start, raw_end = match.groups()
+            if raw_start == "" and raw_end == "":
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            if raw_start == "":
+                suffix_len = int(raw_end)
+                start = max(file_size - suffix_len, 0)
+            else:
+                start = int(raw_start)
+            if raw_end:
+                end = int(raw_end)
+            end = min(end, file_size - 1)
+            if start > end or start >= file_size:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            partial = True
+
+        length = max(end - start + 1, 0)
+        self.send_response(HTTPStatus.PARTIAL_CONTENT if partial else HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        if path.suffix.lower() == ".mp4":
+            self.send_header("Accept-Ranges", "bytes")
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+        self.end_headers()
+        with path.open("rb") as handle:
+            handle.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = handle.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
+
     def _read_json_body(self) -> Dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
@@ -4198,6 +6216,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._serve_file(STATIC_DASHBOARD_DIR / "browser_dashboard.html", "text/html; charset=utf-8")
         if path == "/browser_dashboard.js":
             return self._serve_file(STATIC_DASHBOARD_DIR / "browser_dashboard.js", "text/javascript; charset=utf-8")
+        if path in {"/fetch-plan", "/fetch-plan/", "/fetch_plan.html"}:
+            return self._serve_file(STATIC_DASHBOARD_DIR / "fetch_plan.html", "text/html; charset=utf-8")
+        if path == "/fetch_plan_data.json":
+            return self._serve_file(STATIC_DASHBOARD_DIR / "fetch_plan_data.json", "application/json; charset=utf-8", no_cache=True)
         if path == "/api/state":
             return self._json_response(HTTPStatus.OK, controller.get_state())
         if path == "/api/llm/supervisor/history":
@@ -4208,6 +6230,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._json_response(HTTPStatus.OK, controller.list_llm_supervisor_history(limit))
         if path == "/api/scenarios":
             return self._json_response(HTTPStatus.OK, controller.list_scenarios())
+        if path.startswith("/artifacts/session/"):
+            artifact_path = controller.resolve_session_artifact_path(path[len("/artifacts/session/") :])
+            if artifact_path is None:
+                return self._json_response(HTTPStatus.NOT_FOUND, {"error": "artifact not found"})
+            return self._serve_artifact_file(artifact_path)
         if path.startswith("/live/"):
             live_name = path[len("/") :]
             live_path = controller.read_live_file(live_name)
@@ -4236,6 +6263,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._json_response(status, payload)
         if path == "/api/env/refresh":
             status, payload = controller.request_refresh()
+            return self._json_response(status, payload)
+        if path == "/api/activity":
+            status, payload = controller.request_activity(body)
             return self._json_response(status, payload)
         if path == "/api/sim/reset":
             status, payload = controller.request_reset_sim(body)
@@ -4364,6 +6394,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def tailscale_ipv4() -> str:
+    try:
+        completed = subprocess.run(
+            ["tailscale", "ip", "-4"],
+            capture_output=True,
+            text=True,
+            timeout=3.0,
+            check=False,
+        )
+    except Exception:
+        return ""
+    if completed.returncode != 0:
+        return ""
+    for line in (completed.stdout or "").splitlines():
+        text = line.strip()
+        if text:
+            return text
+    return ""
+
+
 def main() -> int:
     args = parse_args()
     _kill_stale_dashboard_on_port(args.port)
@@ -4380,11 +6430,17 @@ def main() -> int:
     controller._update_state(dashboard_url=f"http://{client_host}:{args.port}/")
     server = DashboardHttpServer((args.host, args.port), controller)
     print(f"DASHBOARD_URL=http://{client_host}:{args.port}/")
+    if args.host in ("0.0.0.0", "::"):
+        ts_ip = tailscale_ipv4()
+        if ts_ip:
+            print(f"DASHBOARD_TAILSCALE_URL=http://{ts_ip}:{args.port}/")
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
         pass
     finally:
+        controller.world_stream_watchdog_cancel.set()
+        controller.idle_shutdown_cancel.set()
         server.server_close()
     return 0
 

@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,14 +39,224 @@ from gather_handoff_yaw_servo_helpers import HANDOFF_YAW_SERVO_CONTROL_FAMILY
 from gather_handoff_yaw_servo_helpers import decide_handoff_yaw_servo_pre_stage_command
 from gather_manager_helpers import GatherManagerState
 from gather_manager_helpers import decide_gather_manager_directive
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_KEEPUP_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_LATERAL_TO_ZONE_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_POSITIVE_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_RECENTER_KEEPUP_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_EDGE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_EDGE_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import decide_object_centric_gather_command
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_MODE_GUARDED_LIVE
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_MODE_SHADOW
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+from gather_ai_push_coast_helpers import ALLOWED_AI_PUSH_COAST_MODES
+from gather_ai_push_coast_helpers import compute_fetch_push_readiness_setup_command
+from gather_ai_push_coast_helpers import decide_ai_push_coast_handoff
+from gather_ai_push_coast_helpers import evaluate_fetch_push_readiness
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_BALL_MOTION_TOLERANCE_M
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_GOAL_TIMEOUT_S
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_SERVER_WAIT_S
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_GOAL_TIMEOUT_S
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTACT_STANDOFF_M
+from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_MPPI_FOLLOW_PATH_CONTROLLER_ID
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_MPPI_FOLLOW_PATH_GOAL_TIMEOUT_S
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_MPPI_FOLLOW_PATH_PRE_STAGE_TIMEOUT_S
 from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY
 from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_REACQUIRE_OBJECTIVE
+from gather_nav2_follow_path_reacquire_helpers import NAV2_MPPI_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY
+from gather_nav2_follow_path_reacquire_helpers import NAV2_MPPI_FOLLOW_PATH_REACQUIRE_OBJECTIVE
 from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_RESULT_MARKER
+from gather_nav2_follow_path_reacquire_helpers import build_nav2_follow_path_corridor_contact_probe_plan
+from gather_nav2_follow_path_reacquire_helpers import build_nav2_follow_path_corridor_push_plan
 from gather_nav2_follow_path_reacquire_helpers import build_nav2_follow_path_reacquire_plan
+from gather_nav2_follow_path_reacquire_helpers import build_nav2_mppi_follow_path_reacquire_plan
 from gather_pre_stage_reacquire_fsm_helpers import PRE_STAGE_REACQUIRE_FSM_CONTROL_FAMILY
 from gather_pre_stage_reacquire_fsm_helpers import decide_pre_stage_reacquire_fsm_command
 from gather_pre_stage_path_tracker_helpers import PRE_STAGE_PATH_TRACKER_CONTROL_FAMILY
@@ -61,6 +272,7 @@ from gather_mission_helpers import DEFAULT_STAGE_READY_DWELL_S
 from gather_mission_helpers import CaptureEnvelope
 from gather_mission_helpers import GatherTargetSpec
 from gather_mission_helpers import PlaceControlCommand
+from gather_mission_helpers import ZoneSpec
 from gather_mission_helpers import approach_side_verdict
 from gather_mission_helpers import build_gather_targets
 from gather_mission_helpers import build_scorecard_markdown
@@ -100,19 +312,102 @@ DEFAULT_TARGET_MODEL_NAME = "visit_mission_target"
 DEFAULT_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"
 DEFAULT_ZONE_MODEL_NAME = "corral_zone_marker"
 DEFAULT_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "corral_zone_marker.sdf"
+DEFAULT_FETCH_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf"
+DEFAULT_FETCH_ZONE_MODEL_NAME = "golf_ball_delivery_zone_marker"
+DEFAULT_FETCH_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "golf_ball_delivery_zone_marker.sdf"
+CALIBRATED_GOLF_BALL_RADIUS_M = 0.021336
+LEGACY_FRISBEE_TARGET_BALL_RADIUS_M = 0.05
+FETCH_DELIVERY_MARKER_RADIUS_M = 0.30
+LEGACY_CORRAL_MARKER_RADIUS_M = 0.762
 DEFAULT_MISSION_START_POSE = {"x": 0.0, "y": 0.0, "yaw": 0.0}
 DEFAULT_PLACE_RECOVERY_SETTLE_S = 0.20
 DEFAULT_PLACE_MARGINAL_CAPTURE_SETTLE_S = 0.25
+DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S = 60.0
+DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S = 8.0
+DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M = 0.25
+DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_TIMEOUT_S = 12.0
+DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S = 8.0
+DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M = -0.015
+DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M = 0.20
+DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M = 0.06
+DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M = 0.40
+DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG = 20.0
+DEFAULT_FETCH_PUSH_READINESS_SETUP_WINDOW_S = 4.0
 DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S = 1.25
 DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S = 1.0
 DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S = 0.25
 DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M = 0.03
 DEFAULT_SETTLE_NO_CHASE_ESCAPE_MARGIN_M = 0.08
 DEFAULT_SETTLE_NO_CHASE_ESCAPE_TIMEOUT_S = 0.75
+DEFAULT_OBJECT_CENTRIC_UNSECURE_SETTLE_ZONE_MAX_M = 0.25
+DEFAULT_OBJECT_CENTRIC_UNSECURE_MOVING_SETTLE_ZONE_MAX_M = 0.36
+DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_ZONE_MAX_M = 0.12
+DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MOTION_MAX_M = 0.045
+DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MIN_X_M = 1.20
+DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MAX_LATERAL_M = 0.42
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_ZONE_MAX_M = 0.36
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MOTION_MAX_M = 0.045
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MIN_X_M = 0.80
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MAX_X_M = 1.25
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MIN_LATERAL_M = 0.35
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MAX_LATERAL_M = 1.50
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_ZONE_MAX_M = 0.55
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MOTION_MAX_M = 0.045
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MIN_X_M = 0.65
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MAX_X_M = 0.85
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MIN_LATERAL_M = 0.55
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MAX_LATERAL_M = 0.75
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_ZONE_MAX_M = 0.70
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MOTION_MAX_M = 0.045
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MIN_X_M = 1.40
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MAX_X_M = 1.75
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MIN_LATERAL_M = 0.70
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MAX_LATERAL_M = 0.95
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MIN_X_M = -0.45
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_X_M = 0.10
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_LATERAL_M = 1.45
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MIN_WORLD_LATERAL_M = 0.24
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_WORLD_LATERAL_M = 0.65
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_MOTION_M = 0.055
 DEFAULT_MULTI_BALL_ADVANCE_DWELL_S = 0.5
 DEFAULT_MULTI_BALL_ADVANCE_MOTION_TOLERANCE_M = 0.04
 DEFAULT_PRE_STAGE_TIMEOUT_S = 30.0
+DEFAULT_OBJECT_CENTRIC_PRE_STAGE_TIMEOUT_S = 70.0
+DEFAULT_OBJECT_CENTRIC_FETCH_PRE_STAGE_TIMEOUT_S = 90.0
 DEFAULT_STAGE_TIMEOUT_S = 6.0
+DEFAULT_OBJECT_CENTRIC_STAGE_TIMEOUT_S = 14.0
+DEFAULT_OBJECT_CENTRIC_FETCH_CAPTURE_TIMEOUT_S = 32.0
+DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S = 4.0
+DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M = 0.03
+DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_MAX = 12
+DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_INTERVAL_S = 0.5
+DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_MAX = 20
+DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_INTERVAL_S = 0.25
+DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_LOG_TAIL = 400
+DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_STALE_S = 2.5
+DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_ESCAPE_LATERAL_M = 0.45
+DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M = 0.25
+DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M = 1.0
+DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M = 0.35
+DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S = 5.0
+DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M = 0.58
+DEFAULT_FETCH_CAPTURE_ENTRY_PUSH_READINESS_TIMEOUT_S = 15.0
+DEFAULT_FETCH_CAPTURE_ENTRY_PUSH_READINESS_PROGRESS_MIN_SCORE_DELTA = 0.10
+DEFAULT_FETCH_GEOMETRY_CENTER_TOLERANCE_M = 0.02
+DEFAULT_FETCH_GEOMETRY_RADIUS_TOLERANCE_M = 0.01
+MISSION_OBJECTIVE_GATHER_HERE = "gather_here"
+MISSION_OBJECTIVE_FETCH_TO_POSE = "fetch_to_pose"
+ALLOWED_MISSION_OBJECTIVES = (
+    MISSION_OBJECTIVE_GATHER_HERE,
+    MISSION_OBJECTIVE_FETCH_TO_POSE,
+)
+FETCH_GATE_MODE_FULL_MISSION = "full_mission"
+FETCH_GATE_MODE_CONTACT_READY = "contact_ready"
+ALLOWED_FETCH_GATE_MODES = (
+    FETCH_GATE_MODE_FULL_MISSION,
+    FETCH_GATE_MODE_CONTACT_READY,
+)
+DEFAULT_FETCH_DELIVERY_RADIUS_M = 0.762
 ALLOWED_GATHER_CONTROL_FAMILIES = (
     "baseline",
     "short_horizon_v1",
@@ -126,6 +421,10 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "pre_stage_path_tracker_v1",
     "pre_stage_trajectory_owner_v1",
     "nav2_follow_path_reacquire_v1",
+    "nav2_mppi_follow_path_reacquire_v1",
+    NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY,
+    "object_centric_gather_policy_v1",
+    AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
 )
 NAV2_REACQUIRE_CONTROL_FAMILY = "nav2_reacquire_v1"
 DEFAULT_NAV2_REACQUIRE_TRIGGER_DISTANCE_M = 1.20
@@ -323,6 +622,374 @@ def clean_number(value: Any) -> float | None:
     return numeric
 
 
+def optional_float_arg(value: Any) -> float | None:
+    if value in {None, ""}:
+        return None
+    numeric = clean_number(value)
+    if numeric is None:
+        raise argparse.ArgumentTypeError(f"invalid float value: {value!r}")
+    return float(numeric)
+
+
+def clean_rounded_number(value: Any, digits: int = 6) -> float | None:
+    numeric = clean_number(value)
+    if numeric is None:
+        return None
+    return round(float(numeric), int(digits))
+
+
+def nav2_follow_path_monitor_last_sample(payload: dict[str, Any] | None) -> dict[str, Any]:
+    source = payload if isinstance(payload, dict) else {}
+    sample = source.get("monitor_sample")
+    if isinstance(sample, dict) and sample:
+        return dict(sample)
+    monitor = source.get("monitor") if isinstance(source.get("monitor"), dict) else {}
+    monitor_sample = monitor.get("last_sample") if isinstance(monitor.get("last_sample"), dict) else {}
+    return dict(monitor_sample or {})
+
+
+def nav2_follow_path_object_motion_observed(
+    payload: dict[str, Any] | None,
+    *,
+    threshold_m: float | None = None,
+) -> bool:
+    sample = nav2_follow_path_monitor_last_sample(payload)
+    start_displacement_m = clean_number(sample.get("start_displacement_m"))
+    if start_displacement_m is None:
+        return False
+    threshold = DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M if threshold_m is None else max(float(threshold_m), 0.0)
+    return float(start_displacement_m) >= float(threshold)
+
+
+def nav2_follow_path_no_object_motion_result(
+    payload: dict[str, Any] | None,
+    *,
+    threshold_m: float | None = None,
+) -> dict[str, Any]:
+    source = payload if isinstance(payload, dict) else {}
+    sample = nav2_follow_path_monitor_last_sample(source)
+    start_displacement_m = clean_number(sample.get("start_displacement_m"))
+    threshold = DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M if threshold_m is None else max(float(threshold_m), 0.0)
+    return {
+        "object_motion_observed": nav2_follow_path_object_motion_observed(source, threshold_m=threshold),
+        "start_displacement_m": clean_rounded_number(start_displacement_m),
+        "required_motion_m": round(float(threshold), 6),
+    }
+
+
+def pose_payload(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    x_value = clean_number(value.get("x"))
+    y_value = clean_number(value.get("y"))
+    if x_value is None or y_value is None:
+        return {}
+    payload: dict[str, Any] = {
+        "x": round(float(x_value), 6),
+        "y": round(float(y_value), 6),
+    }
+    z_value = clean_number(value.get("z"))
+    yaw_value = clean_number(value.get("yaw"))
+    yaw_deg_value = clean_number(value.get("yaw_deg"))
+    if z_value is not None:
+        payload["z"] = round(float(z_value), 6)
+    if yaw_value is not None:
+        payload["yaw"] = round(float(yaw_value), 6)
+    if yaw_deg_value is not None:
+        payload["yaw_deg"] = round(float(yaw_deg_value), 6)
+    return payload
+
+
+def delivery_marker_pose_payload(value: Any) -> dict[str, Any]:
+    payload = pose_payload(value)
+    if not isinstance(value, dict):
+        return payload
+    radius_value = clean_number(value.get("radius_m", value.get("radius")))
+    if radius_value is not None:
+        payload["radius_m"] = round(float(radius_value), 6)
+    control_radius_value = clean_number(value.get("control_radius_m"))
+    if control_radius_value is not None:
+        payload["control_radius_m"] = round(float(control_radius_value), 6)
+    dwell_value = clean_number(value.get("dwell_s"))
+    if dwell_value is not None:
+        payload["dwell_s"] = round(float(dwell_value), 6)
+    source = clean_text(value.get("source"))
+    if source:
+        payload["source"] = source
+    return payload
+
+
+def fetch_geometry_consistency(
+    *,
+    fetch_pose_world: dict[str, Any] | None,
+    visible_delivery_marker_pose: dict[str, Any] | None,
+    center_tolerance_m: float = DEFAULT_FETCH_GEOMETRY_CENTER_TOLERANCE_M,
+    radius_tolerance_m: float = DEFAULT_FETCH_GEOMETRY_RADIUS_TOLERANCE_M,
+    source: str = "",
+) -> dict[str, Any]:
+    fetch_pose = delivery_marker_pose_payload(fetch_pose_world or {})
+    marker_pose = delivery_marker_pose_payload(visible_delivery_marker_pose or {})
+    fetch_xy = world_pose_xyyaw(fetch_pose)
+    marker_xy = world_pose_xyyaw(marker_pose)
+    fetch_radius = clean_number(fetch_pose.get("radius_m"))
+    marker_radius = clean_number(marker_pose.get("radius_m"))
+    center_delta_m: float | None = None
+    radius_delta_m: float | None = None
+    reason = "matched"
+    if fetch_xy is None:
+        reason = "missing_fetch_pose"
+    elif marker_xy is None:
+        reason = "missing_visible_delivery_marker_pose"
+    else:
+        center_delta_m = math.hypot(float(fetch_xy[0]) - float(marker_xy[0]), float(fetch_xy[1]) - float(marker_xy[1]))
+        if center_delta_m > float(center_tolerance_m):
+            reason = "center_mismatch"
+        elif fetch_radius is None:
+            reason = "missing_fetch_radius"
+        elif marker_radius is None:
+            reason = "missing_visible_marker_radius"
+        else:
+            radius_delta_m = abs(float(fetch_radius) - float(marker_radius))
+            if radius_delta_m > float(radius_tolerance_m):
+                reason = "radius_mismatch"
+    return {
+        "pass": reason == "matched",
+        "reason": reason,
+        "center_delta_m": round(float(center_delta_m), 6) if center_delta_m is not None else None,
+        "radius_delta_m": round(float(radius_delta_m), 6) if radius_delta_m is not None else None,
+        "center_tolerance_m": round(float(center_tolerance_m), 6),
+        "radius_tolerance_m": round(float(radius_tolerance_m), 6),
+        "fetch_pose_world": fetch_pose,
+        "visible_delivery_marker_pose": marker_pose,
+        "source": clean_text(source, "unspecified"),
+    }
+
+
+def _resolve_model_sdf_path(raw_path: str | Path | None) -> Path | None:
+    text = clean_text(raw_path)
+    if not text:
+        return None
+    path = Path(text)
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    return path
+
+
+def _display_model_sdf_path(path: Path | None) -> str:
+    if path is None:
+        return ""
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT.resolve())).replace("\\", "/")
+    except Exception:
+        return str(path)
+
+
+def _close_to(value: float | None, expected: float, tolerance: float = 0.002) -> bool:
+    return value is not None and abs(float(value) - float(expected)) <= float(tolerance)
+
+
+def _sdf_model_name(path: Path | None) -> str:
+    if path is None or not path.is_file():
+        return ""
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return ""
+    model = root.find(".//model")
+    return clean_text(model.get("name") if model is not None else "")
+
+
+def _sdf_first_sphere_radius_m(path: Path | None) -> float | None:
+    if path is None or not path.is_file():
+        return None
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return None
+    for radius in root.findall(".//sphere/radius"):
+        numeric = clean_number(radius.text)
+        if numeric is not None:
+            return round(float(numeric), 6)
+    return None
+
+
+def _sdf_first_cylinder_radius_m(path: Path | None) -> float | None:
+    if path is None or not path.is_file():
+        return None
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return None
+    for radius in root.findall(".//cylinder/radius"):
+        numeric = clean_number(radius.text)
+        if numeric is not None:
+            return round(float(numeric), 6)
+    return None
+
+
+def _sdf_has_golf_ball_resistance_plugin(path: Path | None) -> bool:
+    if path is None or not path.is_file():
+        return False
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return False
+    for plugin in root.findall(".//plugin"):
+        filename = clean_text(plugin.get("filename"))
+        name = clean_text(plugin.get("name"))
+        if "GolfBallRollingResistance" in filename or "GolfBallRollingResistance" in name:
+            return True
+    return False
+
+
+def classify_target_model_sdf(raw_path: str | Path | None) -> dict[str, Any]:
+    path = _resolve_model_sdf_path(raw_path)
+    radius_m = _sdf_first_sphere_radius_m(path)
+    model_name = _sdf_model_name(path)
+    filename = path.name if path is not None else ""
+    exists = bool(path and path.is_file())
+    plugin = _sdf_has_golf_ball_resistance_plugin(path)
+    if not path:
+        classification = "missing"
+    elif (
+        filename == DEFAULT_FETCH_TARGET_MODEL_SDF.name
+        or model_name == "calibrated_golf_ball"
+        or (_close_to(radius_m, CALIBRATED_GOLF_BALL_RADIUS_M, tolerance=0.001) and plugin)
+    ):
+        classification = "calibrated_golf_ball"
+    elif (
+        filename == DEFAULT_TARGET_MODEL_SDF.name
+        or model_name == "frisbee_target_ball"
+        or _close_to(radius_m, LEGACY_FRISBEE_TARGET_BALL_RADIUS_M, tolerance=0.003)
+    ):
+        classification = "legacy_frisbee_target_ball"
+    elif radius_m is not None:
+        classification = "unknown_sphere_target"
+    else:
+        classification = "unknown_target_model"
+    return {
+        "target_model_sdf": _display_model_sdf_path(path),
+        "target_model_sdf_exists": exists,
+        "target_model_name_in_sdf": model_name,
+        "target_model_radius_m": radius_m,
+        "target_model_classification": classification,
+        "target_model_has_rolling_resistance_plugin": plugin,
+    }
+
+
+def classify_zone_model_sdf(raw_path: str | Path | None) -> dict[str, Any]:
+    path = _resolve_model_sdf_path(raw_path)
+    radius_m = _sdf_first_cylinder_radius_m(path)
+    model_name = _sdf_model_name(path)
+    filename = path.name if path is not None else ""
+    exists = bool(path and path.is_file())
+    if not path:
+        classification = "missing"
+    elif (
+        filename == DEFAULT_FETCH_ZONE_MODEL_SDF.name
+        or model_name == DEFAULT_FETCH_ZONE_MODEL_NAME
+        or _close_to(radius_m, FETCH_DELIVERY_MARKER_RADIUS_M, tolerance=0.01)
+    ):
+        classification = "golf_ball_delivery_zone_marker"
+    elif (
+        filename == DEFAULT_ZONE_MODEL_SDF.name
+        or model_name == DEFAULT_ZONE_MODEL_NAME
+        or _close_to(radius_m, LEGACY_CORRAL_MARKER_RADIUS_M, tolerance=0.02)
+    ):
+        classification = "legacy_corral_zone_marker"
+    elif radius_m is not None:
+        classification = "unknown_cylinder_zone"
+    else:
+        classification = "unknown_zone_model"
+    return {
+        "zone_model_sdf": _display_model_sdf_path(path),
+        "zone_model_sdf_exists": exists,
+        "zone_model_name_in_sdf": model_name,
+        "zone_model_radius_m": radius_m,
+        "zone_model_classification": classification,
+    }
+
+
+def fetch_model_provenance(
+    *,
+    mission_objective: str,
+    target_model_sdf: str | Path | None,
+    zone_model_sdf: str | Path | None,
+) -> dict[str, Any]:
+    target = classify_target_model_sdf(target_model_sdf)
+    zone = classify_zone_model_sdf(zone_model_sdf)
+    required = clean_text(mission_objective).lower() == MISSION_OBJECTIVE_FETCH_TO_POSE
+    target_ok = target.get("target_model_classification") == "calibrated_golf_ball"
+    zone_ok = zone.get("zone_model_classification") == "golf_ball_delivery_zone_marker"
+    if not required:
+        reason = "not_required_for_objective"
+    elif target_ok and zone_ok:
+        reason = "calibrated_fetch_models"
+    elif not target_ok:
+        reason = f"invalid_target_model:{target.get('target_model_classification', 'unknown')}"
+    else:
+        reason = f"invalid_zone_model:{zone.get('zone_model_classification', 'unknown')}"
+    valid = bool((not required) or (target_ok and zone_ok))
+    return {
+        **target,
+        **zone,
+        "model_provenance_required": required,
+        "model_provenance_valid": valid,
+        "model_provenance_reason": reason,
+    }
+
+
+def _ball_pose_from_state_row(row: dict[str, Any]) -> dict[str, Any]:
+    for key in (
+        "ball_pose",
+        "final_ball_pose",
+        "target_pose_world",
+        "target_pose",
+    ):
+        pose = pose_payload(row.get(key))
+        if pose:
+            return pose
+    belief = row.get("belief", {}) if isinstance(row.get("belief"), dict) else {}
+    pose = pose_payload(belief.get("ball_pose"))
+    if pose:
+        return pose
+    target_state = row.get("target", {}) if isinstance(row.get("target"), dict) else {}
+    return pose_payload(target_state.get("pose"))
+
+
+def pose_to_path_distance_m(pose: dict[str, Any] | None, path_pose: dict[str, Any] | None) -> float | None:
+    if not isinstance(path_pose, dict):
+        return None
+    pose_xyyaw = world_pose_xyyaw(pose or {})
+    path_x = clean_number(path_pose.get("x"))
+    path_y = clean_number(path_pose.get("y"))
+    if pose_xyyaw is None or path_x is None or path_y is None:
+        return None
+    return round(math.hypot(float(path_x) - pose_xyyaw[0], float(path_y) - pose_xyyaw[1]), 6)
+
+
+def pose_to_path_yaw_error_deg(pose: dict[str, Any] | None, path_pose: dict[str, Any] | None) -> float | None:
+    if not isinstance(path_pose, dict):
+        return None
+    pose_xyyaw = world_pose_xyyaw(pose or {})
+    path_yaw = clean_number(path_pose.get("yaw"))
+    if pose_xyyaw is None or path_yaw is None:
+        return None
+    return round(math.degrees(normalize_angle(float(path_yaw) - pose_xyyaw[2])), 6)
+
+
+def pre_stage_snapshot_number(snapshot: dict[str, Any] | None, key: str) -> float | None:
+    if not isinstance(snapshot, dict):
+        return None
+    return clean_rounded_number(snapshot.get(key))
+
+
+def numeric_reduction(start: float | None, end: float | None) -> float | None:
+    if start is None or end is None:
+        return None
+    return round(float(start) - float(end), 6)
+
+
 def default_settle_exit_reason(
     *,
     failure_reason: str = "",
@@ -440,6 +1107,22 @@ def truth_world_xy(pose: dict[str, Any]) -> dict[str, float] | None:
     return payload
 
 
+def truth_world_xyyaw(pose: dict[str, Any]) -> tuple[float, float, float] | None:
+    position = pose.get("position") if isinstance(pose.get("position"), dict) else {}
+    orientation = pose.get("orientation") if isinstance(pose.get("orientation"), dict) else {}
+    x = clean_number(position.get("x"))
+    y = clean_number(position.get("y"))
+    qx = float(clean_number(orientation.get("x")) or 0.0)
+    qy = float(clean_number(orientation.get("y")) or 0.0)
+    qz = float(clean_number(orientation.get("z")) or 0.0)
+    qw = float(clean_number(orientation.get("w")) or 1.0)
+    if x is None or y is None:
+        return None
+    siny_cosp = 2.0 * ((qw * qz) + (qx * qy))
+    cosy_cosp = 1.0 - (2.0 * ((qy * qy) + (qz * qz)))
+    return float(x), float(y), math.atan2(siny_cosp, cosy_cosp)
+
+
 def build_provider(provider_name: str, *, model: str, reasoning_effort: str):
     normalized = str(provider_name or "").strip().lower() or "openai"
     if normalized == "openai":
@@ -495,13 +1178,27 @@ def _load_target_layout_override(raw_value: str) -> list[GatherTargetSpec]:
     return targets
 
 
+def _path_matches(path_value: object, expected: Path) -> bool:
+    raw_text = clean_text(path_value)
+    if not raw_text:
+        return False
+    candidate = Path(raw_text)
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    try:
+        return candidate.resolve() == expected.resolve()
+    except OSError:
+        return candidate == expected
+
+
 class GatherMissionRunner:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
         self.dashboard_url = args.dashboard_url.rstrip("/")
         self.targets = _load_target_layout_override(getattr(args, "target_layout_json", "")) or build_gather_targets(args.scenario_id)
         self.targets_by_id = {item.id: item for item in self.targets}
-        self.zone = build_zone_spec(args.scenario_id)
+        self.legacy_zone = build_zone_spec(args.scenario_id)
+        self.zone = self.legacy_zone
         self.capture_envelope = CaptureEnvelope()
         self.docker = choose_docker_cli()
         self.world_file = clean_text(args.world_file)
@@ -509,6 +1206,38 @@ class GatherMissionRunner:
         self.gather_control_family = clean_text(getattr(args, "gather_control_family", "baseline"), "baseline").lower()
         if self.gather_control_family not in ALLOWED_GATHER_CONTROL_FAMILIES:
             self.gather_control_family = "baseline"
+        self.ai_push_coast_mode = clean_text(
+            getattr(args, "ai_push_coast_mode", AI_PUSH_COAST_MODE_SHADOW),
+            AI_PUSH_COAST_MODE_SHADOW,
+        ).lower()
+        if self.ai_push_coast_mode not in ALLOWED_AI_PUSH_COAST_MODES:
+            self.ai_push_coast_mode = AI_PUSH_COAST_MODE_SHADOW
+        self.mission_objective = clean_text(
+            getattr(args, "mission_objective", MISSION_OBJECTIVE_GATHER_HERE),
+            MISSION_OBJECTIVE_GATHER_HERE,
+        ).lower()
+        if self.mission_objective not in ALLOWED_MISSION_OBJECTIVES:
+            self.mission_objective = MISSION_OBJECTIVE_GATHER_HERE
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+            if _path_matches(getattr(args, "target_model_sdf", ""), DEFAULT_TARGET_MODEL_SDF):
+                self.args.target_model_sdf = str(DEFAULT_FETCH_TARGET_MODEL_SDF)
+            if _path_matches(getattr(args, "zone_model_sdf", ""), DEFAULT_ZONE_MODEL_SDF):
+                self.args.zone_model_sdf = str(DEFAULT_FETCH_ZONE_MODEL_SDF)
+            zone_model_name = clean_text(getattr(args, "zone_model_name", ""))
+            if zone_model_name == DEFAULT_ZONE_MODEL_NAME:
+                self.args.zone_model_name = DEFAULT_FETCH_ZONE_MODEL_NAME
+        self.fetch_gate_mode = clean_text(
+            getattr(args, "fetch_gate_mode", FETCH_GATE_MODE_FULL_MISSION),
+            FETCH_GATE_MODE_FULL_MISSION,
+        ).lower()
+        if self.fetch_gate_mode not in ALLOWED_FETCH_GATE_MODES:
+            self.fetch_gate_mode = FETCH_GATE_MODE_FULL_MISSION
+        self.fetch_delivery_radius_m = max(
+            0.05,
+            float(clean_number(getattr(args, "fetch_delivery_radius_m", DEFAULT_FETCH_DELIVERY_RADIUS_M)) or DEFAULT_FETCH_DELIVERY_RADIUS_M),
+        )
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+            self.zone = self._fetch_delivery_zone_spec()
         self.visit_runtime_state_path = resolve_visit_runtime_state_path(args.visit_runtime_json)
         self.gather_runtime_state_path = resolve_gather_runtime_state_path(args.gather_runtime_json)
         self.visit_runtime_state: dict[str, Any] = {}
@@ -554,6 +1283,367 @@ class GatherMissionRunner:
                 if projected_distance_gain is not None
                 else None
             ),
+        }
+
+    def _fetch_pose_world(self) -> dict[str, Any]:
+        configured_x = clean_number(getattr(self.args, "fetch_target_x", None))
+        configured_y = clean_number(getattr(self.args, "fetch_target_y", None))
+        configured_z = clean_number(getattr(self.args, "fetch_target_z", None))
+        base_zone = getattr(self, "legacy_zone", self.zone)
+        fetch_x = float(configured_x) if configured_x is not None else float(base_zone.world_x)
+        fetch_y = float(configured_y) if configured_y is not None else float(base_zone.world_y)
+        fetch_z = float(configured_z) if configured_z is not None else float(base_zone.z_m)
+        return {
+            "x": round(fetch_x, 6),
+            "y": round(fetch_y, 6),
+            "z": round(fetch_z, 6),
+            "radius_m": round(float(self.fetch_delivery_radius_m), 6),
+        }
+
+    def _fetch_delivery_zone_spec(self) -> ZoneSpec:
+        fetch_pose = self._fetch_pose_world()
+        return ZoneSpec(
+            id="fetch_delivery_zone",
+            label="Fetch Delivery Zone",
+            world_x=float(fetch_pose["x"]),
+            world_y=float(fetch_pose["y"]),
+            retrieval_radius_m=float(self.fetch_delivery_radius_m),
+            control_radius_m=min(float(self.fetch_delivery_radius_m), float(getattr(self.legacy_zone, "control_radius_m", self.fetch_delivery_radius_m))),
+            dwell_s=float(getattr(self.legacy_zone, "dwell_s", 1.0)),
+            z_m=float(fetch_pose["z"]),
+        )
+
+    def _legacy_corral_zone_pose(self) -> dict[str, Any]:
+        zone = getattr(self, "legacy_zone", self.zone)
+        return {
+            "x": round(float(zone.world_x), 6),
+            "y": round(float(zone.world_y), 6),
+            "z": round(float(zone.z_m), 6),
+            "radius_m": round(float(zone.retrieval_radius_m), 6),
+            "control_radius_m": round(float(zone.control_radius_m), 6),
+            "dwell_s": round(float(zone.dwell_s), 6),
+            "source": "legacy_corral_zone",
+        }
+
+    def _zone_model_sdf_radius_m(self) -> float | None:
+        raw_path = clean_text(getattr(self.args, "zone_model_sdf", ""))
+        if not raw_path:
+            return None
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = REPO_ROOT / path
+        try:
+            root = ET.parse(path).getroot()
+        except Exception:
+            return None
+        for radius in root.findall(".//visual/geometry/cylinder/radius"):
+            numeric = clean_number(radius.text)
+            if numeric is not None:
+                return round(float(numeric), 6)
+        return None
+
+    def _visible_delivery_marker_pose(self) -> dict[str, Any]:
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+            fetch_pose = self._fetch_pose_world()
+            marker_radius_m = self._zone_model_sdf_radius_m()
+            return {
+                "x": float(fetch_pose["x"]),
+                "y": float(fetch_pose["y"]),
+                "z": float(fetch_pose["z"]),
+                "radius_m": float(marker_radius_m if marker_radius_m is not None else fetch_pose["radius_m"]),
+                "source": "fetch_pose_world",
+            }
+        return self._legacy_corral_zone_pose()
+
+    def _fetch_geometry_consistency(
+        self,
+        fetch_pose_world: dict[str, Any] | None = None,
+        visible_delivery_marker_pose: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return fetch_geometry_consistency(
+            fetch_pose_world=fetch_pose_world or self._fetch_pose_world(),
+            visible_delivery_marker_pose=visible_delivery_marker_pose or self._visible_delivery_marker_pose(),
+            source="gather_mission_runner",
+        )
+
+    def _model_provenance(self) -> dict[str, Any]:
+        return fetch_model_provenance(
+            mission_objective=self.mission_objective,
+            target_model_sdf=getattr(self.args, "target_model_sdf", ""),
+            zone_model_sdf=getattr(self.args, "zone_model_sdf", ""),
+        )
+
+    def _contact_ready_pose_world(
+        self,
+        *,
+        ball_pose: dict[str, Any],
+        fetch_pose_world: dict[str, Any],
+    ) -> dict[str, Any]:
+        ball_xyyaw = world_pose_xyyaw(ball_pose)
+        fetch_xyyaw = world_pose_xyyaw(fetch_pose_world)
+        if ball_xyyaw is None or fetch_xyyaw is None:
+            return {}
+        ball_x, ball_y, _ball_yaw = ball_xyyaw
+        fetch_x, fetch_y, _fetch_yaw = fetch_xyyaw
+        dx = float(fetch_x) - float(ball_x)
+        dy = float(fetch_y) - float(ball_y)
+        distance_m = math.hypot(dx, dy)
+        if distance_m <= 1.0e-6:
+            return {}
+        ux = dx / distance_m
+        uy = dy / distance_m
+        standoff_m = max(float(DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTACT_STANDOFF_M), 0.0)
+        yaw = math.atan2(uy, ux)
+        return {
+            "x": round(float(ball_x) - (standoff_m * ux), 6),
+            "y": round(float(ball_y) - (standoff_m * uy), 6),
+            "yaw": round(float(yaw), 6),
+            "standoff_m": round(float(standoff_m), 6),
+            "ball_target_distance_m": round(float(distance_m), 6),
+        }
+
+    def _state_history_ball_samples(
+        self,
+        *,
+        state_history_path: Path,
+        target_id: str,
+        phase: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if not state_history_path.exists():
+            return []
+        samples: list[dict[str, Any]] = []
+        with state_history_path.open(encoding="utf-8", errors="ignore") as handle:
+            for line_index, raw_line in enumerate(handle):
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    row = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                row_target_id = clean_text(row.get("target_id"))
+                if row_target_id and row_target_id != target_id:
+                    continue
+                row_phase = clean_text(row.get("phase"))
+                if phase is not None and row_phase != phase:
+                    continue
+                ball_pose = _ball_pose_from_state_row(row)
+                if not ball_pose:
+                    continue
+                samples.append(
+                    {
+                        "line_index": line_index,
+                        "generated_utc": clean_text(row.get("generated_utc")),
+                        "event_type": clean_text(row.get("event_type")),
+                        "phase": row_phase,
+                        "ball_pose": ball_pose,
+                    }
+                )
+        return samples
+
+    def _build_fetch_to_pose_outcome(
+        self,
+        *,
+        target: GatherTargetSpec,
+        state_history_path: Path,
+        final_ball_pose: dict[str, Any] | None,
+        place_payload: dict[str, Any] | None,
+        place_failure_reason: str = "",
+    ) -> dict[str, Any]:
+        fetch_pose = self._fetch_pose_world()
+        fetch_xy = world_pose_xyyaw(fetch_pose)
+        samples = self._state_history_ball_samples(
+            state_history_path=state_history_path,
+            target_id=target.id,
+            phase="fetch_to_pose",
+        )
+        final_pose_payload = pose_payload(final_ball_pose or {})
+        if final_pose_payload:
+            samples.append(
+                {
+                    "line_index": -1,
+                    "generated_utc": utc_now(),
+                    "event_type": "fetch_to_pose_final_pose",
+                    "phase": "fetch_to_pose",
+                    "ball_pose": final_pose_payload,
+                }
+            )
+        model_provenance = self._model_provenance()
+        model_provenance_valid = bool(model_provenance.get("model_provenance_valid", True))
+        if fetch_xy is None:
+            visible_marker_pose = self._visible_delivery_marker_pose()
+            geometry_consistency = self._fetch_geometry_consistency(
+                fetch_pose_world=fetch_pose,
+                visible_delivery_marker_pose=visible_marker_pose,
+            )
+            return {
+                "observed": bool(samples),
+                "pass": False,
+                "reason": "missing_fetch_pose",
+                "fetch_pose_world": fetch_pose,
+                "visible_delivery_marker_pose": visible_marker_pose,
+                "geometry_consistency": geometry_consistency,
+                "model_provenance": model_provenance,
+                "model_provenance_valid": model_provenance_valid,
+                "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+                "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+                "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+                "target_model_classification": str(model_provenance.get("target_model_classification", "")),
+                "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                "sample_count": len(samples),
+                "ball_start_pose": {},
+                "ball_end_pose": final_pose_payload,
+                "distance_to_fetch_pose_m": None,
+                "closest_approach_distance_m": None,
+                "closest_pose": {},
+                "surface_profile": self.surface_profile,
+            }
+
+        radius_m = max(float(self.fetch_delivery_radius_m), 0.0)
+        visible_marker_pose = self._visible_delivery_marker_pose()
+        geometry_consistency = self._fetch_geometry_consistency(
+            fetch_pose_world=fetch_pose,
+            visible_delivery_marker_pose=visible_marker_pose,
+        )
+        closest_distance: float | None = None
+        closest_pose: dict[str, Any] = {}
+        previous_xy: tuple[float, float] | None = None
+        previous_pose: dict[str, Any] = {}
+        fetch_point = (float(fetch_xy[0]), float(fetch_xy[1]))
+        for sample in samples:
+            pose = pose_payload(sample.get("ball_pose"))
+            pose_xyyaw = world_pose_xyyaw(pose)
+            if pose_xyyaw is None:
+                continue
+            current_xy = (float(pose_xyyaw[0]), float(pose_xyyaw[1]))
+            point_distance = math.hypot(current_xy[0] - fetch_point[0], current_xy[1] - fetch_point[1])
+            if closest_distance is None or point_distance < closest_distance:
+                closest_distance = point_distance
+                closest_pose = dict(pose)
+            if previous_xy is not None:
+                segment_distance = _segment_distance_m(fetch_point, previous_xy, current_xy)
+                if closest_distance is None or segment_distance < closest_distance:
+                    closest_distance = segment_distance
+                    closest_pose = dict(pose if point_distance <= math.hypot(previous_xy[0] - fetch_point[0], previous_xy[1] - fetch_point[1]) else previous_pose)
+            previous_xy = current_xy
+            previous_pose = dict(pose)
+
+        observed = closest_distance is not None
+        trajectory_intersects_delivery = bool(observed and closest_distance is not None and closest_distance <= radius_m)
+        pass_delivery = bool(
+            trajectory_intersects_delivery
+            and geometry_consistency.get("pass", False)
+            and model_provenance_valid
+        )
+        ball_start_pose = dict(samples[0]["ball_pose"]) if samples else {}
+        ball_end_pose = dict(samples[-1]["ball_pose"]) if samples else {}
+        end_xyyaw = world_pose_xyyaw(ball_end_pose)
+        distance_to_fetch_pose_m = (
+            math.hypot(float(end_xyyaw[0]) - fetch_point[0], float(end_xyyaw[1]) - fetch_point[1])
+            if end_xyyaw is not None
+            else None
+        )
+        zone_score = zone_snapshot(ball_end_pose, self.zone) if ball_end_pose else None
+        settle_metrics = (
+            place_payload.get("settle_metrics", {})
+            if isinstance(place_payload, dict) and isinstance(place_payload.get("settle_metrics"), dict)
+            else {}
+        )
+        fetch_phase_metrics = {}
+        if isinstance(place_payload, dict):
+            for key in (
+                "fetch_observe_count",
+                "fetch_elapsed_s",
+                "fetch_still_s",
+                "fetch_ball_displacement_m",
+                "fetch_ball_moved_since_fetch",
+                "fetch_min_launch_observe_s",
+                "fetch_launch_motion_evidence_m",
+                "fetch_max_commanded_linear_x_mps",
+                "fetch_max_target_speed_scale",
+                "capture_geometry_gate",
+            ):
+                if key in place_payload:
+                    fetch_phase_metrics[key] = place_payload.get(key)
+            corridor_push_payload = place_payload.get("nav2_follow_path_corridor_push")
+            if isinstance(corridor_push_payload, dict):
+                corridor_payload = dict(corridor_push_payload)
+                first_contact_payload = place_payload.get("ai_first_contact_confirmation")
+                if (
+                    isinstance(first_contact_payload, dict)
+                    and first_contact_payload
+                    and "first_contact_confirmation" not in corridor_payload
+                ):
+                    corridor_payload["first_contact_confirmation"] = first_contact_payload
+                fetch_phase_metrics["nav2_follow_path_corridor_push"] = corridor_payload
+            for key in (
+                "ai_first_contact_confirmation",
+                "ai_push_coast_mode",
+                "ai_push_coast_shadow",
+                "ai_push_coast_proposal",
+                "ai_push_coast_guard",
+                "ai_push_coast_latency_ms",
+            ):
+                if key in place_payload:
+                    fetch_phase_metrics[key] = place_payload.get(key)
+        if pass_delivery:
+            reason = "trajectory_intersects_delivery_radius"
+        elif trajectory_intersects_delivery and not bool(geometry_consistency.get("pass", False)):
+            reason = "fetch_marker_geometry_mismatch"
+        elif trajectory_intersects_delivery and not model_provenance_valid:
+            reason = "fetch_model_provenance_invalid"
+        elif not observed:
+            reason = "no_ball_samples"
+        else:
+            reason = "missed_delivery_radius"
+            if place_failure_reason:
+                reason = f"{reason}_after_{place_failure_reason}"
+        return {
+            "observed": bool(observed),
+            "pass": bool(pass_delivery),
+            "reason": reason,
+            "fetch_pose_world": fetch_pose,
+            "visible_delivery_marker_pose": visible_marker_pose,
+            "geometry_consistency": geometry_consistency,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": model_provenance_valid,
+            "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+            "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+            "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+            "target_model_classification": str(model_provenance.get("target_model_classification", "")),
+            "delivery_radius_m": round(float(radius_m), 6),
+            "sample_count": len(samples),
+            "ball_start_pose": ball_start_pose,
+            "ball_end_pose": ball_end_pose,
+            "distance_to_fetch_pose_m": (
+                round(float(distance_to_fetch_pose_m), 6)
+                if distance_to_fetch_pose_m is not None
+                else None
+            ),
+            "closest_approach_distance_m": (
+                round(float(closest_distance), 6)
+                if closest_distance is not None
+                else None
+            ),
+            "closest_pose": closest_pose,
+            "distance_to_zone_m": (
+                round(float(zone_score.retrieval_distance_m), 6)
+                if zone_score is not None
+                else None
+            ),
+            "inside_retrieval_corral": bool(zone_score.center_inside_retrieval_corral) if zone_score is not None else False,
+            "ball_stopped": bool(settle_metrics.get("ball_stopped_in_corral", False)),
+            "rolled_away": bool(
+                settle_metrics.get(
+                    "rolled_away_after_release",
+                    place_payload.get("rolled_away_after_release", False) if isinstance(place_payload, dict) else False,
+                )
+            ),
+            "max_overshoot_distance_m": round(float(clean_number(settle_metrics.get("max_overshoot_distance_m")) or 0.0), 6),
+            "surface_profile": self.surface_profile,
+            **fetch_phase_metrics,
         }
 
     def _persist_visit_runtime_state(self) -> None:
@@ -641,6 +1731,11 @@ class GatherMissionRunner:
         approach_failure_reason: str = "",
         latest_approach_progress: dict[str, Any] | None = None,
         fresh_attempt_approach: dict[str, Any] | None = None,
+        fetch_to_pose_reached: bool = False,
+        fetch_to_pose_time_s: float = 0.0,
+        fetch_to_pose_failure_reason: str = "",
+        fetch_pose_world: dict[str, Any] | None = None,
+        shot_outcome: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         approach_fields = resolve_approach_result_fields(
             pre_stage_pose_world=pre_stage_pose_world,
@@ -668,10 +1763,21 @@ class GatherMissionRunner:
                 rolled_away_after_release=bool(rolled_away_after_release),
             ),
         )
+        visible_marker_pose = self._visible_delivery_marker_pose()
+        geometry_consistency = (
+            self._fetch_geometry_consistency(
+                fetch_pose_world=fetch_pose_world,
+                visible_delivery_marker_pose=visible_marker_pose,
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            else {}
+        )
+        model_provenance = self._model_provenance()
         payload = {
             "target_id": target.id,
             "label": target.label,
             "pass": False,
+            "mission_objective": self.mission_objective,
             "failure_reason": str(failure_reason),
             "failure_stage": str(failure_stage),
             "attempts": int(attempts),
@@ -681,6 +1787,21 @@ class GatherMissionRunner:
             "local_recovery_attempted": bool(local_recovery_attempted),
             "revisit_attempted": bool(revisit_attempted),
             "surface_profile": self.surface_profile,
+            "fetched": bool(fetch_to_pose_reached),
+            "fetch_to_pose_reached": bool(fetch_to_pose_reached),
+            "fetch_to_pose_time_s": round(float(fetch_to_pose_time_s), 6),
+            "fetch_to_pose_failure_reason": clean_text(fetch_to_pose_failure_reason, clean_text(failure_reason)),
+            "fetch_pose_world": dict(fetch_pose_world) if isinstance(fetch_pose_world, dict) else {},
+            "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+            "visible_delivery_marker_pose": visible_marker_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
+            "geometry_consistency": geometry_consistency,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": bool(model_provenance.get("model_provenance_valid", True)),
+            "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+            "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+            "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+            "target_model_classification": str(model_provenance.get("target_model_classification", "")),
+            "shot_outcome": dict(shot_outcome) if isinstance(shot_outcome, dict) else {},
             "handoff_kind": clean_text(handoff_kind, "unspecified"),
             "zone_edge_correction_count": int(zone_edge_correction_count),
             "place_controller_reentry_count": int(place_controller_reentry_count),
@@ -776,6 +1897,11 @@ class GatherMissionRunner:
         approach_failure_reason: str = "",
         latest_approach_progress: dict[str, Any] | None = None,
         fresh_attempt_approach: dict[str, Any] | None = None,
+        fetch_to_pose_reached: bool = False,
+        fetch_to_pose_time_s: float = 0.0,
+        fetch_to_pose_failure_reason: str = "",
+        fetch_pose_world: dict[str, Any] | None = None,
+        shot_outcome: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         approach_fields = resolve_approach_result_fields(
             pre_stage_pose_world=pre_stage_pose_world,
@@ -823,7 +1949,34 @@ class GatherMissionRunner:
             if practical_retrieval_pass is None
             else bool(practical_retrieval_pass)
         )
-        target_pass = practical_pass if self.args.scenario_id == "gather_three_ball_zone" else bool(settled_pass)
+        visible_marker_pose = self._visible_delivery_marker_pose()
+        geometry_consistency = (
+            self._fetch_geometry_consistency(
+                fetch_pose_world=fetch_pose_world,
+                visible_delivery_marker_pose=visible_marker_pose,
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            else {}
+        )
+        model_provenance = self._model_provenance()
+        geometry_ok = bool(geometry_consistency.get("pass", True))
+        fetch_failure_reason = clean_text(fetch_to_pose_failure_reason)
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE and fetch_to_pose_reached and not geometry_ok:
+            fetch_failure_reason = "fetch_marker_geometry_mismatch"
+        provenance_ok = bool(model_provenance.get("model_provenance_valid", True))
+        if (
+            self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            and fetch_to_pose_reached
+            and geometry_ok
+            and not provenance_ok
+            and not fetch_failure_reason
+        ):
+            fetch_failure_reason = "fetch_model_provenance_invalid"
+        fetch_pass = bool(fetch_to_pose_reached and geometry_ok and provenance_ok)
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+            target_pass = fetch_pass
+        else:
+            target_pass = practical_pass if self.args.scenario_id == "gather_three_ball_zone" else bool(settled_pass)
         resolved_settle_exit_reason = clean_text(
             settle_payload.get("settle_exit_reason") if isinstance(settle_payload, dict) else "",
             clean_text(
@@ -843,11 +1996,27 @@ class GatherMissionRunner:
             "target_id": target.id,
             "label": target.label,
             "pass": bool(target_pass),
+            "mission_objective": self.mission_objective,
             "attempts": int(attempts),
             "attempt_kind": str(attempt_kind),
             "capture_loss_count": int(capture_loss_count),
             "route_index": int(route_index),
             "placed": bool(target_pass),
+            "fetched": bool(fetch_pass),
+            "fetch_to_pose_reached": bool(fetch_to_pose_reached),
+            "fetch_to_pose_time_s": round(float(fetch_to_pose_time_s), 6),
+            "fetch_to_pose_failure_reason": fetch_failure_reason,
+            "fetch_pose_world": dict(fetch_pose_world) if isinstance(fetch_pose_world, dict) else {},
+            "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+            "visible_delivery_marker_pose": visible_marker_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
+            "geometry_consistency": geometry_consistency,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": provenance_ok,
+            "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+            "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+            "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+            "target_model_classification": str(model_provenance.get("target_model_classification", "")),
+            "shot_outcome": dict(shot_outcome) if isinstance(shot_outcome, dict) else {},
             "final_ball_pose": final_ball_pose,
             "place_time_s": round(float(place_time_s), 6),
             "local_recovery_attempted": bool(local_recovery_attempted),
@@ -971,6 +2140,33 @@ class GatherMissionRunner:
             time.sleep(self.args.poll_s)
         raise RuntimeError(f"Robot pose did not settle near commanded start pose: {last_state}")
 
+    def _wait_for_robot_truth_pose_near(
+        self,
+        *,
+        session_id: str,
+        x: float,
+        y: float,
+        yaw: float,
+        timeout_s: float = 5.0,
+        position_tolerance_m: float = 0.08,
+        yaw_tolerance_rad: float = 0.20,
+    ) -> dict[str, Any]:
+        deadline = time.monotonic() + max(timeout_s, 0.1)
+        last_state: dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            last_state = self._load_truth_state(session_id)
+            truth_pose = last_state.get("robot_truth_pose") if isinstance(last_state.get("robot_truth_pose"), dict) else {}
+            robot_xyyaw = truth_world_xyyaw(truth_pose if isinstance(truth_pose, dict) else {})
+            if robot_xyyaw is None:
+                time.sleep(self.args.poll_s)
+                continue
+            position_error = math.hypot(float(robot_xyyaw[0]) - float(x), float(robot_xyyaw[1]) - float(y))
+            yaw_error = abs(normalize_angle(float(robot_xyyaw[2]) - float(yaw)))
+            if position_error <= position_tolerance_m and yaw_error <= yaw_tolerance_rad:
+                return last_state
+            time.sleep(self.args.poll_s)
+        raise RuntimeError(f"Robot truth pose did not settle near commanded contact-ready pose: {last_state}")
+
     def _wait_for_nav2_ready(self, timeout_s: float = 30.0) -> dict[str, Any]:
         deadline = time.monotonic() + max(timeout_s, 0.1)
         last_state: dict[str, Any] = {}
@@ -1046,6 +2242,50 @@ class GatherMissionRunner:
         output = (proc.stdout or b"").decode("utf-8", errors="replace")
         output += ("\n" + (proc.stderr or b"").decode("utf-8", errors="replace")) if proc.stderr else ""
         return proc.returncode, output.strip()
+
+    def _docker_logs_since(self, container_id: str, since_utc: datetime, *, tail: int = 400) -> dict[str, Any]:
+        since_text = since_utc.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        proc = subprocess.run(
+            [
+                self.docker,
+                "logs",
+                "--since",
+                since_text,
+                "--tail",
+                str(max(int(tail), 1)),
+                container_id,
+            ],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            check=False,
+        )
+        output = (proc.stdout or b"").decode("utf-8", errors="replace")
+        output += ("\n" + (proc.stderr or b"").decode("utf-8", errors="replace")) if proc.stderr else ""
+        raw_lines = [line.strip() for line in output.splitlines() if line.strip()]
+        needles = (
+            "controller_server",
+            "mppifollowpath",
+            "mppi",
+            "followpath",
+            "goal_status",
+            "aborted",
+            "error",
+            "warn",
+            "failed",
+        )
+        excerpt = [
+            line[-600:]
+            for line in raw_lines
+            if any(needle in line.lower() for needle in needles)
+        ]
+        return {
+            "returncode": int(proc.returncode),
+            "since_utc": since_text,
+            "raw_line_count": len(raw_lines),
+            "excerpt_line_count": len(excerpt[-80:]),
+            "excerpt": excerpt[-80:],
+            "error": "" if proc.returncode == 0 else output[-1200:],
+        }
 
     def _safe_stop(self) -> None:
         try:
@@ -1269,6 +2509,7 @@ PY
         controller_id: str,
         goal_checker_id: str,
         timeout_s: float,
+        monitor: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not path_poses:
             return {
@@ -1296,7 +2537,15 @@ PY
             "goal_checker_id": clean_text(goal_checker_id, DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID),
             "server_wait_s": float(DEFAULT_NAV2_FOLLOW_PATH_SERVER_WAIT_S),
             "timeout_s": float(max(timeout_s, 0.1)),
+            "feedback_sample_max": int(DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_MAX),
+            "feedback_sample_interval_s": float(DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_INTERVAL_S),
+            "diagnostic_sample_max": int(DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_MAX),
+            "diagnostic_sample_interval_s": float(DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_INTERVAL_S),
+            "cmd_vel_topics": ["/cmd_vel_nav", "/cmd_vel", "/jetbot_base_controller/cmd_vel"],
+            "odom_topic": "/jetbot_base_controller/odom",
+            "monitor": dict(monitor) if isinstance(monitor, dict) else {"enabled": False},
         }
+        log_since_utc = datetime.now(timezone.utc)
         script = (
             "set -eo pipefail\n"
             "set +u\n"
@@ -1313,6 +2562,9 @@ import time
 import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Twist
+from geometry_msgs.msg import TwistStamped
+from nav_msgs.msg import Odometry
 from nav_msgs.msg import Path
 from nav2_msgs.action import FollowPath
 from rclpy.action import ActionClient
@@ -1320,11 +2572,114 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 
 MARKER = "NAV2_FOLLOW_PATH_RESULT="
+STATUS_TEXT = {
+    int(GoalStatus.STATUS_UNKNOWN): "STATUS_UNKNOWN",
+    int(GoalStatus.STATUS_ACCEPTED): "STATUS_ACCEPTED",
+    int(GoalStatus.STATUS_EXECUTING): "STATUS_EXECUTING",
+    int(GoalStatus.STATUS_CANCELING): "STATUS_CANCELING",
+    int(GoalStatus.STATUS_SUCCEEDED): "STATUS_SUCCEEDED",
+    int(GoalStatus.STATUS_CANCELED): "STATUS_CANCELED",
+    int(GoalStatus.STATUS_ABORTED): "STATUS_ABORTED",
+}
+
+
+def ros_to_plain(value, depth=0):
+    if depth > 4:
+        return str(value)
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [ros_to_plain(item, depth + 1) for item in list(value)[:20]]
+    if isinstance(value, dict):
+        return {str(key): ros_to_plain(item, depth + 1) for key, item in value.items()}
+    if hasattr(value, "sec") and hasattr(value, "nanosec"):
+        return {"sec": int(value.sec), "nanosec": int(value.nanosec)}
+    field_names = []
+    if hasattr(value, "get_fields_and_field_types"):
+        try:
+            field_names = list(value.get_fields_and_field_types().keys())
+        except Exception:
+            field_names = []
+    if not field_names and hasattr(value, "__slots__"):
+        field_names = [str(slot).lstrip("_") for slot in value.__slots__]
+    if field_names:
+        payload = {}
+        for name in field_names:
+            try:
+                payload[name] = ros_to_plain(getattr(value, name), depth + 1)
+            except Exception as exc:
+                payload[name] = f"<unreadable:{exc}>"
+        return payload
+    return str(value)
 
 
 def yaw_to_quaternion(yaw):
     half = 0.5 * float(yaw)
     return 0.0, 0.0, math.sin(half), math.cos(half)
+
+
+def quaternion_to_yaw(q):
+    siny_cosp = 2.0 * ((q.w * q.z) + (q.x * q.y))
+    cosy_cosp = 1.0 - (2.0 * ((q.y * q.y) + (q.z * q.z)))
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def normalize_angle(value):
+    result = math.fmod(float(value) + math.pi, 2.0 * math.pi)
+    if result < 0.0:
+        result += 2.0 * math.pi
+    return result - math.pi
+
+
+def status_text(status_code):
+    return STATUS_TEXT.get(int(status_code), f"STATUS_{int(status_code)}")
+
+
+def append_ring(buffer, sample, limit):
+    if limit <= 0:
+        return
+    buffer.append(sample)
+    while len(buffer) > limit:
+        buffer.pop(0)
+
+
+def path_progress_for_pose(x, y, yaw):
+    if not path_poses:
+        return {}
+    nearest_index = 0
+    nearest_distance = None
+    for index, item in enumerate(path_poses):
+        dx = float(item.get("x", 0.0)) - float(x)
+        dy = float(item.get("y", 0.0)) - float(y)
+        distance = math.hypot(dx, dy)
+        if nearest_distance is None or distance < nearest_distance:
+            nearest_index = index
+            nearest_distance = distance
+    terminal = path_poses[-1]
+    terminal_dx = float(terminal.get("x", 0.0)) - float(x)
+    terminal_dy = float(terminal.get("y", 0.0)) - float(y)
+    terminal_yaw_error = normalize_angle(float(yaw) - float(terminal.get("yaw", 0.0)))
+    nearest = path_poses[nearest_index]
+    return {
+        "nearest_path_index": int(nearest_index),
+        "nearest_path_kind": str(nearest.get("kind", "")),
+        "nearest_path_distance_m": round(float(nearest_distance or 0.0), 6),
+        "remaining_path_pose_count": int(max(len(path_poses) - nearest_index - 1, 0)),
+        "terminal_path_distance_m": round(math.hypot(terminal_dx, terminal_dy), 6),
+        "terminal_yaw_error_deg": round(math.degrees(terminal_yaw_error), 6),
+    }
+
+
+def twist_payload(msg):
+    twist = msg.twist if hasattr(msg, "twist") else msg
+    return {
+        "linear_x": round(float(twist.linear.x), 6),
+        "linear_y": round(float(twist.linear.y), 6),
+        "linear_z": round(float(twist.linear.z), 6),
+        "angular_x": round(float(twist.angular.x), 6),
+        "angular_y": round(float(twist.angular.y), 6),
+        "angular_z": round(float(twist.angular.z), 6),
+    }
 
 
 def wait_future(node, future, timeout_s):
@@ -1342,32 +2697,435 @@ def emit(payload):
 
 payload = json.loads(os.environ["NAV2_FOLLOW_PATH_PAYLOAD"])
 path_poses = payload.get("path_poses", [])
+feedback_sample_max = max(int(payload.get("feedback_sample_max") or 0), 0)
+feedback_sample_interval_s = max(float(payload.get("feedback_sample_interval_s") or 0.0), 0.0)
+diagnostic_sample_max = max(int(payload.get("diagnostic_sample_max") or 0), 0)
+diagnostic_sample_interval_s = max(float(payload.get("diagnostic_sample_interval_s") or 0.0), 0.0)
+feedback_count = 0
+feedback_samples = []
+feedback_last = {}
+last_feedback_sample_elapsed_s = -999999.0
+cmd_vel_counts = {}
+cmd_vel_samples = []
+cmd_vel_last = {}
+odom_count = 0
+odom_samples = []
+odom_last = {}
+odom_first = {}
+path_progress_samples = []
+path_progress_last = {}
+last_cmd_vel_sample_elapsed_s = -999999.0
+last_odom_sample_elapsed_s = -999999.0
 started = time.monotonic()
 rclpy.init()
 node = Node("gather_nav2_follow_path_reacquire_client")
 node.set_parameters([Parameter("use_sim_time", Parameter.Type.BOOL, True)])
 client = ActionClient(node, FollowPath, "/follow_path")
+
+
+def odom_delta_payload():
+    if not odom_first or not odom_last:
+        return {}
+    dx = float(odom_last.get("x", 0.0)) - float(odom_first.get("x", 0.0))
+    dy = float(odom_last.get("y", 0.0)) - float(odom_first.get("y", 0.0))
+    dyaw = normalize_angle(float(odom_last.get("yaw", 0.0)) - float(odom_first.get("yaw", 0.0)))
+    return {
+        "dx_m": round(dx, 6),
+        "dy_m": round(dy, 6),
+        "distance_m": round(math.hypot(dx, dy), 6),
+        "dyaw_deg": round(math.degrees(dyaw), 6),
+        "elapsed_s": round(float(odom_last.get("elapsed_s", 0.0)) - float(odom_first.get("elapsed_s", 0.0)), 6),
+    }
+
+
+monitor_payload = payload.get("monitor", {}) if isinstance(payload.get("monitor"), dict) else {}
+monitor_enabled = bool(monitor_payload.get("enabled", False))
+monitor_state = {
+    "enabled": bool(monitor_enabled),
+    "last_fresh_elapsed_s": 0.0,
+    "last_sample_count": None,
+    "last_sample": {},
+    "last_error": "",
+    "terminal_reason": "",
+}
+
+
+def truth_pose_xy(value):
+    if not isinstance(value, dict):
+        return None
+    position = value.get("position") if isinstance(value.get("position"), dict) else value
+    if not isinstance(position, dict):
+        return None
+    try:
+        return float(position.get("x")), float(position.get("y"))
+    except (TypeError, ValueError):
+        return None
+
+
+def monitor_basis():
+    start = monitor_payload.get("start_ball_pose", {})
+    delivery = monitor_payload.get("delivery_pose", {})
+    start_xy = truth_pose_xy(start) if isinstance(start, dict) else None
+    delivery_xy = truth_pose_xy(delivery) if isinstance(delivery, dict) else None
+    if start_xy is None or delivery_xy is None:
+        return None
+    dx = delivery_xy[0] - start_xy[0]
+    dy = delivery_xy[1] - start_xy[1]
+    length = math.hypot(dx, dy)
+    if length <= 1.0e-6:
+        return None
+    ux = dx / length
+    uy = dy / length
+    return start_xy, delivery_xy, ux, uy, -uy, ux
+
+
+def read_monitor_sample():
+    truth_state_path = str(monitor_payload.get("truth_state_path") or "")
+    if not truth_state_path:
+        return {"error": "missing_truth_state_path"}
+    try:
+        with open(truth_state_path, "r", encoding="utf-8") as handle:
+            state = json.load(handle)
+    except Exception as exc:
+        return {"error": f"truth_state_unreadable:{exc}"}
+    if not isinstance(state, dict):
+        return {"error": "truth_state_not_object"}
+    target_model_name = str(monitor_payload.get("target_model_name") or "")
+    target_poses = state.get("target_poses_by_name") if isinstance(state.get("target_poses_by_name"), dict) else {}
+    target_pose = target_poses.get(target_model_name) if target_model_name else None
+    if not isinstance(target_pose, dict):
+        target_pose = state.get("true_target_pose") if isinstance(state.get("true_target_pose"), dict) else {}
+    ball_xy = truth_pose_xy(target_pose)
+    robot_xy = truth_pose_xy(state.get("robot_truth_pose") if isinstance(state.get("robot_truth_pose"), dict) else {})
+    try:
+        sample_count = int(state.get("samples"))
+    except (TypeError, ValueError):
+        sample_count = None
+    sample = {
+        "sample_count": sample_count,
+        "target_model_name": target_model_name,
+        "ball_seen": ball_xy is not None,
+        "robot_seen": robot_xy is not None,
+    }
+    if ball_xy is not None:
+        sample["ball_x"] = round(ball_xy[0], 6)
+        sample["ball_y"] = round(ball_xy[1], 6)
+    if robot_xy is not None:
+        sample["robot_x"] = round(robot_xy[0], 6)
+        sample["robot_y"] = round(robot_xy[1], 6)
+    return sample
+
+
+def monitor_summary():
+    return dict(monitor_state)
+
+
+def evaluate_monitor():
+    if not monitor_enabled:
+        return None
+    elapsed_s = round(time.monotonic() - started, 6)
+    sample = read_monitor_sample()
+    monitor_state["last_sample"] = sample
+    if sample.get("error"):
+        monitor_state["last_error"] = str(sample.get("error"))
+    sample_count = sample.get("sample_count")
+    if sample.get("ball_seen") and (
+        sample_count is None or sample_count != monitor_state.get("last_sample_count")
+    ):
+        monitor_state["last_sample_count"] = sample_count
+        monitor_state["last_fresh_elapsed_s"] = elapsed_s
+    stale_timeout_s = max(float(monitor_payload.get("stale_timeout_s") or 0.0), 0.1)
+    stale_elapsed_s = elapsed_s - float(monitor_state.get("last_fresh_elapsed_s") or 0.0)
+    sample["stale_elapsed_s"] = round(stale_elapsed_s, 6)
+    if stale_elapsed_s >= stale_timeout_s:
+        monitor_state["terminal_reason"] = "stale_state"
+        return {
+            "reason": "stale_state",
+            "dispatch_status": "monitor_stale_state",
+            "error": "monitor_stale_state",
+            "sample": sample,
+        }
+    basis = monitor_basis()
+    if basis is None or not sample.get("ball_seen"):
+        return None
+    start_xy, delivery_xy, ux, uy, nx, ny = basis
+    ball_xy = float(sample["ball_x"]), float(sample["ball_y"])
+    from_start_x = ball_xy[0] - start_xy[0]
+    from_start_y = ball_xy[1] - start_xy[1]
+    longitudinal_m = (from_start_x * ux) + (from_start_y * uy)
+    lateral_m = (from_start_x * nx) + (from_start_y * ny)
+    delivery_distance_m = math.hypot(ball_xy[0] - delivery_xy[0], ball_xy[1] - delivery_xy[1])
+    start_displacement_m = math.hypot(from_start_x, from_start_y)
+    robot_ball_distance_m = None
+    if sample.get("robot_seen"):
+        robot_ball_distance_m = math.hypot(float(sample["robot_x"]) - ball_xy[0], float(sample["robot_y"]) - ball_xy[1])
+    sample.update({
+        "longitudinal_progress_m": round(longitudinal_m, 6),
+        "lateral_error_m": round(lateral_m, 6),
+        "delivery_distance_m": round(delivery_distance_m, 6),
+        "start_displacement_m": round(start_displacement_m, 6),
+        "robot_ball_distance_m": None if robot_ball_distance_m is None else round(robot_ball_distance_m, 6),
+    })
+    delivery_radius_m = max(float(monitor_payload.get("delivery_radius_m") or 0.0), 0.0)
+    if delivery_distance_m <= delivery_radius_m:
+        monitor_state["terminal_reason"] = "success"
+        return {
+            "reason": "success",
+            "dispatch_status": "monitor_success",
+            "error": "",
+            "sample": sample,
+        }
+    moved_m = max(float(monitor_payload.get("launch_motion_evidence_m") or 0.03), 0.0)
+    ball_moved = start_displacement_m >= moved_m
+    if ball_moved and abs(lateral_m) > max(float(monitor_payload.get("escape_lateral_m") or 0.0), 0.0):
+        monitor_state["terminal_reason"] = "ball_escape"
+        return {
+            "reason": "ball_escape",
+            "dispatch_status": "monitor_ball_escape",
+            "error": "monitor_ball_escape",
+            "sample": sample,
+        }
+    if ball_moved and longitudinal_m < -max(float(monitor_payload.get("backtrack_m") or 0.0), 0.0):
+        monitor_state["terminal_reason"] = "unsafe_drift"
+        return {
+            "reason": "unsafe_drift",
+            "dispatch_status": "monitor_unsafe_drift",
+            "error": "monitor_unsafe_drift_backtrack",
+            "sample": sample,
+        }
+    max_robot_ball_m = max(float(monitor_payload.get("max_robot_ball_distance_m") or 0.0), 0.0)
+    if ball_moved and robot_ball_distance_m is not None and robot_ball_distance_m > max_robot_ball_m:
+        monitor_state["terminal_reason"] = "unsafe_drift"
+        return {
+            "reason": "unsafe_drift",
+            "dispatch_status": "monitor_unsafe_drift",
+            "error": "monitor_unsafe_drift_robot_separation",
+            "sample": sample,
+        }
+    contact_buffer_max_robot_ball_m = max(
+        float(monitor_payload.get("contact_buffer_handoff_max_robot_ball_m") or 0.0),
+        0.0,
+    )
+    contact_buffer_max_lateral_error_m = max(
+        float(monitor_payload.get("contact_buffer_handoff_max_lateral_error_m") or 0.0),
+        0.0,
+    )
+    contact_buffer_max_terminal_path_distance_m = max(
+        float(monitor_payload.get("contact_buffer_handoff_max_terminal_path_distance_m") or 0.0),
+        0.0,
+    )
+    contact_buffer_max_terminal_yaw_error_deg = max(
+        float(monitor_payload.get("contact_buffer_handoff_max_terminal_yaw_error_deg") or 0.0),
+        0.0,
+    )
+    if (
+        not ball_moved
+        and contact_buffer_max_robot_ball_m > 0.0
+        and contact_buffer_max_lateral_error_m > 0.0
+        and robot_ball_distance_m is not None
+        and robot_ball_distance_m <= contact_buffer_max_robot_ball_m
+        and abs(lateral_m) <= contact_buffer_max_lateral_error_m
+    ):
+        terminal_path_distance_m = None
+        terminal_yaw_error_deg = None
+        nearest_path_kind = ""
+        if isinstance(path_progress_last, dict):
+            nearest_path_kind = str(path_progress_last.get("nearest_path_kind") or "")
+            try:
+                terminal_path_distance_m = float(path_progress_last.get("terminal_path_distance_m"))
+            except (TypeError, ValueError):
+                terminal_path_distance_m = None
+            try:
+                terminal_yaw_error_deg = float(path_progress_last.get("terminal_yaw_error_deg"))
+            except (TypeError, ValueError):
+                terminal_yaw_error_deg = None
+        terminal_distance_ok = (
+            contact_buffer_max_terminal_path_distance_m <= 0.0
+            or terminal_path_distance_m is None
+            or terminal_path_distance_m <= contact_buffer_max_terminal_path_distance_m
+        )
+        terminal_yaw_ok = (
+            contact_buffer_max_terminal_yaw_error_deg <= 0.0
+            or terminal_yaw_error_deg is None
+            or abs(terminal_yaw_error_deg) <= contact_buffer_max_terminal_yaw_error_deg
+        )
+        contact_stage_ok = (
+            not nearest_path_kind
+            or "corridor_contact" in nearest_path_kind
+            or terminal_distance_ok
+        )
+        if terminal_distance_ok and terminal_yaw_ok and contact_stage_ok:
+            monitor_state["terminal_reason"] = "contact_buffer_handoff"
+            sample["contact_buffer_handoff"] = True
+            sample["nearest_path_kind"] = nearest_path_kind
+            sample["terminal_path_distance_m"] = (
+                None if terminal_path_distance_m is None else round(float(terminal_path_distance_m), 6)
+            )
+            sample["terminal_yaw_error_deg"] = (
+                None if terminal_yaw_error_deg is None else round(float(terminal_yaw_error_deg), 6)
+            )
+            return {
+                "reason": "contact_buffer_handoff",
+                "dispatch_status": "monitor_contact_buffer_handoff",
+                "error": "",
+                "sample": sample,
+            }
+    success_on_motion_m = max(float(monitor_payload.get("success_on_motion_m") or 0.0), 0.0)
+    success_on_motion_min_longitudinal_m = float(
+        monitor_payload.get("success_on_motion_min_longitudinal_m")
+        if monitor_payload.get("success_on_motion_min_longitudinal_m") is not None
+        else -float("inf")
+    )
+    if (
+        success_on_motion_m > 0.0
+        and start_displacement_m >= success_on_motion_m
+        and longitudinal_m >= success_on_motion_min_longitudinal_m
+    ):
+        monitor_state["terminal_reason"] = "first_contact_confirmed"
+        return {
+            "reason": "first_contact_confirmed",
+            "dispatch_status": "monitor_first_contact_confirmed",
+            "error": "",
+            "sample": sample,
+        }
+    return None
+
+
+def request_cancel(goal_handle):
+    cancel_started = time.monotonic()
+    cancel_response_received = False
+    cancel_goal_count = 0
+    cancel_error = ""
+    try:
+        cancel_future = goal_handle.cancel_goal_async()
+        cancel_response_received = wait_future(node, cancel_future, timeout_s=1.0)
+        if cancel_response_received and cancel_future.result() is not None:
+            cancel_goal_count = len(getattr(cancel_future.result(), "goals_canceling", []) or [])
+    except Exception as exc:
+        cancel_error = str(exc)
+    return {
+        "cancel_requested": True,
+        "cancel_response_received": bool(cancel_response_received),
+        "cancel_goal_count": int(cancel_goal_count),
+        "cancel_elapsed_s": round(time.monotonic() - cancel_started, 6),
+        "cancel_error": cancel_error,
+    }
+
+
+def result_payload(extra):
+    result = dict(extra)
+    if "status_text" not in result and result.get("status_code") is not None:
+        result["status_text"] = status_text(int(result["status_code"]))
+    result.setdefault("feedback_count", int(feedback_count))
+    result.setdefault("feedback_samples", feedback_samples)
+    result.setdefault("feedback_last", feedback_last)
+    result.setdefault("feedback_sample_max", int(feedback_sample_max))
+    result.setdefault("feedback_sample_interval_s", round(float(feedback_sample_interval_s), 6))
+    result.setdefault("diagnostic_sample_max", int(diagnostic_sample_max))
+    result.setdefault("diagnostic_sample_interval_s", round(float(diagnostic_sample_interval_s), 6))
+    result.setdefault("cmd_vel_counts", dict(cmd_vel_counts))
+    result.setdefault("cmd_vel_samples", cmd_vel_samples)
+    result.setdefault("cmd_vel_last", cmd_vel_last)
+    result.setdefault("odom_count", int(odom_count))
+    result.setdefault("odom_samples", odom_samples)
+    result.setdefault("odom_last", odom_last)
+    result.setdefault("odom_delta", odom_delta_payload())
+    result.setdefault("path_progress_samples", path_progress_samples)
+    result.setdefault("path_progress_last", path_progress_last)
+    result.setdefault("timeout_s", round(float(payload.get("timeout_s") or 0.0), 6))
+    result.setdefault("monitor", monitor_summary())
+    return result
+
+
+def feedback_callback(feedback_msg):
+    global feedback_count, feedback_last, last_feedback_sample_elapsed_s
+    feedback_count += 1
+    elapsed_s = round(time.monotonic() - started, 6)
+    sample = {
+        "elapsed_s": elapsed_s,
+        "feedback": ros_to_plain(getattr(feedback_msg, "feedback", feedback_msg)),
+    }
+    feedback_last = sample
+    if len(feedback_samples) >= feedback_sample_max:
+        return
+    if not feedback_samples or elapsed_s - last_feedback_sample_elapsed_s >= feedback_sample_interval_s:
+        feedback_samples.append(sample)
+        last_feedback_sample_elapsed_s = elapsed_s
+
+
+def make_cmd_callback(topic):
+    def _callback(msg):
+        global cmd_vel_last, last_cmd_vel_sample_elapsed_s
+        elapsed_s = round(time.monotonic() - started, 6)
+        cmd_vel_counts[topic] = int(cmd_vel_counts.get(topic, 0)) + 1
+        sample = {"elapsed_s": elapsed_s, "topic": topic, **twist_payload(msg)}
+        cmd_vel_last = sample
+        if elapsed_s - last_cmd_vel_sample_elapsed_s >= diagnostic_sample_interval_s:
+            append_ring(cmd_vel_samples, sample, diagnostic_sample_max)
+            last_cmd_vel_sample_elapsed_s = elapsed_s
+    return _callback
+
+
+def odom_callback(msg):
+    global odom_count, odom_first, odom_last, path_progress_last, last_odom_sample_elapsed_s
+    odom_count += 1
+    elapsed_s = round(time.monotonic() - started, 6)
+    pose = msg.pose.pose
+    twist = msg.twist.twist
+    yaw = quaternion_to_yaw(pose.orientation)
+    sample = {
+        "elapsed_s": elapsed_s,
+        "x": round(float(pose.position.x), 6),
+        "y": round(float(pose.position.y), 6),
+        "yaw": round(float(yaw), 6),
+        "linear_x": round(float(twist.linear.x), 6),
+        "angular_z": round(float(twist.angular.z), 6),
+    }
+    progress = path_progress_for_pose(sample["x"], sample["y"], yaw)
+    if progress:
+        sample["path_progress"] = progress
+        path_progress_last = {"elapsed_s": elapsed_s, **progress}
+        if progress.get("terminal_path_distance_m", 999.0) <= 1.5:
+            append_ring(path_progress_samples, path_progress_last, diagnostic_sample_max)
+    if not odom_first:
+        odom_first = dict(sample)
+    odom_last = dict(sample)
+    if elapsed_s - last_odom_sample_elapsed_s >= diagnostic_sample_interval_s:
+        append_ring(odom_samples, sample, diagnostic_sample_max)
+        last_odom_sample_elapsed_s = elapsed_s
+
+
+for topic in payload.get("cmd_vel_topics", []):
+    topic = str(topic)
+    cmd_vel_counts[topic] = 0
+    if topic == "/jetbot_base_controller/cmd_vel":
+        node.create_subscription(TwistStamped, topic, make_cmd_callback(topic), 20)
+    else:
+        node.create_subscription(Twist, topic, make_cmd_callback(topic), 20)
+node.create_subscription(Odometry, str(payload.get("odom_topic") or "/jetbot_base_controller/odom"), odom_callback, 20)
+
+
 try:
     if not path_poses:
-        emit({
+        emit(result_payload({
             "dispatch_status": "empty_path",
             "accepted": False,
             "success": False,
             "status_code": int(GoalStatus.STATUS_UNKNOWN),
             "elapsed_s": round(time.monotonic() - started, 6),
             "error": "follow_path_empty_path",
-        })
+        }))
     else:
         server_ready = bool(client.wait_for_server(timeout_sec=max(float(payload["server_wait_s"]), 0.1)))
         if not server_ready:
-            emit({
+            emit(result_payload({
                 "dispatch_status": "server_unavailable",
                 "accepted": False,
                 "success": False,
                 "status_code": int(GoalStatus.STATUS_UNKNOWN),
                 "elapsed_s": round(time.monotonic() - started, 6),
                 "error": "follow_path_action_server_unavailable",
-            })
+            }))
         else:
             now = node.get_clock().now().to_msg()
             frame_id = str(path_poses[0].get("frame_id") or "odom")
@@ -1393,63 +3151,112 @@ try:
             goal.goal_checker_id = str(payload.get("goal_checker_id") or "general_goal_checker")
             if hasattr(goal, "progress_checker_id"):
                 goal.progress_checker_id = ""
-            send_future = client.send_goal_async(goal)
+            send_future = client.send_goal_async(goal, feedback_callback=feedback_callback)
             if not wait_future(node, send_future, timeout_s=5.0):
-                emit({
+                emit(result_payload({
                     "dispatch_status": "send_goal_timeout",
                     "accepted": False,
                     "success": False,
                     "status_code": int(GoalStatus.STATUS_UNKNOWN),
                     "elapsed_s": round(time.monotonic() - started, 6),
                     "error": "send_goal_timeout",
-                })
+                }))
             else:
                 goal_handle = send_future.result()
                 if goal_handle is None:
-                    emit({
+                    emit(result_payload({
                         "dispatch_status": "send_goal_result_none",
                         "accepted": False,
                         "success": False,
                         "status_code": int(GoalStatus.STATUS_UNKNOWN),
                         "elapsed_s": round(time.monotonic() - started, 6),
                         "error": "send_goal_result_none",
-                    })
+                    }))
                 elif not goal_handle.accepted:
-                    emit({
+                    emit(result_payload({
                         "dispatch_status": "goal_rejected",
                         "accepted": False,
                         "success": False,
                         "status_code": int(GoalStatus.STATUS_REJECTED),
                         "elapsed_s": round(time.monotonic() - started, 6),
                         "error": "goal_rejected",
-                    })
+                    }))
                 else:
                     result_future = goal_handle.get_result_async()
-                    if not wait_future(node, result_future, timeout_s=float(payload["timeout_s"])):
-                        try:
-                            goal_handle.cancel_goal_async()
-                        except Exception:
-                            pass
-                        emit({
+                    monitor_terminal = None
+                    result_deadline = time.monotonic() + float(payload["timeout_s"])
+                    while time.monotonic() < result_deadline and rclpy.ok():
+                        if result_future.done():
+                            break
+                        rclpy.spin_once(node, timeout_sec=0.1)
+                        monitor_terminal = evaluate_monitor()
+                        if monitor_terminal is not None:
+                            break
+                    if monitor_terminal is not None:
+                        cancel_payload = request_cancel(goal_handle)
+                        monitor_reason = str(monitor_terminal.get("reason") or "")
+                        monitor_success = monitor_reason in {"success", "first_contact_confirmed"}
+                        emit(result_payload({
+                            "dispatch_status": str(monitor_terminal.get("dispatch_status") or "monitor_cancel"),
+                            "accepted": True,
+                            "success": bool(monitor_success),
+                            "status_code": int(GoalStatus.STATUS_CANCELED),
+                            "status_text": status_text(int(GoalStatus.STATUS_CANCELED)),
+                            "elapsed_s": round(time.monotonic() - started, 6),
+                            "error": str(monitor_terminal.get("error") or ""),
+                            "timed_out": False,
+                            "monitor_cancel_reason": monitor_reason,
+                            "monitor_sample": monitor_terminal.get("sample", {}),
+                            **cancel_payload,
+                        }))
+                    elif not result_future.done():
+                        cancel_payload = request_cancel(goal_handle)
+                        emit(result_payload({
                             "dispatch_status": "goal_result_timeout",
                             "accepted": True,
                             "success": False,
                             "status_code": int(GoalStatus.STATUS_ABORTED),
+                            "status_text": status_text(int(GoalStatus.STATUS_ABORTED)),
                             "elapsed_s": round(time.monotonic() - started, 6),
                             "error": "goal_result_timeout",
-                        })
+                            "timed_out": True,
+                            **cancel_payload,
+                        }))
                     else:
                         result = result_future.result()
                         status_code = int(result.status) if result is not None else int(GoalStatus.STATUS_UNKNOWN)
                         success = status_code == int(GoalStatus.STATUS_SUCCEEDED)
-                        emit({
-                            "dispatch_status": "goal_succeeded" if success else "goal_finished",
-                            "accepted": True,
-                            "success": bool(success),
-                            "status_code": status_code,
-                            "elapsed_s": round(time.monotonic() - started, 6),
-                            "error": "" if success else f"goal_status_{status_code}",
-                        })
+                        final_monitor_terminal = evaluate_monitor()
+                        if final_monitor_terminal is not None:
+                            monitor_reason = str(final_monitor_terminal.get("reason") or "")
+                            monitor_success = monitor_reason in {"success", "first_contact_confirmed"}
+                            emit(result_payload({
+                                "dispatch_status": str(final_monitor_terminal.get("dispatch_status") or "monitor_finished"),
+                                "accepted": True,
+                                "success": bool(monitor_success),
+                                "status_code": status_code,
+                                "status_text": status_text(status_code),
+                                "action_result": ros_to_plain(getattr(result, "result", None)),
+                                "elapsed_s": round(time.monotonic() - started, 6),
+                                "error": str(final_monitor_terminal.get("error") or ""),
+                                "timed_out": False,
+                                "monitor_cancel_reason": monitor_reason,
+                                "monitor_sample": final_monitor_terminal.get("sample", {}),
+                                "cancel_requested": False,
+                            }))
+                        else:
+                            emit(result_payload({
+                                "dispatch_status": "goal_succeeded" if success else "goal_finished",
+                                "accepted": True,
+                                "success": bool(success),
+                                "status_code": status_code,
+                                "status_text": status_text(status_code),
+                                "action_result": ros_to_plain(getattr(result, "result", None)),
+                                "elapsed_s": round(time.monotonic() - started, 6),
+                                "error": "" if success else f"goal_status_{status_code}",
+                                "timed_out": False,
+                                "cancel_requested": False,
+                            }))
 finally:
     node.destroy_node()
     if rclpy.ok():
@@ -1459,9 +3266,38 @@ PY
         )
         rc, output = self._docker_exec(gate_stack_container, script)
         result = self._parse_nav2_follow_path_result(output, rc=rc)
+        result.setdefault(
+            "controller_log_excerpt",
+            self._docker_logs_since(
+                gate_stack_container,
+                log_since_utc,
+                tail=DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_LOG_TAIL,
+            ),
+        )
         result.setdefault("path_pose_count", len(payload["path_poses"]))
         result.setdefault("controller_id", payload["controller_id"])
         result.setdefault("goal_checker_id", payload["goal_checker_id"])
+        result.setdefault("feedback_count", 0)
+        result.setdefault("feedback_samples", [])
+        result.setdefault("feedback_last", {})
+        result.setdefault("feedback_sample_max", payload["feedback_sample_max"])
+        result.setdefault("feedback_sample_interval_s", payload["feedback_sample_interval_s"])
+        result.setdefault("diagnostic_sample_max", payload["diagnostic_sample_max"])
+        result.setdefault("diagnostic_sample_interval_s", payload["diagnostic_sample_interval_s"])
+        result.setdefault("cmd_vel_counts", {})
+        result.setdefault("cmd_vel_samples", [])
+        result.setdefault("cmd_vel_last", {})
+        result.setdefault("odom_count", 0)
+        result.setdefault("odom_samples", [])
+        result.setdefault("odom_last", {})
+        result.setdefault("odom_delta", {})
+        result.setdefault("path_progress_samples", [])
+        result.setdefault("path_progress_last", {})
+        result.setdefault("timeout_s", payload["timeout_s"])
+        result.setdefault("cancel_requested", False)
+        result.setdefault("monitor", {})
+        result.setdefault("monitor_cancel_reason", "")
+        result.setdefault("monitor_sample", {})
         return result
 
     def _robot_pose_components(self, state: dict[str, Any]) -> tuple[float, float, float]:
@@ -1845,6 +3681,18 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             target.id: self._target_world_pose(target)
             for target in self.targets
         }
+        active_zone_pose = self._visible_delivery_marker_pose()
+        legacy_zone_pose = self._legacy_corral_zone_pose()
+        fetch_pose_world = self._fetch_pose_world() if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {}
+        model_provenance = self._model_provenance()
+        geometry_consistency = (
+            self._fetch_geometry_consistency(
+                fetch_pose_world=fetch_pose_world,
+                visible_delivery_marker_pose=active_zone_pose,
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            else {}
+        )
         self.visit_runtime_state = {
             "running": True,
             "scenario_id": str(self.args.scenario_id),
@@ -1884,13 +3732,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "route_order": [],
             "capture_state": {},
             "capture_loss_count": 0,
-            "zone_pose": {
-                "x": round(self.zone.world_x, 6),
-                "y": round(self.zone.world_y, 6),
-                "radius_m": round(self.zone.retrieval_radius_m, 6),
-                "control_radius_m": round(self.zone.control_radius_m, 6),
-                "dwell_s": round(self.zone.dwell_s, 6),
-            },
+            "zone_pose": active_zone_pose,
+            "visible_delivery_marker_pose": active_zone_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
+            "legacy_corral_zone_pose": legacy_zone_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
+            "fetch_pose_world": fetch_pose_world,
+            "geometry_consistency": geometry_consistency,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": bool(model_provenance.get("model_provenance_valid", True)),
+            "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+            "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+            "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+            "target_model_classification": str(model_provenance.get("target_model_classification", "")),
             "zone_score": {},
             "final_corral_audit": {},
             "settle_metrics": {},
@@ -1927,15 +3779,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             y=float(DEFAULT_MISSION_START_POSE["y"]),
             yaw=float(DEFAULT_MISSION_START_POSE["yaw"]),
         )
+        active_zone_pose = self._visible_delivery_marker_pose()
         self._remove_model(compose_project=compose_project, world_name=world_name, model_name=self.args.zone_model_name)
         self._spawn_model(
             compose_project=compose_project,
             world_name=world_name,
             model_sdf_host=Path(self.args.zone_model_sdf).resolve(),
             model_name=self.args.zone_model_name,
-            x=float(self.zone.world_x),
-            y=float(self.zone.world_y),
-            z=float(self.zone.z_m),
+            x=float(active_zone_pose.get("x", self.zone.world_x)),
+            y=float(active_zone_pose.get("y", self.zone.world_y)),
+            z=float(active_zone_pose.get("z", self.zone.z_m)),
             yaw=0.0,
             log_path=mission_root / "zone_spawn.log",
         )
@@ -2132,7 +3985,23 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         attempt_index: int = 0,
         attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
-        deadline = time.monotonic() + max(DEFAULT_PRE_STAGE_TIMEOUT_S, 0.1)
+        pre_stage_timeout_s = DEFAULT_PRE_STAGE_TIMEOUT_S
+        if self.gather_control_family == NAV2_MPPI_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY:
+            pre_stage_timeout_s = max(
+                pre_stage_timeout_s,
+                DEFAULT_NAV2_MPPI_FOLLOW_PATH_PRE_STAGE_TIMEOUT_S,
+            )
+        if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+            pre_stage_timeout_s = max(
+                pre_stage_timeout_s,
+                DEFAULT_OBJECT_CENTRIC_PRE_STAGE_TIMEOUT_S,
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+                pre_stage_timeout_s = max(
+                    pre_stage_timeout_s,
+                    DEFAULT_OBJECT_CENTRIC_FETCH_PRE_STAGE_TIMEOUT_S,
+                )
+        deadline = time.monotonic() + max(pre_stage_timeout_s, 0.1)
         pre_stage_started_monotonic = time.monotonic()
         pre_stage_ready_started_monotonic: float | None = None
         pre_stage_pose_reached_once = False
@@ -2157,6 +4026,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         pre_stage_trajectory_owner_milestone_index = 0
         pre_stage_trajectory_owner_side_sign: float | None = None
         pre_stage_trajectory_owner_replan_count = 0
+        object_centric_previous_command: PlaceControlCommand | None = None
+        object_centric_previous_ball_pose: dict[str, Any] | None = None
+        last_object_centric_policy: dict[str, Any] = {}
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -2186,6 +4058,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             pre_stage_reacquire_fsm_debug_fields: dict[str, Any] = {}
             pre_stage_path_tracker_debug_fields: dict[str, Any] = {}
             pre_stage_trajectory_owner_debug_fields: dict[str, Any] = {}
+            object_centric_debug_fields: dict[str, Any] = {}
             pre_stage_reacquire_fsm_abort_reason = ""
             pre_stage_path_tracker_abort_reason = ""
             pre_stage_trajectory_owner_abort_reason = ""
@@ -2220,6 +4093,27 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if pre_stage_trajectory_owner_previous_ball_pose is not None and ball_pose
                 else None
             )
+            if (
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                object_decision = decide_object_centric_gather_command(
+                    robot_pose,
+                    ball_pose or {},
+                    phase="pre_stage",
+                    zone=self.zone,
+                    envelope=self.capture_envelope,
+                    previous_command=object_centric_previous_command,
+                    previous_ball_pose=object_centric_previous_ball_pose,
+                )
+                last_object_centric_policy = dict(object_decision.diagnostics)
+                object_centric_debug_fields = {"object_centric_policy": last_object_centric_policy}
+                if object_decision.command is not None:
+                    pre_stage_command = object_decision.command
+                    pre_stage_strategy_name = str(object_decision.strategy_name or "")
+                    pre_stage_objective_name = str(object_decision.objective_name or "")
+                    pre_stage_progress_score = clean_number(object_decision.progress_score)
             if isinstance(pre_stage_snapshot, dict):
                 pre_stage_pose_world = (
                     dict(pre_stage_snapshot.get("pre_stage_pose_world", {}))
@@ -2399,18 +4293,42 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     time.sleep(self.args.poll_s)
                     continue
             if (
-                self.gather_control_family == NAV2_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY
+                self.gather_control_family
+                in {
+                    NAV2_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY,
+                    NAV2_MPPI_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY,
+                }
                 and not nav2_follow_path_reacquire_attempted
                 and robot_pose
                 and ball_pose
                 and isinstance(pre_stage_snapshot, dict)
             ):
-                follow_path_plan = build_nav2_follow_path_reacquire_plan(
-                    robot_pose,
-                    ball_pose or {},
-                    zone=self.zone,
-                    snapshot=pre_stage_snapshot,
+                mppi_follow_path = self.gather_control_family == NAV2_MPPI_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY
+                follow_path_controller_id = (
+                    DEFAULT_NAV2_MPPI_FOLLOW_PATH_CONTROLLER_ID
+                    if mppi_follow_path
+                    else DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID
                 )
+                follow_path_objective_name = (
+                    NAV2_MPPI_FOLLOW_PATH_REACQUIRE_OBJECTIVE
+                    if mppi_follow_path
+                    else NAV2_FOLLOW_PATH_REACQUIRE_OBJECTIVE
+                )
+                follow_path_display_name = "Nav2 MPPI FollowPath" if mppi_follow_path else "Nav2 FollowPath"
+                if mppi_follow_path:
+                    follow_path_plan = build_nav2_mppi_follow_path_reacquire_plan(
+                        robot_pose,
+                        ball_pose or {},
+                        zone=self.zone,
+                        snapshot=pre_stage_snapshot,
+                    )
+                else:
+                    follow_path_plan = build_nav2_follow_path_reacquire_plan(
+                        robot_pose,
+                        ball_pose or {},
+                        zone=self.zone,
+                        snapshot=pre_stage_snapshot,
+                    )
                 follow_path_plan_dict = follow_path_plan.to_dict()
                 follow_path_reason = clean_text(follow_path_plan_dict.get("reason"))
                 if (
@@ -2428,7 +4346,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     self._set_manual_drive(
                         enabled=False,
                         mode=failure_reason,
-                        rationale="Nav2 FollowPath pre-stage reacquire could not build a safe path.",
+                        rationale=f"{follow_path_display_name} pre-stage reacquire could not build a safe path.",
                     )
                     failure_payload = {
                         "failure_reason": failure_reason,
@@ -2442,6 +4360,27 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "entered_goal_side_before_capture": last_failure_reason == "entered_goal_side_before_capture",
                         "nav2_follow_path_plan": follow_path_plan_dict,
                     }
+                    append_jsonl(
+                        state_history_path,
+                        {
+                            "generated_utc": utc_now(),
+                            "phase": "pre_stage",
+                            "event_type": "nav2_follow_path_reacquire_plan_blocked",
+                            "attempt": int(attempt_index),
+                            "attempt_kind": str(attempt_kind),
+                            "target_id": target.id,
+                            "robot_pose": robot_pose,
+                            "ball_pose": ball_pose,
+                            "pre_stage": pre_stage_snapshot or {},
+                            "nav2_follow_path_plan": follow_path_plan_dict,
+                            "nav2_follow_path_dispatch_status": follow_path_reason or failure_reason,
+                            "selected_command": {},
+                            **self._control_debug_fields(
+                                strategy_name=follow_path_objective_name,
+                                objective_name="follow_path_pre_stage_path",
+                            ),
+                        },
+                    )
                     write_json(mission_root / f"{target.id}_{failure_reason}.json", failure_payload)
                     return False, failure_payload
                 if bool(follow_path_plan_dict.get("active", False)):
@@ -2455,16 +4394,22 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     self._set_manual_drive(
                         enabled=False,
                         mode="nav2_follow_path_reacquire_path",
-                        rationale="Nav2 FollowPath owns the explicit pre-stage reacquire path.",
+                        rationale=f"{follow_path_display_name} owns the explicit pre-stage reacquire path.",
                     )
                     self._update_gather_runtime_state(
-                        latest_feedback=f"Nav2 FollowPath is reacquiring the behind-ball pre-stage pose for {target.label}.",
+                        latest_feedback=(
+                            f"{follow_path_display_name} is reacquiring the behind-ball pre-stage pose for "
+                            f"{target.label}."
+                        ),
                         latest_control_command={
                             "mode": "nav2_follow_path_reacquire_path",
                             "linear_x": 0.0,
                             "angular_z": 0.0,
                             "target_speed_scale": 0.0,
-                            "rationale": "Manual gather drive disabled while Nav2 FollowPath owns pre-stage reacquire.",
+                            "rationale": (
+                                f"Manual gather drive disabled while {follow_path_display_name} owns "
+                                "pre-stage reacquire."
+                            ),
                         },
                     )
                     append_jsonl(
@@ -2484,7 +4429,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             "nav2_follow_path_path_poses": path_poses,
                             "nav2_follow_path_controller_id": clean_text(
                                 follow_path_plan_dict.get("controller_id"),
-                                "FollowPath",
+                                follow_path_controller_id,
                             ),
                             "nav2_follow_path_goal_checker_id": clean_text(
                                 follow_path_plan_dict.get("goal_checker_id"),
@@ -2493,13 +4438,18 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             "nav2_follow_path_dispatch_status": "planned",
                             "selected_command": {},
                             **self._control_debug_fields(
-                                strategy_name=NAV2_FOLLOW_PATH_REACQUIRE_OBJECTIVE,
+                                strategy_name=follow_path_objective_name,
                                 objective_name="follow_path_pre_stage_path",
                             ),
                         },
                     )
                     remaining_timeout_s = max(0.1, deadline - time.monotonic())
-                    follow_path_timeout_s = min(DEFAULT_NAV2_FOLLOW_PATH_GOAL_TIMEOUT_S, remaining_timeout_s)
+                    follow_path_timeout_cap_s = (
+                        DEFAULT_NAV2_MPPI_FOLLOW_PATH_GOAL_TIMEOUT_S
+                        if mppi_follow_path
+                        else DEFAULT_NAV2_FOLLOW_PATH_GOAL_TIMEOUT_S
+                    )
+                    follow_path_timeout_s = min(follow_path_timeout_cap_s, remaining_timeout_s)
                     if compose_project:
                         try:
                             follow_path_result = self._dispatch_nav2_follow_path_reacquire(
@@ -2507,7 +4457,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 path_poses=path_poses,
                                 controller_id=clean_text(
                                     follow_path_plan_dict.get("controller_id"),
-                                    "FollowPath",
+                                    follow_path_controller_id,
                                 ),
                                 goal_checker_id=clean_text(
                                     follow_path_plan_dict.get("goal_checker_id"),
@@ -2562,6 +4512,116 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     completion_handoff_ready = bool(
                         completion_snapshot.get("pre_stage_pose_reached", False)
                     ) if isinstance(completion_snapshot, dict) else False
+                    terminal_path_pose = path_poses[-1] if path_poses else {}
+                    dispatch_terminal_path_distance_m = pose_to_path_distance_m(robot_pose, terminal_path_pose)
+                    completion_terminal_path_distance_m = pose_to_path_distance_m(
+                        completion_robot_pose,
+                        terminal_path_pose,
+                    )
+                    dispatch_terminal_yaw_error_deg = pose_to_path_yaw_error_deg(robot_pose, terminal_path_pose)
+                    completion_terminal_yaw_error_deg = pose_to_path_yaw_error_deg(
+                        completion_robot_pose,
+                        terminal_path_pose,
+                    )
+                    dispatch_pre_stage_distance_m = pre_stage_snapshot_number(
+                        pre_stage_snapshot,
+                        "pre_stage_pose_distance_m",
+                    )
+                    completion_pre_stage_distance_m = pre_stage_snapshot_number(
+                        completion_snapshot,
+                        "pre_stage_pose_distance_m",
+                    )
+                    dispatch_lateral_error_m = pre_stage_snapshot_number(
+                        pre_stage_snapshot,
+                        "robot_lateral_error_m",
+                    )
+                    completion_lateral_error_m = pre_stage_snapshot_number(
+                        completion_snapshot,
+                        "robot_lateral_error_m",
+                    )
+                    dispatch_yaw_error_deg = pre_stage_snapshot_number(pre_stage_snapshot, "yaw_error_deg")
+                    completion_yaw_error_deg = pre_stage_snapshot_number(completion_snapshot, "yaw_error_deg")
+                    follow_path_robot_motion_m = pose_delta_m(robot_pose, completion_robot_pose)
+                    follow_path_diagnostics = {
+                        "controller_id": clean_text(
+                            follow_path_plan_dict.get("controller_id"),
+                            follow_path_controller_id,
+                        ),
+                        "goal_checker_id": clean_text(
+                            follow_path_plan_dict.get("goal_checker_id"),
+                            DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID,
+                        ),
+                        "path_pose_count": len(path_poses),
+                        "feedback_count": int(clean_number(follow_path_result.get("feedback_count")) or 0),
+                        "feedback_samples": follow_path_result.get("feedback_samples", []),
+                        "feedback_last": follow_path_result.get("feedback_last", {}),
+                        "dispatch_status": clean_text(follow_path_result.get("dispatch_status"), "unknown"),
+                        "success": bool(follow_path_result.get("success", False)),
+                        "status_code": clean_number(follow_path_result.get("status_code")),
+                        "status_text": clean_text(follow_path_result.get("status_text")),
+                        "error": clean_text(follow_path_result.get("error")),
+                        "action_result": follow_path_result.get("action_result", {}),
+                        "timeout_s": clean_rounded_number(follow_path_result.get("timeout_s")),
+                        "elapsed_s": clean_rounded_number(follow_path_result.get("elapsed_s")),
+                        "timed_out": bool(follow_path_result.get("timed_out", False)),
+                        "cancel_requested": bool(follow_path_result.get("cancel_requested", False)),
+                        "cancel_response_received": bool(
+                            follow_path_result.get("cancel_response_received", False)
+                        ),
+                        "cancel_goal_count": int(clean_number(follow_path_result.get("cancel_goal_count")) or 0),
+                        "cancel_elapsed_s": clean_rounded_number(follow_path_result.get("cancel_elapsed_s")),
+                        "controller_log_excerpt": follow_path_result.get("controller_log_excerpt", {}),
+                        "cmd_vel_counts": follow_path_result.get("cmd_vel_counts", {}),
+                        "cmd_vel_samples": follow_path_result.get("cmd_vel_samples", []),
+                        "cmd_vel_last": follow_path_result.get("cmd_vel_last", {}),
+                        "odom_count": int(clean_number(follow_path_result.get("odom_count")) or 0),
+                        "odom_samples": follow_path_result.get("odom_samples", []),
+                        "odom_last": follow_path_result.get("odom_last", {}),
+                        "odom_delta": follow_path_result.get("odom_delta", {}),
+                        "path_progress_samples": follow_path_result.get("path_progress_samples", []),
+                        "path_progress_last": follow_path_result.get("path_progress_last", {}),
+                        "dispatch_terminal_path_distance_m": clean_rounded_number(
+                            dispatch_terminal_path_distance_m
+                        ),
+                        "completion_terminal_path_distance_m": clean_rounded_number(
+                            completion_terminal_path_distance_m
+                        ),
+                        "terminal_path_distance_reduction_m": numeric_reduction(
+                            dispatch_terminal_path_distance_m,
+                            completion_terminal_path_distance_m,
+                        ),
+                        "dispatch_terminal_yaw_error_deg": clean_rounded_number(
+                            dispatch_terminal_yaw_error_deg
+                        ),
+                        "completion_terminal_yaw_error_deg": clean_rounded_number(
+                            completion_terminal_yaw_error_deg
+                        ),
+                        "dispatch_pre_stage_distance_m": dispatch_pre_stage_distance_m,
+                        "completion_pre_stage_distance_m": completion_pre_stage_distance_m,
+                        "pre_stage_distance_reduction_m": numeric_reduction(
+                            dispatch_pre_stage_distance_m,
+                            completion_pre_stage_distance_m,
+                        ),
+                        "dispatch_lateral_error_m": dispatch_lateral_error_m,
+                        "completion_lateral_error_m": completion_lateral_error_m,
+                        "lateral_error_reduction_m": numeric_reduction(
+                            dispatch_lateral_error_m,
+                            completion_lateral_error_m,
+                        ),
+                        "dispatch_yaw_error_deg": dispatch_yaw_error_deg,
+                        "completion_yaw_error_deg": completion_yaw_error_deg,
+                        "yaw_error_reduction_deg": numeric_reduction(
+                            dispatch_yaw_error_deg,
+                            completion_yaw_error_deg,
+                        ),
+                        "robot_motion_m": clean_rounded_number(follow_path_robot_motion_m),
+                        "ball_motion_m": clean_rounded_number(follow_path_ball_motion_m),
+                        "completion_ball_clearance_m": clean_rounded_number(completion_ball_clearance_m),
+                        "min_plan_ball_clearance_m": clean_rounded_number(
+                            follow_path_plan_dict.get("min_path_ball_clearance_m")
+                        ),
+                        "measured_handoff_ready": bool(completion_handoff_ready),
+                    }
                     append_jsonl(
                         state_history_path,
                         {
@@ -2584,16 +4644,28 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             ),
                             "nav2_follow_path_result": follow_path_result,
                             "nav2_follow_path_ball_motion_m": clean_number(follow_path_ball_motion_m),
+                            "nav2_follow_path_robot_motion_m": clean_number(follow_path_robot_motion_m),
                             "nav2_follow_path_min_ball_clearance_m": clean_number(
                                 follow_path_plan_dict.get("min_path_ball_clearance_m")
                             ),
                             "nav2_follow_path_completion_ball_clearance_m": clean_number(
                                 completion_ball_clearance_m
                             ),
+                            "nav2_follow_path_terminal_path_distance_m": clean_number(
+                                completion_terminal_path_distance_m
+                            ),
+                            "nav2_follow_path_terminal_yaw_error_deg": clean_number(
+                                completion_terminal_yaw_error_deg
+                            ),
+                            "nav2_follow_path_feedback_count": int(
+                                clean_number(follow_path_result.get("feedback_count")) or 0
+                            ),
+                            "nav2_follow_path_feedback_samples": follow_path_result.get("feedback_samples", []),
+                            "nav2_follow_path_diagnostics": follow_path_diagnostics,
                             "nav2_follow_path_measured_handoff_ready": completion_handoff_ready,
                             "selected_command": {},
                             **self._control_debug_fields(
-                                strategy_name=NAV2_FOLLOW_PATH_REACQUIRE_OBJECTIVE,
+                                strategy_name=follow_path_objective_name,
                                 objective_name="follow_path_pre_stage_path",
                             ),
                         },
@@ -2617,7 +4689,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         self._set_manual_drive(
                             enabled=False,
                             mode=failure_reason,
-                            rationale="Nav2 FollowPath pre-stage reacquire stopped before measured handoff.",
+                            rationale=f"{follow_path_display_name} pre-stage reacquire stopped before measured handoff.",
                         )
                         failure_payload = {
                             "failure_reason": failure_reason,
@@ -2639,7 +4711,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             "entered_goal_side_before_capture": last_failure_reason == "entered_goal_side_before_capture",
                             "nav2_follow_path_plan": follow_path_plan_dict,
                             "nav2_follow_path_result": follow_path_result,
+                            "nav2_follow_path_diagnostics": follow_path_diagnostics,
                             "nav2_follow_path_ball_motion_m": clean_number(follow_path_ball_motion_m),
+                            "nav2_follow_path_robot_motion_m": clean_number(follow_path_robot_motion_m),
                             "pre_stage_at_completion": completion_snapshot or {},
                         }
                         write_json(mission_root / f"{target.id}_{failure_reason}.json", failure_payload)
@@ -2647,7 +4721,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     self._set_manual_drive(
                         enabled=False,
                         mode="nav2_follow_path_reacquire_complete",
-                        rationale="Nav2 FollowPath pre-stage reacquire completed; waiting for measured handoff dwell.",
+                        rationale=(
+                            f"{follow_path_display_name} pre-stage reacquire completed; "
+                            "waiting for measured handoff dwell."
+                        ),
                     )
                     time.sleep(self.args.poll_s)
                     continue
@@ -3526,8 +5603,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **pre_stage_reacquire_fsm_debug_fields,
                     **pre_stage_path_tracker_debug_fields,
                     **pre_stage_trajectory_owner_debug_fields,
+                    **object_centric_debug_fields,
                 },
             )
+            if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                object_centric_previous_command = pre_stage_command
+                object_centric_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_previous_ball_pose
             constrained_local_previous_ball_pose = dict(ball_pose or {}) if ball_pose else constrained_local_previous_ball_pose
             docking_reacquire_previous_ball_pose = (
                 dict(ball_pose or {}) if ball_pose else docking_reacquire_previous_ball_pose
@@ -3627,8 +5708,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "pre_stage_pose_world": pre_stage_pose_world,
                     "pre_stage_pose_reached": True,
                     "pre_stage_time_s": round(pre_stage_time_s, 6),
+                    "pre_stage_timeout_budget_s": round(pre_stage_timeout_s, 6),
                     "pre_stage_handoff_pass": True,
                     "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+                    "object_centric_policy": last_object_centric_policy,
                 }
             if pre_stage_command is not None:
                 self._set_manual_drive(
@@ -3653,10 +5736,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "pre_stage_pose_world": pre_stage_pose_world,
             "pre_stage_pose_reached": bool(pre_stage_pose_reached_once),
             "pre_stage_time_s": round(pre_stage_time_s, 6),
+            "pre_stage_timeout_budget_s": round(pre_stage_timeout_s, 6),
             "pre_stage_handoff_pass": False,
             "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
             "approach_failure_reason": last_failure_reason,
             "entered_goal_side_before_capture": last_failure_reason == "entered_goal_side_before_capture",
+            "object_centric_policy": last_object_centric_policy,
         }
         write_json(mission_root / f"{target.id}_pre_stage_timeout.json", timeout_payload)
         return False, timeout_payload
@@ -3673,13 +5758,27 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         attempt_index: int = 0,
         attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
-        deadline = time.monotonic() + max(self.args.capture_timeout_s, 0.1)
+        capture_timeout_s = max(self.args.capture_timeout_s, 0.1)
+        if (
+            self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            and self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+        ):
+            capture_timeout_s = max(capture_timeout_s, DEFAULT_OBJECT_CENTRIC_FETCH_CAPTURE_TIMEOUT_S)
+        deadline = time.monotonic() + capture_timeout_s
         captured_started_monotonic: float | None = None
         zone_centered_started_monotonic: float | None = None
         previous_ball_pose: dict[str, Any] | None = None
         last_capture = None
         last_zone_score = None
         stage_started_monotonic = time.monotonic() if enable_goal_side_stage else None
+        stage_timeout_s = (
+            DEFAULT_OBJECT_CENTRIC_STAGE_TIMEOUT_S
+            if (
+                enable_goal_side_stage
+                and self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+            )
+            else DEFAULT_STAGE_TIMEOUT_S
+        )
         stage_ready_started_monotonic: float | None = None
         stage_ready_latched = False
         stage_completed = not enable_goal_side_stage
@@ -3697,10 +5796,371 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         approach_failure_reason = ""
         last_approach_snapshot: dict[str, Any] = {}
         latest_pre_capture_command_mode = ""
+        handoff_robot_pose: dict[str, Any] | None = None
+        handoff_ball_pose: dict[str, Any] | None = None
+        capture_entry_ball_pose_source = ""
+        capture_entry_gap_fill_active = False
+        capture_entry_gap_fill_reason = ""
+        last_capture_entry_snapshot: dict[str, Any] = {}
+        last_capture_entry_diagnostics: dict[str, Any] = {}
+        last_capture_entry_ready_source = ""
+        last_capture_entry_push_readiness_gate: dict[str, Any] = {}
+        last_capture_entry_timeout_s = DEFAULT_CAPTURE_ENTRY_TIMEOUT_S
+        capture_entry_push_readiness_initial_score: float | None = None
+        capture_entry_push_readiness_best_score: float | None = None
+        capture_entry_push_readiness_last_score: float | None = None
+        capture_handoff_robot_pose: dict[str, Any] | None = None
+        capture_handoff_ball_pose: dict[str, Any] | None = None
+        capture_started_monotonic: float | None = None
+        last_capture_diagnostics: dict[str, Any] = {}
+        capture_yaw_sample_count = 0
+        capture_yaw_travel_rad = 0.0
+        capture_yaw_previous_raw_rad: float | None = None
+        capture_yaw_previous_unwrapped_rad: float | None = None
+        capture_yaw_min_unwrapped_rad: float | None = None
+        capture_yaw_max_unwrapped_rad: float | None = None
+        capture_yaw_previous_sign = 0
+        capture_yaw_sign_crossing_count = 0
+        object_centric_previous_command: PlaceControlCommand | None = None
+        object_centric_previous_ball_pose: dict[str, Any] | None = None
+        last_object_centric_policy: dict[str, Any] = {}
+
+        def _capture_entry_timeout_cause(*, manager_directive: str = "") -> str:
+            directive = str(manager_directive or "")
+            if (
+                directive == "recover_goal_side"
+                or approach_failure_reason == "capture_entry_goal_side_loss"
+                or entered_goal_side_before_capture
+            ):
+                return "goal_side_authority_lost"
+            if capture_entry_reached_once or capture_entry_ready_latched:
+                return "ready_dwell_not_completed"
+            return "ready_band_never_reached"
+
+        def _capture_entry_push_readiness_score(gate: dict[str, Any] | None) -> float | None:
+            payload = gate if isinstance(gate, dict) else {}
+            errors = payload.get("relative_errors", {}) if isinstance(payload.get("relative_errors"), dict) else {}
+            thresholds = payload.get("thresholds", {}) if isinstance(payload.get("thresholds"), dict) else {}
+            lateral_error_m = clean_number(errors.get("robot_lateral_error_m"))
+            yaw_error_deg = clean_number(errors.get("robot_yaw_error_deg"))
+            standoff_m = clean_number(errors.get("robot_standoff_m"))
+            max_lateral_error_m = clean_number(thresholds.get("max_lateral_error_m"))
+            max_yaw_error_deg = clean_number(thresholds.get("max_yaw_error_deg"))
+            min_standoff_m = clean_number(thresholds.get("min_standoff_m"))
+            max_standoff_m = clean_number(thresholds.get("max_standoff_m"))
+            components: list[float] = []
+            if lateral_error_m is not None and max_lateral_error_m and max_lateral_error_m > 0.0:
+                components.append(abs(float(lateral_error_m)) / float(max_lateral_error_m))
+            if yaw_error_deg is not None and max_yaw_error_deg and max_yaw_error_deg > 0.0:
+                components.append(abs(float(yaw_error_deg)) / float(max_yaw_error_deg))
+            if standoff_m is not None and min_standoff_m is not None and max_standoff_m is not None:
+                if float(standoff_m) < float(min_standoff_m) and float(min_standoff_m) > 0.0:
+                    components.append(float(min_standoff_m) / max(float(standoff_m), 1.0e-6))
+                elif float(standoff_m) > float(max_standoff_m) and float(max_standoff_m) > 0.0:
+                    components.append(float(standoff_m) / float(max_standoff_m))
+                else:
+                    components.append(1.0)
+            if not components:
+                return None
+            return round(float(max(components)), 6)
+
+        def _capture_entry_push_readiness_progress_delta() -> float:
+            if (
+                capture_entry_push_readiness_initial_score is None
+                or capture_entry_push_readiness_best_score is None
+            ):
+                return 0.0
+            return max(
+                0.0,
+                float(capture_entry_push_readiness_initial_score)
+                - float(capture_entry_push_readiness_best_score),
+            )
+
+        def _capture_entry_diagnostics_payload(
+            *,
+            now_monotonic: float,
+            snapshot: dict[str, Any] | None,
+            ready_signal: bool,
+            manager_directive: str,
+            selected_command: Any = None,
+            robot_pose: dict[str, Any] | None = None,
+            ball_pose: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            capture_entry_elapsed_s = 0.0
+            if capture_entry_started_monotonic is not None:
+                capture_entry_elapsed_s = max(0.0, now_monotonic - float(capture_entry_started_monotonic))
+            ready_dwell_s = 0.0
+            if capture_entry_ready_started_monotonic is not None:
+                ready_dwell_s = max(0.0, now_monotonic - float(capture_entry_ready_started_monotonic))
+            snapshot_payload = dict(snapshot or {})
+            selected_command_payload = selected_command.to_dict() if selected_command is not None else {}
+            robot_delta_m = (
+                pose_delta_m(handoff_robot_pose, robot_pose)
+                if handoff_robot_pose is not None and robot_pose is not None
+                else None
+            )
+            ball_delta_m = (
+                pose_delta_m(handoff_ball_pose, ball_pose)
+                if handoff_ball_pose is not None and ball_pose is not None
+                else None
+            )
+            return {
+                "elapsed_s": round(float(capture_entry_elapsed_s), 6),
+                "timeout_s": round(float(last_capture_entry_timeout_s), 6),
+                "ready_signal": bool(ready_signal),
+                "ready_latched": bool(capture_entry_ready_latched),
+                "ready_reached_once": bool(capture_entry_reached_once),
+                "ready_source": str(last_capture_entry_ready_source or ""),
+                "ready_dwell_s": round(float(ready_dwell_s), 6),
+                "ready_dwell_required_s": round(float(DEFAULT_CAPTURE_ENTRY_READY_DWELL_S), 6),
+                "ready_dwell_completed": bool(
+                    capture_entry_ready_started_monotonic is not None
+                    and ready_dwell_s >= DEFAULT_CAPTURE_ENTRY_READY_DWELL_S
+                ),
+                "timeout_cause": _capture_entry_timeout_cause(manager_directive=manager_directive),
+                "manager_directive": str(manager_directive or ""),
+                "selected_command": selected_command_payload,
+                "selected_command_mode": str(selected_command_payload.get("mode", "") or ""),
+                "ball_pose_source": str(capture_entry_ball_pose_source or ""),
+                "gap_fill_active": bool(capture_entry_gap_fill_active),
+                "gap_fill_reason": str(capture_entry_gap_fill_reason or ""),
+                "gap_fill_max_robot_delta_m": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M), 6),
+                "gap_fill_max_elapsed_s": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S), 6),
+                "push_readiness_score": clean_rounded_number(capture_entry_push_readiness_last_score),
+                "push_readiness_best_score": clean_rounded_number(capture_entry_push_readiness_best_score),
+                "push_readiness_progress_delta": clean_rounded_number(
+                    _capture_entry_push_readiness_progress_delta()
+                ),
+                "robot_delta_from_handoff_m": clean_rounded_number(robot_delta_m),
+                "ball_delta_from_handoff_m": clean_rounded_number(ball_delta_m),
+                "handoff_robot_pose": dict(handoff_robot_pose or {}),
+                "handoff_ball_pose": dict(handoff_ball_pose or {}),
+                "capture_entry_snapshot": snapshot_payload,
+                "capture_entry_push_readiness_gate": dict(last_capture_entry_push_readiness_gate or {}),
+                "ball_x_m": clean_rounded_number(snapshot_payload.get("ball_x_m")),
+                "ball_y_m": clean_rounded_number(snapshot_payload.get("ball_y_m")),
+                "bearing_rad": clean_rounded_number(snapshot_payload.get("bearing_rad")),
+                "robot_longitudinal_projection_m": clean_rounded_number(
+                    snapshot_payload.get("robot_longitudinal_projection_m")
+                ),
+                "robot_lateral_error_m": clean_rounded_number(snapshot_payload.get("robot_lateral_error_m")),
+                "robot_on_goal_side": bool(snapshot_payload.get("robot_on_goal_side", False)),
+                "entered_goal_side_before_capture": bool(entered_goal_side_before_capture),
+            }
+
+        def _command_payload(command: Any = None) -> dict[str, Any]:
+            if command is None:
+                return {}
+            if isinstance(command, dict):
+                return dict(command)
+            to_dict = getattr(command, "to_dict", None)
+            if callable(to_dict):
+                payload = to_dict()
+                return dict(payload) if isinstance(payload, dict) else {}
+            return {}
+
+        def _record_capture_yaw(robot_pose: dict[str, Any] | None) -> None:
+            nonlocal capture_yaw_sample_count
+            nonlocal capture_yaw_travel_rad
+            nonlocal capture_yaw_previous_raw_rad
+            nonlocal capture_yaw_previous_unwrapped_rad
+            nonlocal capture_yaw_min_unwrapped_rad
+            nonlocal capture_yaw_max_unwrapped_rad
+            nonlocal capture_yaw_previous_sign
+            nonlocal capture_yaw_sign_crossing_count
+            robot_xyyaw = world_pose_xyyaw(robot_pose or {})
+            if robot_xyyaw is None:
+                return
+            yaw = float(robot_xyyaw[2])
+            if capture_yaw_previous_raw_rad is None:
+                unwrapped = yaw
+            else:
+                delta = normalize_angle(yaw - float(capture_yaw_previous_raw_rad))
+                capture_yaw_travel_rad += abs(float(delta))
+                unwrapped = float(capture_yaw_previous_unwrapped_rad or 0.0) + float(delta)
+            capture_yaw_sample_count += 1
+            capture_yaw_previous_raw_rad = yaw
+            capture_yaw_previous_unwrapped_rad = unwrapped
+            capture_yaw_min_unwrapped_rad = (
+                unwrapped
+                if capture_yaw_min_unwrapped_rad is None
+                else min(float(capture_yaw_min_unwrapped_rad), unwrapped)
+            )
+            capture_yaw_max_unwrapped_rad = (
+                unwrapped
+                if capture_yaw_max_unwrapped_rad is None
+                else max(float(capture_yaw_max_unwrapped_rad), unwrapped)
+            )
+            deadband_rad = math.radians(float(AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG))
+            if abs(yaw) > deadband_rad:
+                current_sign = 1 if yaw > 0.0 else -1
+                if capture_yaw_previous_sign and current_sign != capture_yaw_previous_sign:
+                    capture_yaw_sign_crossing_count += 1
+                capture_yaw_previous_sign = current_sign
+
+        def _capture_geometry_gate_payload() -> dict[str, Any]:
+            yaw_span_rad = 0.0
+            if capture_yaw_min_unwrapped_rad is not None and capture_yaw_max_unwrapped_rad is not None:
+                yaw_span_rad = float(capture_yaw_max_unwrapped_rad) - float(capture_yaw_min_unwrapped_rad)
+            yaw_travel_deg = math.degrees(float(capture_yaw_travel_rad))
+            yaw_span_deg = math.degrees(float(yaw_span_rad))
+            flags: list[str] = []
+            if yaw_travel_deg > float(AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG):
+                flags.append("capture_yaw_watch")
+            if capture_yaw_sign_crossing_count >= int(AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT):
+                flags.append("capture_yaw_sign_crossing_watch")
+            return {
+                "pass": not flags,
+                "flags": flags,
+                "capture_yaw_sample_count": int(capture_yaw_sample_count),
+                "capture_yaw_travel_deg": round(float(yaw_travel_deg), 6),
+                "capture_yaw_span_deg": round(float(yaw_span_deg), 6),
+                "capture_yaw_sign_crossing_count": int(capture_yaw_sign_crossing_count),
+                "thresholds": {
+                    "capture_yaw_watch_deg": round(float(AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG), 6),
+                    "capture_yaw_sign_crossing_watch_count": int(
+                        AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT
+                    ),
+                    "capture_yaw_sign_crossing_deadband_deg": round(
+                        float(AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG),
+                        6,
+                    ),
+                },
+                "source": "live_capture_phase",
+            }
+
+        def _capture_diagnostics_payload(
+            *,
+            now_monotonic: float,
+            capture: Any = None,
+            zone_score: Any = None,
+            approach_snapshot: dict[str, Any] | None = None,
+            selected_command: Any = None,
+            raw_command: Any = None,
+            command_source: str = "",
+            command_limit_reason: str = "",
+            robot_pose: dict[str, Any] | None = None,
+            ball_pose: dict[str, Any] | None = None,
+            zone_entry_handoff_ready: bool = False,
+            secure_capture_ready: bool = False,
+            soft_capture_handoff_ready: bool = False,
+            terminal_cause: str = "",
+        ) -> dict[str, Any]:
+            capture_elapsed_s = 0.0
+            if capture_started_monotonic is not None:
+                capture_elapsed_s = max(0.0, now_monotonic - float(capture_started_monotonic))
+            selected_command_payload = _command_payload(selected_command)
+            raw_command_payload = _command_payload(raw_command)
+            robot_delta_m = (
+                pose_delta_m(capture_handoff_robot_pose, robot_pose)
+                if capture_handoff_robot_pose is not None and robot_pose is not None
+                else None
+            )
+            ball_delta_m = (
+                pose_delta_m(capture_handoff_ball_pose, ball_pose)
+                if capture_handoff_ball_pose is not None and ball_pose is not None
+                else None
+            )
+            capture_payload = capture.to_dict() if capture else {}
+            zone_payload = zone_score.to_dict() if zone_score else {}
+            first_contact_alignment = clean_rounded_number(first_contact_alignment_value)
+            command_limited = bool(
+                raw_command_payload
+                and selected_command_payload
+                and (
+                    clean_rounded_number(raw_command_payload.get("linear_x"))
+                    != clean_rounded_number(selected_command_payload.get("linear_x"))
+                    or clean_rounded_number(raw_command_payload.get("angular_z"))
+                    != clean_rounded_number(selected_command_payload.get("angular_z"))
+                    or clean_rounded_number(raw_command_payload.get("target_speed_scale"))
+                    != clean_rounded_number(selected_command_payload.get("target_speed_scale"))
+                    or str(raw_command_payload.get("mode", "") or "")
+                    != str(selected_command_payload.get("mode", "") or "")
+                )
+            )
+            return {
+                "elapsed_s": round(float(capture_elapsed_s), 6),
+                "terminal_cause": str(terminal_cause or ""),
+                "command_source": str(command_source or ""),
+                "command_limited": command_limited,
+                "command_limit_reason": str(command_limit_reason or ""),
+                "selected_command": selected_command_payload,
+                "raw_selected_command": raw_command_payload,
+                "selected_command_mode": str(selected_command_payload.get("mode", "") or ""),
+                "linear_x": clean_rounded_number(selected_command_payload.get("linear_x")),
+                "angular_z": clean_rounded_number(selected_command_payload.get("angular_z")),
+                "target_speed_scale": clean_rounded_number(selected_command_payload.get("target_speed_scale")),
+                "capture_snapshot": capture_payload,
+                "zone_snapshot": zone_payload,
+                "approach_snapshot": dict(approach_snapshot or {}),
+                "capture_entry_snapshot": last_capture_entry_snapshot,
+                "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                "capture_geometry_gate": _capture_geometry_gate_payload(),
+                "robot_delta_from_capture_entry_handoff_m": clean_rounded_number(robot_delta_m),
+                "ball_delta_from_capture_entry_handoff_m": clean_rounded_number(ball_delta_m),
+                "capture_entry_handoff_robot_pose": dict(capture_handoff_robot_pose or {}),
+                "capture_entry_handoff_ball_pose": dict(capture_handoff_ball_pose or {}),
+                "captured_now": bool(capture and capture.captured),
+                "secure_capture_ready": bool(secure_capture_ready),
+                "soft_capture_handoff_ready": bool(soft_capture_handoff_ready),
+                "zone_entry_handoff_ready": bool(zone_entry_handoff_ready),
+                "first_contact_alignment_seen": first_contact_alignment is not None,
+                "first_contact_push_alignment_deg": first_contact_alignment,
+                "ball_ahead": bool(capture_payload.get("ball_ahead", False)),
+                "ball_x_m": clean_rounded_number(capture_payload.get("ball_x_m")),
+                "ball_y_m": clean_rounded_number(capture_payload.get("ball_y_m")),
+                "bearing_rad": clean_rounded_number(capture_payload.get("bearing_rad")),
+                "within_capture_window": bool(capture_payload.get("within_capture_window", False)),
+                "within_recapture_window": bool(capture_payload.get("within_recapture_window", False)),
+                "zone_center_inside_zone": bool(zone_payload.get("center_inside_zone", False)),
+                "zone_inside_zone": bool(zone_payload.get("inside_zone", False)),
+                "entered_goal_side_before_capture": bool(entered_goal_side_before_capture),
+            }
+
+        def _append_capture_state(
+            *,
+            robot_pose: dict[str, Any] | None,
+            ball_pose: dict[str, Any] | None,
+            capture: Any = None,
+            zone_score: Any = None,
+            ball_motion_m: float | None = None,
+            selected_command: Any = None,
+            capture_diagnostics: dict[str, Any] | None = None,
+            object_centric_policy: dict[str, Any] | None = None,
+        ) -> None:
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "phase": "capture",
+                    "attempt": int(attempt_index),
+                    "attempt_kind": str(attempt_kind),
+                    "target_id": target.id,
+                    "robot_pose": robot_pose,
+                    "ball_pose": ball_pose,
+                    "capture": capture.to_dict() if capture else {},
+                    "zone_score": zone_score.to_dict() if zone_score else {},
+                    "approach_side": last_approach_snapshot,
+                    "capture_entry": last_capture_entry_snapshot,
+                    "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                    "capture_diagnostics": capture_diagnostics or {},
+                    "capture_geometry_gate": _capture_geometry_gate_payload(),
+                    "object_centric_policy": object_centric_policy or {},
+                    "selected_command": _command_payload(selected_command),
+                    "ball_motion_m": ball_motion_m,
+                    **self._control_debug_fields(),
+                },
+            )
 
         def _approach_result_payload(*, failure_reason: str = "") -> dict[str, Any]:
+            fetch_push_ready_handoff = bool(
+                last_capture_entry_ready_source == "fetch_push_readiness"
+                and last_capture_entry_push_readiness_gate.get("pass", False)
+            )
             if failure_reason:
                 verdict = {"pass": False, "reason": str(failure_reason)}
+            elif fetch_push_ready_handoff:
+                verdict = {"pass": True, "reason": ""}
             elif not enable_goal_side_stage and first_contact_alignment_value is None:
                 verdict = {"pass": True, "reason": ""}
             else:
@@ -3722,11 +6182,50 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "stage_time_s": round(float(stage_time_s), 6),
                 "capture_entry_reached": bool(capture_entry_reached_once if enable_goal_side_stage else True),
                 "capture_entry_time_s": round(float(capture_entry_time_s), 6),
+                "capture_entry_ready_source": str(last_capture_entry_ready_source or ""),
+                "capture_entry_push_readiness_gate": dict(last_capture_entry_push_readiness_gate or {}),
                 "approach_failure_reason": str(failure_reason or verdict.get("reason", "") or ""),
+                "capture_geometry_gate": _capture_geometry_gate_payload(),
             }
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
             _dashboard_state, robot_pose, ball_pose = self._control_loop_state(session_id=session_id, target=target)
+            if handoff_robot_pose is None and isinstance(robot_pose, dict):
+                handoff_robot_pose = dict(robot_pose)
+            if handoff_ball_pose is None and isinstance(ball_pose, dict):
+                handoff_ball_pose = dict(ball_pose)
+            capture_entry_ball_pose_source = "live" if isinstance(ball_pose, dict) else ""
+            capture_entry_gap_fill_active = False
+            capture_entry_gap_fill_reason = ""
+            if (
+                enable_goal_side_stage
+                and stage_completed
+                and not capture_entry_completed
+                and isinstance(robot_pose, dict)
+                and not isinstance(ball_pose, dict)
+                and isinstance(handoff_ball_pose, dict)
+            ):
+                capture_entry_elapsed_s = (
+                    max(0.0, now_monotonic - float(capture_entry_started_monotonic))
+                    if capture_entry_started_monotonic is not None
+                    else 0.0
+                )
+                robot_delta_from_handoff = (
+                    pose_delta_m(handoff_robot_pose, robot_pose)
+                    if handoff_robot_pose is not None
+                    else 0.0
+                )
+                if (
+                    robot_delta_from_handoff is not None
+                    and float(robot_delta_from_handoff) <= DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M
+                    and capture_entry_elapsed_s <= DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S
+                ):
+                    ball_pose = dict(handoff_ball_pose)
+                    capture_entry_ball_pose_source = "handoff_gap_fill"
+                    capture_entry_gap_fill_active = True
+                    capture_entry_gap_fill_reason = "missing_live_ball_pose_after_stage_handoff"
+                else:
+                    capture_entry_gap_fill_reason = "gap_fill_limit_exceeded"
             capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
             zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
             approach_snapshot = (
@@ -3772,6 +6271,25 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if robot_pose and ball_pose
                     else None
                 )
+                stage_object_centric_policy: dict[str, Any] = {}
+                if (
+                    self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                    and robot_pose
+                    and ball_pose
+                ):
+                    object_decision = decide_object_centric_gather_command(
+                        robot_pose,
+                        ball_pose or {},
+                        phase="stage",
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                        previous_command=object_centric_previous_command,
+                        previous_ball_pose=object_centric_previous_ball_pose,
+                    )
+                    last_object_centric_policy = dict(object_decision.diagnostics)
+                    stage_object_centric_policy = last_object_centric_policy
+                    if object_decision.command is not None:
+                        stage_command = object_decision.command
                 if stage_command is not None:
                     latest_pre_capture_command_mode = str(stage_command.mode)
                 stage_ready_signal = bool(
@@ -3815,6 +6333,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         rationale="Hold the first valid staging pose steady until capture entry begins.",
                     )
                     latest_pre_capture_command_mode = str(stage_command.mode)
+                    if stage_object_centric_policy:
+                        stage_object_centric_policy = {
+                            **stage_object_centric_policy,
+                            "selected_command": stage_command.to_dict(),
+                            "mode": str(stage_command.mode),
+                        }
+                        last_object_centric_policy = dict(stage_object_centric_policy)
                 self._update_gather_runtime_state(
                     mission_phase="stage",
                     gather_phase="stage",
@@ -3842,6 +6367,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "approach_side": approach_snapshot or {},
                         "manager_directive": stage_manager_decision.directive,
                         "selected_command": stage_command.to_dict() if stage_command else {},
+                        "object_centric_policy": stage_object_centric_policy,
                         "ball_motion_m": ball_motion_m,
                         **self._control_debug_fields(),
                     },
@@ -3872,7 +6398,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     continue
                 if (
                     stage_started_monotonic is not None
-                    and (now_monotonic - stage_started_monotonic) >= DEFAULT_STAGE_TIMEOUT_S
+                    and (now_monotonic - stage_started_monotonic) >= stage_timeout_s
                     and not stage_ready_latched
                 ):
                     stage_time_s = now_monotonic - float(stage_started_monotonic)
@@ -3892,6 +6418,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "failure_stage": "stage",
                         "capture_state": capture.to_dict() if capture else {},
                         "zone_score": zone_score.to_dict() if zone_score else {},
+                        "object_centric_policy": last_object_centric_policy,
                         **_approach_result_payload(failure_reason=approach_failure_reason),
                     }
                     write_json(mission_root / f"{target.id}_stage_timeout.json", timeout_payload)
@@ -3905,10 +6432,19 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         rationale=stage_command.rationale,
                     )
                     self._update_gather_runtime_state(latest_control_command=stage_command.to_dict())
+                    if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                        object_centric_previous_command = stage_command
+                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    object_centric_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_previous_ball_pose
                 previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
                 time.sleep(self.args.poll_s)
                 continue
             if enable_goal_side_stage and not capture_entry_completed:
+                fetch_corridor_handoff_required = bool(
+                    self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+                    and self.gather_control_family
+                    in {NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY, AI_PUSH_COAST_SERVO_CONTROL_FAMILY}
+                )
                 capture_entry_snapshot_payload = (
                     capture_entry_snapshot(
                         robot_pose,
@@ -3919,11 +6455,68 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if robot_pose and ball_pose
                     else None
                 )
-                capture_entry_ready_signal = bool(
+                capture_entry_ball_frame_ready = bool(
                     isinstance(capture_entry_snapshot_payload, dict)
                     and capture_entry_snapshot_payload.get("capture_entry_reached", False)
                 )
+                capture_entry_ready_signal = bool(capture_entry_ball_frame_ready and not fetch_corridor_handoff_required)
+                capture_entry_ready_source = "capture_entry_ball_frame" if capture_entry_ready_signal else ""
+                capture_entry_push_readiness_gate: dict[str, Any] = {}
+                if fetch_corridor_handoff_required and robot_pose and ball_pose:
+                    capture_entry_push_readiness_gate = evaluate_fetch_push_readiness(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        fetch_pose_world=self._fetch_pose_world(),
+                        delivery_radius_m=float(self.fetch_delivery_radius_m),
+                        max_standoff_m=DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M,
+                    )
+                    capture_entry_push_readiness_last_score = _capture_entry_push_readiness_score(
+                        capture_entry_push_readiness_gate
+                    )
+                    if capture_entry_push_readiness_last_score is not None:
+                        if capture_entry_push_readiness_initial_score is None:
+                            capture_entry_push_readiness_initial_score = float(
+                                capture_entry_push_readiness_last_score
+                            )
+                        if (
+                            capture_entry_push_readiness_best_score is None
+                            or float(capture_entry_push_readiness_last_score)
+                            < float(capture_entry_push_readiness_best_score)
+                        ):
+                            capture_entry_push_readiness_best_score = float(
+                                capture_entry_push_readiness_last_score
+                            )
+                    push_readiness_progress_delta = _capture_entry_push_readiness_progress_delta()
+                    last_capture_entry_timeout_s = (
+                        DEFAULT_FETCH_CAPTURE_ENTRY_PUSH_READINESS_TIMEOUT_S
+                        if push_readiness_progress_delta
+                        >= DEFAULT_FETCH_CAPTURE_ENTRY_PUSH_READINESS_PROGRESS_MIN_SCORE_DELTA
+                        else DEFAULT_CAPTURE_ENTRY_TIMEOUT_S
+                    )
+                    if isinstance(capture_entry_snapshot_payload, dict):
+                        capture_entry_snapshot_payload = {
+                            **capture_entry_snapshot_payload,
+                            "capture_entry_ball_frame_reached": bool(capture_entry_ball_frame_ready),
+                            "capture_entry_reached": False,
+                            "capture_entry_ready_source": capture_entry_ready_source,
+                            "capture_entry_push_readiness_gate": dict(capture_entry_push_readiness_gate),
+                        }
+                    if bool(capture_entry_push_readiness_gate.get("pass", False)):
+                        capture_entry_ready_signal = True
+                        capture_entry_ready_source = "fetch_push_readiness"
+                        if isinstance(capture_entry_snapshot_payload, dict):
+                            capture_entry_snapshot_payload = {
+                                **capture_entry_snapshot_payload,
+                                "capture_entry_reached": True,
+                                "capture_entry_ready_source": capture_entry_ready_source,
+                                "fetch_push_readiness_ready": True,
+                            }
+                else:
+                    capture_entry_push_readiness_last_score = None
+                    last_capture_entry_timeout_s = DEFAULT_CAPTURE_ENTRY_TIMEOUT_S
+                last_capture_entry_push_readiness_gate = dict(capture_entry_push_readiness_gate or {})
                 if capture_entry_ready_signal:
+                    last_capture_entry_ready_source = capture_entry_ready_source or "capture_entry_ball_frame"
                     capture_entry_reached_once = True
                     capture_entry_ready_latched = True
                     capture_entry_ready_started_monotonic = (
@@ -3933,6 +6526,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     )
                 elif not capture_entry_ready_latched:
                     capture_entry_ready_started_monotonic = None
+                    last_capture_entry_ready_source = ""
                 capture_entry_command = (
                     compute_capture_entry_command(
                         robot_pose,
@@ -3943,6 +6537,62 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if robot_pose and ball_pose
                     else None
                 )
+                if (
+                    fetch_corridor_handoff_required
+                    and not bool(capture_entry_push_readiness_gate.get("pass", False))
+                    and robot_pose
+                    and ball_pose
+                ):
+                    push_readiness_setup_command = compute_fetch_push_readiness_setup_command(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        fetch_pose_world=self._fetch_pose_world(),
+                        delivery_radius_m=float(self.fetch_delivery_radius_m),
+                        max_standoff_m=DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M,
+                    )
+                    if push_readiness_setup_command is not None:
+                        capture_entry_command = PlaceControlCommand(
+                            mode=f"capture_entry_{push_readiness_setup_command.mode}",
+                            linear_x=float(push_readiness_setup_command.linear_x),
+                            angular_z=float(push_readiness_setup_command.angular_z),
+                            target_speed_scale=float(push_readiness_setup_command.target_speed_scale),
+                            rationale=push_readiness_setup_command.rationale,
+                        )
+                    elif capture_entry_ball_frame_ready:
+                        capture_entry_command = PlaceControlCommand(
+                            mode="capture_entry_fetch_push_wait",
+                            linear_x=0.0,
+                            angular_z=0.0,
+                            target_speed_scale=0.0,
+                            rationale="Ball-frame capture-entry is ready, but fetch push-readiness is not satisfied.",
+                        )
+                capture_entry_object_centric_policy: dict[str, Any] = {}
+                if (
+                    self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                    and robot_pose
+                    and ball_pose
+                ):
+                    object_decision = decide_object_centric_gather_command(
+                        robot_pose,
+                        ball_pose or {},
+                        phase="capture_entry",
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                        previous_command=object_centric_previous_command,
+                        previous_ball_pose=object_centric_previous_ball_pose,
+                    )
+                    last_object_centric_policy = dict(object_decision.diagnostics)
+                    capture_entry_object_centric_policy = last_object_centric_policy
+                    if object_decision.command is not None:
+                        capture_entry_command = object_decision.command
+                if capture_entry_ready_signal and capture_entry_ready_source == "fetch_push_readiness":
+                    capture_entry_command = PlaceControlCommand(
+                        mode="capture_entry_fetch_push_ready",
+                        linear_x=0.0,
+                        angular_z=0.0,
+                        target_speed_scale=0.0,
+                        rationale="Fetch-to-pose push-readiness is satisfied; hold for handoff to corridor push.",
+                    )
                 if capture_entry_command is not None:
                     latest_pre_capture_command_mode = str(capture_entry_command.mode)
                 capture_entry_manager_decision = decide_gather_manager_directive(
@@ -3958,11 +6608,32 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         latest_command_mode=latest_pre_capture_command_mode,
                     )
                 )
+                capture_entry_diagnostics_payload = _capture_entry_diagnostics_payload(
+                    now_monotonic=now_monotonic,
+                    snapshot=capture_entry_snapshot_payload,
+                    ready_signal=capture_entry_ready_signal,
+                    manager_directive=capture_entry_manager_decision.directive,
+                    selected_command=capture_entry_command,
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                )
+                last_capture_entry_snapshot = dict(capture_entry_snapshot_payload or {})
+                last_capture_entry_diagnostics = dict(capture_entry_diagnostics_payload)
                 if capture_entry_manager_decision.directive == "recover_goal_side":
                     capture_entry_ready_latched = False
                     capture_entry_ready_started_monotonic = None
                     entered_goal_side_before_capture = True
                     approach_failure_reason = "capture_entry_goal_side_loss"
+                    capture_entry_diagnostics_payload = _capture_entry_diagnostics_payload(
+                        now_monotonic=now_monotonic,
+                        snapshot=capture_entry_snapshot_payload,
+                        ready_signal=capture_entry_ready_signal,
+                        manager_directive=capture_entry_manager_decision.directive,
+                        selected_command=capture_entry_command,
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                    )
+                    last_capture_entry_diagnostics = dict(capture_entry_diagnostics_payload)
                     self._set_manual_drive(
                         enabled=False,
                         mode="capture_entry_goal_side_loss",
@@ -3973,6 +6644,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "failure_stage": "capture_entry",
                         "capture_state": capture.to_dict() if capture else {},
                         "zone_score": zone_score.to_dict() if zone_score else {},
+                        "capture_entry_snapshot": last_capture_entry_snapshot,
+                        "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                        "object_centric_policy": last_object_centric_policy,
                         **_approach_result_payload(failure_reason=approach_failure_reason),
                     }
                     write_json(mission_root / f"{target.id}_capture_entry_goal_side_loss.json", failure_payload)
@@ -4003,8 +6677,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "approach_side": approach_snapshot or {},
                         "capture_entry": capture_entry_snapshot_payload or {},
+                        "capture_entry_diagnostics": capture_entry_diagnostics_payload,
                         "manager_directive": capture_entry_manager_decision.directive,
                         "selected_command": capture_entry_command.to_dict() if capture_entry_command else {},
+                        "ball_pose_source": capture_entry_ball_pose_source,
+                        "capture_entry_gap_fill": {
+                            "active": bool(capture_entry_gap_fill_active),
+                            "reason": str(capture_entry_gap_fill_reason or ""),
+                            "max_robot_delta_m": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M), 6),
+                            "max_elapsed_s": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S), 6),
+                        },
+                        "object_centric_policy": capture_entry_object_centric_policy,
                         "ball_motion_m": ball_motion_m,
                         **self._control_debug_fields(),
                     },
@@ -4019,6 +6702,29 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     capture_entry_completed = True
                     capture_entry_ready_latched = False
                     capture_entry_time_s = now_monotonic - float(capture_entry_started_monotonic or now_monotonic)
+                    capture_started_monotonic = now_monotonic
+                    capture_handoff_robot_pose = dict(robot_pose or {}) if isinstance(robot_pose, dict) else None
+                    capture_handoff_ball_pose = dict(ball_pose or {}) if isinstance(ball_pose, dict) else None
+                    if last_capture_entry_ready_source == "fetch_push_readiness":
+                        self._set_manual_drive(
+                            enabled=False,
+                            mode="capture_entry_fetch_push_ready",
+                            rationale="Fetch-to-pose push-readiness is satisfied; handing off to corridor push.",
+                        )
+                        self._update_gather_runtime_state(
+                            latest_feedback=f"Fetch push-readiness reached on {target.label}; starting corridor push.",
+                        )
+                        return True, {
+                            "capture_state": capture.to_dict() if capture else {},
+                            "zone_score": zone_score.to_dict() if zone_score else {},
+                            "handoff_kind": "fetch_push_ready",
+                            "capture_entry_snapshot": last_capture_entry_snapshot,
+                            "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                            "capture_entry_push_readiness_gate": dict(last_capture_entry_push_readiness_gate or {}),
+                            "capture_geometry_gate": _capture_geometry_gate_payload(),
+                            "object_centric_policy": last_object_centric_policy,
+                            **_approach_result_payload(),
+                        }
                     self._set_manual_drive(
                         enabled=False,
                         mode="capture_entry_ready",
@@ -4032,7 +6738,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     continue
                 if (
                     capture_entry_started_monotonic is not None
-                    and (now_monotonic - capture_entry_started_monotonic) >= DEFAULT_CAPTURE_ENTRY_TIMEOUT_S
+                    and (now_monotonic - capture_entry_started_monotonic) >= last_capture_entry_timeout_s
                     and not capture_entry_ready_latched
                 ):
                     capture_entry_time_s = now_monotonic - float(capture_entry_started_monotonic)
@@ -4048,6 +6754,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "failure_stage": "capture_entry",
                         "capture_state": capture.to_dict() if capture else {},
                         "zone_score": zone_score.to_dict() if zone_score else {},
+                        "capture_entry_snapshot": last_capture_entry_snapshot,
+                        "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                        "object_centric_policy": last_object_centric_policy,
                         **_approach_result_payload(failure_reason=approach_failure_reason),
                     }
                     write_json(mission_root / f"{target.id}_capture_entry_timeout.json", timeout_payload)
@@ -4061,6 +6770,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         rationale=capture_entry_command.rationale,
                     )
                     self._update_gather_runtime_state(latest_control_command=capture_entry_command.to_dict())
+                    if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                        object_centric_previous_command = capture_entry_command
+                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    object_centric_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_previous_ball_pose
                 previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
                 time.sleep(self.args.poll_s)
                 continue
@@ -4078,22 +6791,38 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             )
             if ball_pose:
                 self._update_prior_from_ball_pose(target.id, ball_pose)
-            append_jsonl(
-                state_history_path,
-                {
-                    "generated_utc": utc_now(),
-                    "phase": "capture",
-                    "attempt": int(attempt_index),
-                    "attempt_kind": str(attempt_kind),
-                    "target_id": target.id,
-                    "robot_pose": robot_pose,
-                    "ball_pose": ball_pose,
-                    "capture": capture.to_dict() if capture else {},
-                    "zone_score": zone_score.to_dict() if zone_score else {},
-                    "ball_motion_m": ball_motion_m,
-                    **self._control_debug_fields(),
-                },
-            )
+            if capture_started_monotonic is None:
+                capture_started_monotonic = now_monotonic
+            if capture_handoff_robot_pose is None and isinstance(robot_pose, dict):
+                capture_handoff_robot_pose = dict(robot_pose)
+            if capture_handoff_ball_pose is None and isinstance(ball_pose, dict):
+                capture_handoff_ball_pose = dict(ball_pose)
+            _record_capture_yaw(robot_pose)
+            command = None
+            raw_command = None
+            command_source = "no_pose_or_ball"
+            command_limit_reason = ""
+            capture_object_centric_policy: dict[str, Any] = {}
+            if (
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                object_decision = decide_object_centric_gather_command(
+                    robot_pose,
+                    ball_pose or {},
+                    phase="capture",
+                    zone=self.zone,
+                    envelope=self.capture_envelope,
+                    previous_command=object_centric_previous_command,
+                    previous_ball_pose=object_centric_previous_ball_pose,
+                )
+                command = object_decision.command
+                raw_command = object_decision.raw_command
+                last_object_centric_policy = dict(object_decision.diagnostics)
+                capture_object_centric_policy = last_object_centric_policy
+                command_source = "object_centric_policy"
+                command_limit_reason = str(capture_object_centric_policy.get("guard_rejection_reason", "") or "")
             zone_entry_handoff_ready = bool(
                 zone_score
                 and zone_score.center_inside_zone
@@ -4104,37 +6833,147 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     or ball_motion_m <= max(DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M * 2.0, 0.02)
                 )
             )
-            if zone_entry_handoff_ready:
-                self._set_manual_drive(False, mode="capture_handoff", rationale="Ball reached zone during capture; handing off to place verification.")
-                return True, {
-                    "capture_state": capture.to_dict() if capture else {},
-                    "zone_score": zone_score.to_dict(),
-                    "entered_zone_during_capture": True,
-                    "handoff_kind": "zone_entry",
-                    **_approach_result_payload(),
-                }
-            if secure_capture(capture, self.capture_envelope):
-                self._set_manual_drive(False, mode="captured", rationale="Ball captured.")
-                return True, {
-                    "capture_state": capture.to_dict(),
-                    "zone_score": zone_score.to_dict() if zone_score else {},
-                    "handoff_kind": "secure_capture",
-                    **_approach_result_payload(),
-                }
+            secure_capture_ready = bool(secure_capture(capture, self.capture_envelope))
+            if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                secure_capture_ready = bool(
+                    secure_capture_ready
+                    and command is not None
+                    and str(getattr(command, "mode", "") or "") == "captured"
+                )
             soft_capture_handoff_ready = bool(
-                capture
+                self.gather_control_family != OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
                 and capture.captured
                 and captured_started_monotonic is not None
                 and (now_monotonic - captured_started_monotonic) >= 0.5
                 and float(capture.ball_x_m) <= 0.35
             )
+            if zone_entry_handoff_ready:
+                terminal_command = {
+                    "mode": "capture_handoff",
+                    "linear_x": 0.0,
+                    "angular_z": 0.0,
+                    "target_speed_scale": 0.0,
+                    "rationale": "Ball reached zone during capture; handing off to place verification.",
+                }
+                last_capture_diagnostics = _capture_diagnostics_payload(
+                    now_monotonic=now_monotonic,
+                    capture=capture,
+                    zone_score=zone_score,
+                    approach_snapshot=approach_snapshot or {},
+                    selected_command=terminal_command,
+                    raw_command=terminal_command,
+                    command_source="terminal",
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    zone_entry_handoff_ready=zone_entry_handoff_ready,
+                    secure_capture_ready=secure_capture_ready,
+                    soft_capture_handoff_ready=soft_capture_handoff_ready,
+                    terminal_cause="zone_entry",
+                )
+                _append_capture_state(
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    capture=capture,
+                    zone_score=zone_score,
+                    ball_motion_m=ball_motion_m,
+                    selected_command=terminal_command,
+                    capture_diagnostics=last_capture_diagnostics,
+                    object_centric_policy=last_object_centric_policy,
+                )
+                self._set_manual_drive(False, mode="capture_handoff", rationale="Ball reached zone during capture; handing off to place verification.")
+                return True, {
+                    "capture_state": capture.to_dict() if capture else {},
+                    "zone_score": zone_score.to_dict() if zone_score else {},
+                    "entered_zone_during_capture": True,
+                    "handoff_kind": "zone_entry",
+                    "capture_diagnostics": last_capture_diagnostics,
+                    "object_centric_policy": last_object_centric_policy,
+                    **_approach_result_payload(),
+                }
+            if secure_capture_ready:
+                terminal_command = {
+                    "mode": "captured",
+                    "linear_x": 0.0,
+                    "angular_z": 0.0,
+                    "target_speed_scale": 0.0,
+                    "rationale": "Ball captured.",
+                }
+                last_capture_diagnostics = _capture_diagnostics_payload(
+                    now_monotonic=now_monotonic,
+                    capture=capture,
+                    zone_score=zone_score,
+                    approach_snapshot=approach_snapshot or {},
+                    selected_command=terminal_command,
+                    raw_command=terminal_command,
+                    command_source="terminal",
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    zone_entry_handoff_ready=zone_entry_handoff_ready,
+                    secure_capture_ready=secure_capture_ready,
+                    soft_capture_handoff_ready=soft_capture_handoff_ready,
+                    terminal_cause="secure_capture",
+                )
+                _append_capture_state(
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    capture=capture,
+                    zone_score=zone_score,
+                    ball_motion_m=ball_motion_m,
+                    selected_command=terminal_command,
+                    capture_diagnostics=last_capture_diagnostics,
+                    object_centric_policy=last_object_centric_policy,
+                )
+                self._set_manual_drive(False, mode="captured", rationale="Ball captured.")
+                return True, {
+                    "capture_state": capture.to_dict(),
+                    "zone_score": zone_score.to_dict() if zone_score else {},
+                    "handoff_kind": "secure_capture",
+                    "capture_diagnostics": last_capture_diagnostics,
+                    "object_centric_policy": last_object_centric_policy,
+                    **_approach_result_payload(),
+                }
             if soft_capture_handoff_ready:
+                terminal_command = {
+                    "mode": "capture_handoff",
+                    "linear_x": 0.0,
+                    "angular_z": 0.0,
+                    "target_speed_scale": 0.0,
+                    "rationale": "Ball is stably inside the spur; handing off to place control.",
+                }
+                last_capture_diagnostics = _capture_diagnostics_payload(
+                    now_monotonic=now_monotonic,
+                    capture=capture,
+                    zone_score=zone_score,
+                    approach_snapshot=approach_snapshot or {},
+                    selected_command=terminal_command,
+                    raw_command=terminal_command,
+                    command_source="terminal",
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    zone_entry_handoff_ready=zone_entry_handoff_ready,
+                    secure_capture_ready=secure_capture_ready,
+                    soft_capture_handoff_ready=soft_capture_handoff_ready,
+                    terminal_cause="soft_capture",
+                )
+                _append_capture_state(
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    capture=capture,
+                    zone_score=zone_score,
+                    ball_motion_m=ball_motion_m,
+                    selected_command=terminal_command,
+                    capture_diagnostics=last_capture_diagnostics,
+                    object_centric_policy=last_object_centric_policy,
+                )
                 self._set_manual_drive(False, mode="capture_handoff", rationale="Ball is stably inside the spur; handing off to place control.")
                 return True, {
                     "capture_state": capture.to_dict(),
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "soft_capture_handoff": True,
                     "handoff_kind": "soft_capture",
+                    "capture_diagnostics": last_capture_diagnostics,
+                    "object_centric_policy": last_object_centric_policy,
                     **_approach_result_payload(),
                 }
             handoff_near_zone_control = False
@@ -4144,44 +6983,50 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and capture
                     and capture.ball_ahead
                     and zone_score is not None
-                    and (
-                        capture.within_recapture_window
-                        or float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
-                    )
+                    and float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
                 )
-                if prefer_zone_recovery:
-                    use_zone_recovery = bool(
-                        capture
-                        and capture.ball_ahead
-                        and (
-                            capture.within_recapture_window
-                            or (
-                                zone_score is not None
-                                and float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
+                if self.gather_control_family != OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    if prefer_zone_recovery:
+                        use_zone_recovery = bool(
+                            capture
+                            and capture.ball_ahead
+                            and (
+                                capture.within_recapture_window
+                                or (
+                                    zone_score is not None
+                                    and float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
+                                )
                             )
                         )
-                    )
-                    if use_zone_recovery:
+                        if use_zone_recovery:
+                            command = compute_place_command(
+                                robot_pose,
+                                ball_pose or {},
+                                zone=self.zone,
+                                envelope=self.capture_envelope,
+                            )
+                            command_source = "place_recapture"
+                        else:
+                            command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
+                            command_source = "capture_fallback"
+                    elif handoff_near_zone_control:
                         command = compute_place_command(
                             robot_pose,
                             ball_pose or {},
                             zone=self.zone,
                             envelope=self.capture_envelope,
                         )
+                        command_source = "near_zone_place_handoff"
                     else:
                         command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
-                elif handoff_near_zone_control:
-                    command = compute_place_command(
-                        robot_pose,
-                        ball_pose or {},
-                        zone=self.zone,
-                        envelope=self.capture_envelope,
-                    )
-                else:
-                    command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
-            else:
-                command = None
-            if prefer_zone_recovery and command is not None:
+                        command_source = "capture_command"
+                if raw_command is None:
+                    raw_command = command
+            if (
+                self.gather_control_family != OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and prefer_zone_recovery
+                and command is not None
+            ):
                 angular_limit = 0.50
                 linear_limit = 0.055
                 rationale = "Keep the ball local during post-place recapture instead of driving through it."
@@ -4208,7 +7053,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     target_speed_scale=min(float(command.target_speed_scale), 0.55 if linear_limit > 0.02 else 0.35),
                     rationale=rationale,
                 )
-            elif handoff_near_zone_control and command is not None:
+                command_limit_reason = rationale
+            elif (
+                self.gather_control_family != OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and handoff_near_zone_control
+                and command is not None
+            ):
                 linear_limit = 0.03
                 angular_limit = 0.35
                 rationale = "Near the corral, switch to a gentle handoff instead of driving through the ball."
@@ -4233,6 +7083,32 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     target_speed_scale=min(float(command.target_speed_scale), 0.45 if linear_limit > 0.015 else 0.30),
                     rationale=rationale,
                 )
+                command_limit_reason = rationale
+            last_capture_diagnostics = _capture_diagnostics_payload(
+                now_monotonic=now_monotonic,
+                capture=capture,
+                zone_score=zone_score,
+                approach_snapshot=approach_snapshot or {},
+                selected_command=command,
+                raw_command=raw_command,
+                command_source=command_source,
+                command_limit_reason=command_limit_reason,
+                robot_pose=robot_pose,
+                ball_pose=ball_pose,
+                zone_entry_handoff_ready=zone_entry_handoff_ready,
+                secure_capture_ready=secure_capture_ready,
+                soft_capture_handoff_ready=soft_capture_handoff_ready,
+            )
+            _append_capture_state(
+                robot_pose=robot_pose,
+                ball_pose=ball_pose,
+                capture=capture,
+                zone_score=zone_score,
+                ball_motion_m=ball_motion_m,
+                selected_command=command,
+                capture_diagnostics=last_capture_diagnostics,
+                object_centric_policy=capture_object_centric_policy,
+            )
             if command is not None:
                 self._set_manual_drive(
                     True,
@@ -4242,12 +7118,19 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     rationale=command.rationale,
                 )
                 self._update_gather_runtime_state(latest_control_command=command.to_dict())
+                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    object_centric_previous_command = command
+            if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                object_centric_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_previous_ball_pose
             previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
             time.sleep(self.args.poll_s)
 
         self._set_manual_drive(False, mode="capture_timeout", rationale="Capture timed out.")
         last_capture_payload = last_capture.to_dict() if last_capture else {}
         last_zone_payload = last_zone_score.to_dict() if last_zone_score else {}
+        timeout_capture_diagnostics = dict(last_capture_diagnostics)
+        timeout_capture_diagnostics["terminal_cause"] = "capture_timeout"
+        last_capture_diagnostics = timeout_capture_diagnostics
         correction_eligible = zone_edge_correction_eligible(
             capture=last_capture,
             zone_score=last_zone_score,
@@ -4260,6 +7143,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "zone_score": last_zone_payload,
             "zone_edge_correction_eligible": bool(correction_eligible),
             "allow_full_revisit": False,
+            "capture_entry_snapshot": last_capture_entry_snapshot,
+            "capture_entry_diagnostics": last_capture_entry_diagnostics,
+            "capture_diagnostics": last_capture_diagnostics,
+            "object_centric_policy": last_object_centric_policy,
             **_approach_result_payload(failure_reason=approach_failure_reason),
         }
         write_json(mission_root / f"{target.id}_capture_timeout.json", timeout_payload)
@@ -4274,7 +7161,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         attempt_index: int = 0,
         attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
-        deadline = time.monotonic() + max(self.args.place_timeout_s, 0.1)
+        place_timeout_budget_s = max(self.args.place_timeout_s, 0.1)
+        if (
+            self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+            and place_timeout_budget_s >= 30.0
+        ):
+            place_timeout_budget_s = max(place_timeout_budget_s, DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S)
+        deadline = time.monotonic() + place_timeout_budget_s
         last_captured_monotonic: float | None = None
         local_recovery_attempted = False
         local_recovery_started_monotonic: float | None = None
@@ -4304,6 +7197,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         release_gate_blocked_reason = "none"
         stationary_recapture_signature: tuple[float, float, float] | None = None
         stationary_recapture_started_monotonic: float | None = None
+        object_centric_place_previous_command: PlaceControlCommand | None = None
+        object_centric_place_previous_ball_pose: dict[str, Any] | None = None
 
         def _record_stop_capture(current_capture: Any) -> None:
             nonlocal stop_capture_state
@@ -4434,11 +7329,139 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
 
         def _settle_no_chase_ready(
             *,
+            current_capture: Any = None,
             current_zone_score: Any = None,
             ball_motion_m: float | None = None,
             now_monotonic: float,
         ) -> bool:
             if not current_zone_score or not bool(current_zone_score.center_inside_retrieval_corral):
+                return False
+            object_centric_family = self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+            if object_centric_family and current_capture and not current_capture.ball_ahead:
+                return False
+            object_centric_unsecured = bool(
+                object_centric_family
+                and current_capture
+                and current_capture.ball_ahead
+                and not current_capture.captured
+            )
+            if object_centric_unsecured:
+                unsecured_still_dwell_ready = bool(
+                    pre_release_still_started_monotonic is not None
+                    and (now_monotonic - pre_release_still_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                )
+                if (
+                    float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_MOVING_SETTLE_ZONE_MAX_M
+                    and bool(current_zone_score.center_inside_zone)
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M
+                    and unsecured_still_dwell_ready
+                ):
+                    return True
+                if (
+                    bool(current_zone_score.center_inside_zone)
+                    and float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_ZONE_MAX_M
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and control_centered_started_monotonic is not None
+                    and (now_monotonic - control_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MOTION_MAX_M
+                    and unsecured_still_dwell_ready
+                    and float(current_capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MIN_X_M
+                    and abs(float(current_capture.ball_y_m))
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MAX_LATERAL_M
+                ):
+                    return True
+                if (
+                    not bool(current_zone_score.center_inside_zone)
+                    and float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_ZONE_MAX_M
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MOTION_MAX_M
+                    and unsecured_still_dwell_ready
+                    and float(current_capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MIN_X_M
+                    and float(current_capture.ball_x_m) <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MAX_X_M
+                    and abs(float(current_capture.ball_y_m))
+                    >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MIN_LATERAL_M
+                    and abs(float(current_capture.ball_y_m))
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MAX_LATERAL_M
+                ):
+                    return True
+                if (
+                    not bool(current_zone_score.center_inside_zone)
+                    and float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_ZONE_MAX_M
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MOTION_MAX_M
+                    and unsecured_still_dwell_ready
+                    and float(current_capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MIN_X_M
+                    and float(current_capture.ball_x_m) <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MAX_X_M
+                    and abs(float(current_capture.ball_y_m))
+                    >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MIN_LATERAL_M
+                    and abs(float(current_capture.ball_y_m))
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MAX_LATERAL_M
+                ):
+                    return True
+                if (
+                    not bool(current_zone_score.center_inside_zone)
+                    and float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_ZONE_MAX_M
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MOTION_MAX_M
+                    and unsecured_still_dwell_ready
+                    and float(current_capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MIN_X_M
+                    and float(current_capture.ball_x_m) <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MAX_X_M
+                    and abs(float(current_capture.ball_y_m))
+                    >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MIN_LATERAL_M
+                    and abs(float(current_capture.ball_y_m))
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MAX_LATERAL_M
+                ):
+                    return True
+                if float(current_zone_score.zone_distance_m) > DEFAULT_OBJECT_CENTRIC_UNSECURE_SETTLE_ZONE_MAX_M:
+                    return False
+                if (
+                    bool(current_zone_score.center_inside_zone)
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M
+                    and unsecured_still_dwell_ready
+                ):
+                    return True
+                if (
+                    pre_release_still_started_monotonic is None
+                    or (now_monotonic - pre_release_still_started_monotonic) < DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                ):
+                    return False
+                return bool(
+                    ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M
+                )
+            if (
+                object_centric_family
+                and current_capture
+                and current_capture.ball_ahead
+                and not current_capture.captured
+                and not current_capture.within_recapture_window
+                and not bool(current_zone_score.center_inside_zone)
+                and float(current_zone_score.zone_distance_m) > DEFAULT_OBJECT_CENTRIC_UNSECURE_SETTLE_ZONE_MAX_M
+            ):
                 return False
             if float(current_zone_score.zone_distance_m) > max(float(self.zone.retrieval_radius_m) - 0.05, 0.0):
                 return False
@@ -4727,6 +7750,47 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         **_settle_no_chase_fields(),
                     }
                 if settle_no_chase_active:
+                    object_centric_no_chase_overlap_recontact = bool(
+                        self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                        and within_zone_overlap
+                        and zone_score
+                        and not bool(zone_score.center_inside_zone)
+                        and release_recontact_count < 1
+                        and capture
+                        and (
+                            not capture.ball_ahead
+                            or float(capture.ball_x_m) < 0.0
+                            or abs(float(capture.ball_y_m)) > 1.0
+                            or (
+                                capture.ball_ahead
+                                and not capture.captured
+                                and not capture.within_recapture_window
+                                and ball_motion_m is not None
+                                and ball_motion_m > DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
+                                and zone_score
+                                and float(zone_score.zone_distance_m) > float(self.zone.control_radius_m)
+                                and float(zone_score.zone_distance_m) <= float(self.zone.retrieval_radius_m)
+                                and float(capture.ball_x_m) >= 1.0
+                                and abs(float(capture.ball_y_m)) <= 0.35
+                            )
+                        )
+                    )
+                    if object_centric_no_chase_overlap_recontact:
+                        release_recontact_count += 1
+                        zone_edge_correction_count += 1
+                        zone_edge_correction_started_monotonic = now_monotonic
+                        settle_no_chase_exit_reason = "corrected"
+                        _reset_release_monitor(ball_pose)
+                        self._append_runtime_event(
+                            f"{target.label}: early correction after leaving the center during object-centric no-chase.",
+                            key=f"settle_no_chase_overlap_recontact:{target.id}:{release_recontact_count}",
+                        )
+                        self._update_gather_runtime_state(
+                            latest_feedback=f"Recontacting {target.label} before it leaves the retrieval overlap.",
+                            settle_metrics=settle_metrics,
+                        )
+                        time.sleep(self.args.poll_s)
+                        continue
                     if outside_no_chase_window:
                         settle_no_chase_exit_started_monotonic = (
                             now_monotonic
@@ -4942,6 +8006,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and not settle_monitor_ready
             )
             settle_no_chase_ready = _settle_no_chase_ready(
+                current_capture=capture,
                 current_zone_score=zone_score,
                 ball_motion_m=ball_motion_m,
                 now_monotonic=now_monotonic,
@@ -5036,8 +8101,789 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and (now_monotonic - stationary_recapture_started_monotonic) >= DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S
             )
             local_recovery_active = local_recovery_started_monotonic is not None
+            object_centric_far_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_LATERAL_M
+            )
+            object_centric_far_wide_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_LATERAL_M
+            )
+            object_centric_far_extreme_opposed_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                > OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_LATERAL_M
+                and float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_same_side_high_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                >= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_LATERAL_M
+                and float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) > 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_transition_opposed_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_MOTION_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                > OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_LATERAL_M
+                and float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_world_moderate_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_world_high_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_positive_world_edge_hold_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and (
+                    (
+                        ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_MOTION_M
+                    )
+                    or ball_motion_m <= 0.005
+                )
+                and (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_WORLD_LATERAL_M
+                and (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_WORLD_LATERAL_M
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_X_M
+                and (float(capture.ball_x_m) >= 0.85 or float(capture.ball_y_m) >= 0.0)
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_LATERAL_M
+                and (
+                    (
+                        (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) <= 0.60
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= 0.75
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_ZONE_MARGIN_M
+                    )
+                    or (
+                        (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) >= 0.60
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= 0.75
+                        and abs(float(capture.ball_y_m)) >= 0.55
+                    )
+                    or (
+                        (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) >= 0.50
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= 0.75
+                        and abs(float(capture.ball_y_m)) >= 0.90
+                    )
+                    or (
+                        float(capture.ball_y_m) >= 0.0
+                        and (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) >= 0.35
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= 0.78
+                        and abs(float(capture.ball_y_m)) >= 0.85
+                    )
+                    or (
+                        ball_motion_m <= 0.005
+                        and (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) >= 0.55
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= 0.85
+                    )
+                )
+            )
+            object_centric_far_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_KEEPUP_LATERAL_M
+            )
+            object_centric_far_line_recapture_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and capture.within_recapture_window
+                and zone_score
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_X_M
+                and (
+                    (
+                        ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and
+                        abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_MOTION_M
+                        and
+                        ball_pose
+                        and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                        >= OBJECT_CENTRIC_PLACE_FAR_WORLD_RECENTER_KEEPUP_MIN_WORLD_LATERAL_M
+                        and float(capture.ball_x_m)
+                        <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_X_M
+                        and abs(float(capture.ball_y_m))
+                        <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_LATERAL_M
+                    )
+                )
+            )
+            object_centric_far_line_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and (
+                    (
+                        float(zone_score.zone_distance_m)
+                        <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M + 0.05)
+                        and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_KEEPUP_MAX_X_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_MOTION_M
+                        and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_KEEPUP_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECENTER_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m))
+                        <= OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_LATERAL_M
+                    )
+                )
+            )
+            object_centric_far_straight_rollout_coast_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_MOTION_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_MOTION_M
+                and (
+                    float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                )
+                >= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_ZONE_MARGIN_M
+                and (
+                    float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                )
+                <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_ZONE_MARGIN_M
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_captured_gap_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and (capture.captured or capture.within_recapture_window)
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_MOTION_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_MOTION_M
+                and (
+                    float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                )
+                >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_ZONE_MARGIN_M
+                and (
+                    float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                )
+                <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_ZONE_MARGIN_M
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_LATERAL_M
+                and float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_WORLD_LATERAL_M
+                and (
+                    (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) < 0.0
+                    or (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                    <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_POSITIVE_WORLD_LATERAL_M
+                )
+            )
+            object_centric_far_recapture_reel_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and (
+                    float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                    or (
+                        ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+                        and float(zone_score.zone_distance_m)
+                        <= (
+                            float(self.zone.retrieval_radius_m)
+                            + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+                        )
+                    )
+                )
+                and (
+                    (
+                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_LATERAL_M
+                    )
+                    or (
+                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MAX_LATERAL_M
+                    )
+                    or (
+                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+                        and abs(float(capture.ball_y_m))
+                        > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m))
+                        <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MAX_LATERAL_M
+                        and ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and float(zone_score.zone_distance_m)
+                        <= (
+                            float(self.zone.retrieval_radius_m)
+                            + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+                        )
+                    )
+                )
+            )
+            object_centric_far_low_x_recapture_reel_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_motion_m is not None
+                and ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_MOTION_M
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_LATERAL_M
+            )
+            object_centric_far_high_x_line_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_LATERAL_TO_ZONE_M
+            )
+            object_centric_far_reorient_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and not capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MIN_X_M
+                and float(capture.ball_x_m) <= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and not zone_score.inside_retrieval_corral
+                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MARGIN_M)
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_LATERAL_M
+            )
+            object_centric_near_finish_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and not zone_score.inside_retrieval_corral
+                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MARGIN_M)
+                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_LATERAL_M
+            )
+            object_centric_near_forward_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and not zone_score.inside_retrieval_corral
+                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_LATERAL_M
+            )
+            object_centric_near_wide_reel_common = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and not zone_score.inside_retrieval_corral
+                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M)
+            )
+            object_centric_near_low_x_opposed_wide_reel_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_MOTION_M
+                and ball_pose
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_LATERAL_M
+                and (float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_WORLD_LATERAL_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_ZONE_MARGIN_M
+                )
+            )
+            object_centric_near_low_x_same_side_edge_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_MOTION_M
+                and ball_pose
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_LATERAL_M
+                and (float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))) > 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_WORLD_LATERAL_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_ZONE_MARGIN_M
+                )
+            )
+            object_centric_near_stale_edge_wide_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_MOTION_M
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_high_x_final_edge_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and (
+                    (
+                        ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_MOTION_M
+                        and (
+                            abs(float(capture.ball_y_m)) <= 0.18
+                            or (
+                                float(capture.ball_y_m)
+                                * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                            )
+                            < 0.0
+                        )
+                    )
+                    or ball_motion_m <= 0.005
+                )
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_high_x_escape_edge_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_MOTION_M
+                and ball_pose
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_LATERAL_M
+                and (float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_WORLD_LATERAL_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_ZONE_MARGIN_M
+                )
+            )
+            object_centric_near_mouth_world_edge_resteer_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and (ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M or ball_motion_m <= 0.005)
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_edge_escape_world_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_wide_reel_available = bool(
+                object_centric_near_wide_reel_common
+                and (
+                    object_centric_near_low_x_opposed_wide_reel_available
+                    or object_centric_near_low_x_same_side_edge_hold_available
+                    or object_centric_near_stale_edge_wide_hold_available
+                    or object_centric_near_high_x_final_edge_hold_available
+                    or object_centric_near_high_x_escape_edge_hold_available
+                    or object_centric_near_mouth_world_edge_resteer_available
+                    or object_centric_near_edge_escape_world_hold_available
+                    or
+                    (
+                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m is not None
+                        and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and ball_pose
+                        and float(zone_score.zone_distance_m)
+                        > (
+                            float(self.zone.retrieval_radius_m)
+                            + OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_ZONE_MARGIN_M
+                        )
+                        and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_LATERAL_M
+                        and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                        <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_WORLD_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and float(zone_score.zone_distance_m)
+                        <= (
+                            float(self.zone.retrieval_radius_m)
+                            + OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_EDGE_MARGIN_M
+                        )
+                        and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_EDGE_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_LATERAL_M
+                    )
+                )
+            )
             if local_recovery_active:
-                if recaptured_settle_started_monotonic is None and (not local_recovery_viable) and (not local_settle_correction_eligible):
+                if (
+                    recaptured_settle_started_monotonic is None
+                    and (not local_recovery_viable)
+                    and (not local_settle_correction_eligible)
+                    and (not object_centric_far_lateral_recenter_available)
+                    and (not object_centric_far_wide_lateral_recenter_available)
+                    and (not object_centric_far_extreme_opposed_recenter_available)
+                    and (not object_centric_far_same_side_high_lateral_recenter_available)
+                    and (not object_centric_far_transition_opposed_recenter_available)
+                    and (not object_centric_far_world_moderate_recenter_available)
+                    and (not object_centric_far_world_high_lateral_recenter_available)
+                    and (not object_centric_far_positive_world_edge_hold_available)
+                    and (not object_centric_far_keepup_available)
+                    and (not object_centric_far_line_keepup_available)
+                    and (not object_centric_far_straight_rollout_coast_available)
+                    and (not object_centric_far_recapture_reel_available)
+                    and (not object_centric_far_low_x_recapture_reel_available)
+                    and (not object_centric_far_high_x_line_recenter_available)
+                    and (not object_centric_far_reorient_available)
+                    and (not object_centric_near_lateral_recenter_available)
+                    and (not object_centric_near_finish_keepup_available)
+                    and (not object_centric_near_forward_keepup_available)
+                    and (not object_centric_near_wide_reel_available)
+                ):
                     escape_elapsed_s = (
                         now_monotonic - escaped_zone_correction_started_monotonic
                         if escaped_zone_correction_started_monotonic is not None
@@ -5159,7 +9005,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     continue
                 recaptured_settle_started_monotonic = None
             if capture and capture.captured:
-                marginal_capture_now = abs(float(capture.ball_y_m)) > 0.04 or float(capture.ball_x_m) < 0.08
+                marginal_capture_now = (
+                    (abs(float(capture.ball_y_m)) > 0.04 or float(capture.ball_x_m) < 0.08)
+                    and not object_centric_far_captured_gap_keepup_available
+                )
                 if marginal_capture_now:
                     marginal_capture_started_monotonic = marginal_capture_started_monotonic or now_monotonic
                 else:
@@ -5182,11 +9031,57 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     continue
             else:
                 marginal_capture_started_monotonic = None
-            if local_recovery_started_monotonic is not None:
-                command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
-            else:
-                command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
+            command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
+            if (
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                object_decision = decide_object_centric_gather_command(
+                    robot_pose,
+                    ball_pose or {},
+                    phase="place",
+                    zone=self.zone,
+                    envelope=self.capture_envelope,
+                    previous_command=object_centric_place_previous_command,
+                    previous_ball_pose=object_centric_place_previous_ball_pose,
+                )
+                if object_decision.command is not None:
+                    command = object_decision.command
             if command is not None:
+                object_centric_inside_retrieval_hold = bool(
+                    self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                    and command.mode in {"object_place_inside_retrieval_hold", "object_place_inside_retrieval_shepherd"}
+                    and zone_score
+                    and (zone_score.center_inside_retrieval_corral or zone_score.inside_retrieval_corral)
+                )
+                if object_centric_inside_retrieval_hold:
+                    local_recovery_started_monotonic = None
+                    recaptured_settle_started_monotonic = None
+                    if command.mode == "object_place_inside_retrieval_shepherd":
+                        self._set_manual_drive(
+                            True,
+                            linear_x=command.linear_x,
+                            angular_z=command.angular_z,
+                            mode=command.mode,
+                            rationale=command.rationale,
+                        )
+                    else:
+                        self._set_manual_drive(
+                            False,
+                            mode=command.mode,
+                            rationale=command.rationale,
+                        )
+                    self._update_gather_runtime_state(
+                        latest_feedback=f"Holding position while {target.label} settles inside the retrieval corral.",
+                        latest_control_command=command.to_dict(),
+                    )
+                    object_centric_place_previous_command = command
+                    object_centric_place_previous_ball_pose = (
+                        dict(ball_pose or {}) if ball_pose else object_centric_place_previous_ball_pose
+                    )
+                    time.sleep(self.args.poll_s)
+                    continue
                 if (
                     local_settle_correction_eligible
                     and zone_score
@@ -5195,6 +9090,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and ball_motion_m > DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
                     and not settle_shepherd_needed
                 ):
+                    if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                        object_centric_place_previous_ball_pose = (
+                            dict(ball_pose or {}) if ball_pose else object_centric_place_previous_ball_pose
+                        )
                     self._set_manual_drive(False, mode="zone_edge_wait", rationale="Ball is still moving inside the corral overlap; let it settle before nudging again.")
                     self._update_gather_runtime_state(
                         latest_feedback=f"Letting {target.label} settle near the corral edge before another correction.",
@@ -5209,42 +9108,314 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     time.sleep(self.args.poll_s)
                     continue
                 if local_recovery_started_monotonic is not None:
-                    recovery_linear = min(float(command.linear_x), 0.05)
-                    recovery_angular = clamp(float(command.angular_z), -0.45, 0.45)
-                    recovery_scale = min(float(command.target_speed_scale), 0.55)
-                    recovery_mode = "capture_recovery"
-                    recovery_rationale = "Briefly recenter the ball under the catcher before resuming place."
-                    if capture and not capture.ball_ahead:
-                        recovery_linear = 0.0
-                        recovery_angular = clamp(0.90 if float(capture.ball_y_m) >= 0.0 else -0.90, -0.90, 0.90)
-                        recovery_scale = 0.0
-                        recovery_mode = "capture_recovery_turn"
-                        recovery_rationale = "Ball slipped behind inside the corral; turn in place quickly before it escapes."
-                    elif capture and capture.within_recapture_window and (
-                        float(capture.ball_x_m) > 0.40 or abs(float(capture.ball_y_m)) > 0.08
-                    ):
-                        near_zone_hold = bool(
-                            zone_score
-                            and float(zone_score.zone_distance_m) <= (float(self.zone.retrieval_radius_m) + 0.40)
-                        )
-                        laterally_misaligned_hold = abs(float(capture.ball_y_m)) > 0.08
-                        if laterally_misaligned_hold or near_zone_hold or not stationary_recapture_nudge_ready:
-                            recovery_linear = 0.0
-                            recovery_angular = clamp((float(capture.ball_y_m) * 5.0), -0.35, 0.35)
-                            recovery_scale = 0.30
-                            recovery_mode = "capture_recovery_hold"
-                            recovery_rationale = "Ball is ahead of the spur mouth; hold and yaw gently before pushing again."
-                        else:
-                            recovery_rationale = (
-                                "Ball stayed centered in local recovery while still far from the corral; allow a bounded forward recapture nudge."
+                    object_centric_lateral_place_recenter = bool(
+                        self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                        and command.mode
+                        in {
+                            "object_place_lateral_recenter",
+                            "object_place_far_line_recenter",
+                            "object_place_far_wide_lateral_recenter",
+                        }
+                        and not (
+                            command.mode == "object_place_far_line_recenter"
+                            and float(command.linear_x) > 0.0
+                            and (
+                                object_centric_far_line_keepup_available
+                                or object_centric_far_line_recapture_keepup_available
                             )
-                    command = command.__class__(
-                        mode=recovery_mode,
-                        linear_x=recovery_linear,
-                        angular_z=recovery_angular,
-                        target_speed_scale=recovery_scale,
-                        rationale=recovery_rationale,
+                        )
+                        and capture
+                        and capture.ball_ahead
+                        and zone_score
+                        and (
+                            object_centric_far_world_moderate_recenter_available
+                            or
+                                object_centric_far_world_high_lateral_recenter_available
+                                or
+                                object_centric_far_positive_world_edge_hold_available
+                                or
+                                object_centric_far_same_side_high_lateral_recenter_available
+                                or
+                                object_centric_far_transition_opposed_recenter_available
+                                or
+                                object_centric_far_straight_rollout_coast_available
+                                or
+                                (
+                                capture.within_recapture_window
+                                and float(zone_score.zone_distance_m) > (float(self.zone.retrieval_radius_m) + 0.40)
+                            )
+                            or (
+                                (not capture.within_recapture_window)
+                                and float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_X_M
+                                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_LATERAL_M
+                            )
+                            or (
+                                (not capture.within_recapture_window)
+                                and float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_X_M
+                                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MIN_LATERAL_M
+                                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_LATERAL_M
+                            )
+                            or (
+                                (not capture.within_recapture_window)
+                                and ball_pose
+                                and float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and float(capture.ball_x_m)
+                                > OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_X_M
+                                and float(capture.ball_x_m)
+                                <= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_X_M
+                                and abs(float(capture.ball_y_m))
+                                <= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+                                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                                >= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_LATERAL_TO_ZONE_M
+                            )
+                            or (
+                                (not capture.within_recapture_window)
+                                and not zone_score.inside_retrieval_corral
+                                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                                and float(zone_score.zone_distance_m)
+                                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MARGIN_M)
+                                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MIN_LATERAL_M
+                                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_LATERAL_M
+                            )
+                        )
                     )
+                    object_centric_place_drive_preserve = False
+                    if (
+                        self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                        and command.mode
+                        in {
+                            "object_place_drive_to_zone",
+                            "object_place_recapture_drive",
+                            "object_place_far_line_recenter",
+                            "object_place_far_recapture_reel",
+                            "object_place_near_zone_recapture_drive",
+                            "object_place_near_zone_wide_reel",
+                        }
+                        and capture
+                        and capture.ball_ahead
+                        and zone_score
+                    ):
+                        if capture.within_recapture_window:
+                            preserve_margin_m = (
+                                0.0 if command.mode == "object_place_near_zone_recapture_drive" else 0.40
+                            )
+                            object_centric_place_drive_preserve = bool(
+                                float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + preserve_margin_m)
+                            )
+                        elif command.mode == "object_place_recapture_drive":
+                            object_centric_place_drive_preserve = bool(
+                                float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MIN_X_M
+                                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MAX_X_M
+                                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_KEEPUP_LATERAL_M
+                            )
+                        elif command.mode == "object_place_far_line_recenter":
+                            object_centric_place_drive_preserve = bool(
+                                (
+                                    object_centric_far_line_keepup_available
+                                    or object_centric_far_line_recapture_keepup_available
+                                )
+                                and float(command.linear_x) > 0.0
+                            )
+                        elif command.mode == "object_place_far_recapture_reel":
+                            object_centric_place_drive_preserve = bool(
+                                float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and (
+                                    float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                                    or (
+                                        ball_motion_m is not None
+                                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                                        and float(capture.ball_x_m)
+                                        <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+                                        and float(zone_score.zone_distance_m)
+                                        <= (
+                                            float(self.zone.retrieval_radius_m)
+                                            + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+                                        )
+                                    )
+                                )
+                                and (
+                                    (
+                                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_X_M
+                                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_LATERAL_M
+                                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_LATERAL_M
+                                    )
+                                    or (
+                                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+                                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_LATERAL_M
+                                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MAX_LATERAL_M
+                                    )
+                                    or (
+                                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                                        and float(capture.ball_x_m)
+                                        <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+                                        and abs(float(capture.ball_y_m))
+                                        > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MIN_LATERAL_M
+                                        and abs(float(capture.ball_y_m))
+                                        <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MAX_LATERAL_M
+                                        and ball_motion_m is not None
+                                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                                        and float(zone_score.zone_distance_m)
+                                        <= (
+                                            float(self.zone.retrieval_radius_m)
+                                            + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+                                        )
+                                    )
+                                )
+                            )
+                        elif command.mode == "object_place_near_zone_recapture_drive":
+                            object_centric_place_drive_preserve = bool(
+                                (
+                                    float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                                    and float(zone_score.zone_distance_m)
+                                    <= (
+                                        float(self.zone.retrieval_radius_m)
+                                        + OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MARGIN_M
+                                    )
+                                    and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                                    and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MAX_X_M
+                                    and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_LATERAL_M
+                                )
+                                or (
+                                    not zone_score.inside_retrieval_corral
+                                    and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                                    and float(zone_score.zone_distance_m)
+                                    <= (
+                                        float(self.zone.retrieval_radius_m)
+                                        + OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M
+                                    )
+                                    and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                                    and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_MAX_X_M
+                                    and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_LATERAL_M
+                                )
+                            )
+                        elif command.mode == "object_place_near_zone_wide_reel":
+                            object_centric_place_drive_preserve = bool(
+                                object_centric_near_wide_reel_available
+                            )
+                    if object_centric_lateral_place_recenter:
+                        lateral_recenter_angular_limit = (
+                            0.80
+                            if (
+                                command.mode == "object_place_far_wide_lateral_recenter"
+                                or object_centric_far_world_high_lateral_recenter_available
+                                or object_centric_far_positive_world_edge_hold_available
+                            )
+                            else 0.45
+                        )
+                        command = command.__class__(
+                            mode=(
+                                "object_place_far_wide_lateral_recenter"
+                                if command.mode == "object_place_far_wide_lateral_recenter"
+                                else "object_place_lateral_recenter"
+                            ),
+                            linear_x=0.0,
+                            angular_z=round(
+                                clamp(
+                                    float(command.angular_z),
+                                    -lateral_recenter_angular_limit,
+                                    lateral_recenter_angular_limit,
+                                ),
+                                6,
+                            ),
+                            target_speed_scale=0.0,
+                            rationale="Preserve the object-centric lateral recenter before resuming far-zone recapture push.",
+                        )
+                    elif object_centric_place_drive_preserve:
+                        command_linear = float(command.linear_x)
+                        recovery_linear = 0.0 if command_linear <= 0.0 else min(max(command_linear, 0.025), 0.085)
+                        if (
+                            command.mode
+                            in {
+                                "object_place_far_line_recenter",
+                                "object_place_far_recapture_reel",
+                                "object_place_near_zone_wide_reel",
+                            }
+                            and command_linear > 0.0
+                        ):
+                            recovery_linear = min(max(command_linear, 0.010), 0.032)
+                        if command.mode == "object_place_near_zone_recapture_drive" and command_linear > 0.0:
+                            recovery_linear = min(max(command_linear, 0.012), 0.040)
+                        if capture and abs(float(capture.ball_y_m)) > 0.12:
+                            capture_ball_x = float(capture.ball_x_m)
+                            capture_lateral_abs = abs(float(capture.ball_y_m))
+                            keepup_recapture = bool(
+                                command_linear >= 0.060
+                                and capture_ball_x >= 0.65
+                                and capture_lateral_abs <= 0.16
+                            )
+                            if keepup_recapture:
+                                recovery_linear = max(recovery_linear, min(command_linear, 0.085))
+                            else:
+                                recovery_linear = min(recovery_linear, 0.030)
+                        command = command.__class__(
+                            mode=command.mode,
+                            linear_x=round(recovery_linear, 6),
+                            angular_z=round(
+                                clamp(
+                                    float(command.angular_z),
+                                    -0.80
+                                    if command.mode
+                                    in {"object_place_far_recapture_reel", "object_place_near_zone_wide_reel"}
+                                    else -0.45,
+                                    0.80
+                                    if command.mode
+                                    in {"object_place_far_recapture_reel", "object_place_near_zone_wide_reel"}
+                                    else 0.45,
+                                ),
+                                6,
+                            ),
+                            target_speed_scale=min(float(command.target_speed_scale), 0.65),
+                            rationale="Continue the object-centric far-zone recapture push instead of holding while the ball rolls away.",
+                        )
+                    else:
+                        recovery_linear = min(float(command.linear_x), 0.05)
+                        recovery_angular = clamp(float(command.angular_z), -0.45, 0.45)
+                        recovery_scale = min(float(command.target_speed_scale), 0.55)
+                        recovery_mode = "capture_recovery"
+                        recovery_rationale = "Briefly recenter the ball under the catcher before resuming place."
+                        if capture and not capture.ball_ahead:
+                            recovery_linear = 0.0
+                            recovery_angular = clamp(0.90 if float(capture.ball_y_m) >= 0.0 else -0.90, -0.90, 0.90)
+                            recovery_scale = 0.0
+                            recovery_mode = "capture_recovery_turn"
+                            recovery_rationale = "Ball slipped behind inside the corral; turn in place quickly before it escapes."
+                        elif capture and capture.within_recapture_window and (
+                            float(capture.ball_x_m) > 0.40 or abs(float(capture.ball_y_m)) > 0.08
+                        ):
+                            near_zone_hold = bool(
+                                zone_score
+                                and float(zone_score.zone_distance_m) <= (float(self.zone.retrieval_radius_m) + 0.40)
+                            )
+                            laterally_misaligned_hold = abs(float(capture.ball_y_m)) > 0.08
+                            if laterally_misaligned_hold or near_zone_hold or not stationary_recapture_nudge_ready:
+                                recovery_linear = 0.0
+                                recovery_angular = clamp((float(capture.ball_y_m) * 5.0), -0.35, 0.35)
+                                recovery_scale = 0.30
+                                recovery_mode = "capture_recovery_hold"
+                                recovery_rationale = "Ball is ahead of the spur mouth; hold and yaw gently before pushing again."
+                            else:
+                                recovery_rationale = (
+                                    "Ball stayed centered in local recovery while still far from the corral; allow a bounded forward recapture nudge."
+                                )
+                        command = command.__class__(
+                            mode=recovery_mode,
+                            linear_x=recovery_linear,
+                            angular_z=recovery_angular,
+                            target_speed_scale=recovery_scale,
+                            rationale=recovery_rationale,
+                        )
                 elif settle_shepherd_needed and command.mode in {"retrieval_hold", "capture", "place_recapture", "place"}:
                     shepherd_linear = 0.02
                     if float(capture.ball_x_m) > 0.95:
@@ -5282,6 +9453,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     rationale=command.rationale,
                 )
                 self._update_gather_runtime_state(latest_control_command=command.to_dict())
+                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    object_centric_place_previous_command = command
+            if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                object_centric_place_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_place_previous_ball_pose
             time.sleep(self.args.poll_s)
 
         self._set_manual_drive(False, mode="place_timeout", rationale="Place timed out.")
@@ -5297,6 +9472,2004 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             **_retention_fields(),
             **_settle_no_chase_fields(),
         }
+
+    def _fetch_to_pose_target(
+        self,
+        *,
+        session_id: str,
+        target: GatherTargetSpec,
+        state_history_path: Path,
+        approach_payload: dict[str, Any] | None = None,
+        attempt_index: int = 0,
+        attempt_kind: str = "",
+    ) -> tuple[bool, dict[str, Any]]:
+        timeout_budget_s = max(self.args.place_timeout_s, 0.1)
+        if self.gather_control_family in {OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY, AI_PUSH_COAST_SERVO_CONTROL_FAMILY}:
+            timeout_budget_s = max(timeout_budget_s, DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S)
+        fetch_started_monotonic = time.monotonic()
+        deadline = fetch_started_monotonic + timeout_budget_s
+        fetch_pose_world = self._fetch_pose_world()
+        fetch_xyyaw = world_pose_xyyaw(fetch_pose_world)
+        previous_command: PlaceControlCommand | None = None
+        previous_ball_pose: dict[str, Any] | None = None
+        fetch_start_ball_pose: dict[str, Any] | None = None
+        latest_ball_pose: dict[str, Any] = {}
+        latest_capture: dict[str, Any] = {}
+        latest_zone_score: dict[str, Any] = {}
+        latest_policy: dict[str, Any] = {}
+        latest_ai_push_coast: dict[str, Any] = {}
+        nav2_corridor_push_attempted = False
+        nav2_corridor_push_diagnostics: dict[str, Any] = {}
+        push_readiness_setup_attempted = False
+        push_readiness_setup_active_until: float | None = None
+        push_readiness_setup_diagnostics: dict[str, Any] = {}
+        ai_first_contact_confirmation_attempted = False
+        ai_first_contact_confirmation_confirmed = False
+        ai_first_contact_confirmation_diagnostics: dict[str, Any] = {}
+        ai_first_contact_confirmation_servo_attempted = False
+        ai_first_contact_confirmation_servo_active_until: float | None = None
+        ai_terminal_correction_attempted = False
+        ai_terminal_correction_active_until: float | None = None
+        ai_terminal_correction_start_distance_m: float | None = None
+        ai_terminal_correction_result_emitted = False
+        closest_distance_m: float | None = None
+        closest_pose: dict[str, Any] = {}
+        still_started_monotonic: float | None = None
+        latest_still_s: float | None = None
+        latest_ball_displacement_m: float | None = None
+        ball_moved_since_fetch = False
+        max_commanded_linear_x_mps: float | None = None
+        max_target_speed_scale: float | None = None
+        observe_count = 0
+        failure_reason = "fetch_to_pose_timeout"
+        capture_geometry_gate = {}
+        push_readiness_gate: dict[str, Any] = {}
+        if isinstance(approach_payload, dict) and isinstance(approach_payload.get("capture_geometry_gate"), dict):
+            capture_geometry_gate = dict(approach_payload.get("capture_geometry_gate") or {})
+        approach_contact_metrics = None
+        if capture_geometry_gate:
+            approach_contact_metrics = {
+                "stable_contact_approach_pass": bool(capture_geometry_gate.get("pass", False)),
+                "flags": list(capture_geometry_gate.get("flags", [])),
+                "capture_geometry_gate": dict(capture_geometry_gate),
+            }
+
+        def _distance_to_fetch_pose(ball_pose: dict[str, Any] | None) -> float | None:
+            if fetch_xyyaw is None or not ball_pose:
+                return None
+            ball_xyyaw = world_pose_xyyaw(ball_pose)
+            if ball_xyyaw is None:
+                return None
+            return math.hypot(float(ball_xyyaw[0]) - float(fetch_xyyaw[0]), float(ball_xyyaw[1]) - float(fetch_xyyaw[1]))
+
+        def _ai_push_coast_decision(
+            *,
+            robot_pose: dict[str, Any] | None,
+            ball_pose: dict[str, Any] | None,
+            distance_to_fetch_pose_m: float | None,
+            latest_still_s: float | None,
+            terminal_correction_attempted: bool,
+            terminal_settled_after_nav2: bool = False,
+        ) -> dict[str, Any]:
+            return decide_ai_push_coast_handoff(
+                robot_pose=robot_pose,
+                ball_pose=ball_pose,
+                fetch_pose_world=fetch_pose_world,
+                delivery_radius_m=float(self.fetch_delivery_radius_m),
+                nav2_corridor_push=nav2_corridor_push_diagnostics,
+                nav2_attempted=nav2_corridor_push_attempted,
+                terminal_correction_attempted=terminal_correction_attempted,
+                distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                closest_approach_distance_m=closest_distance_m,
+                latest_still_s=latest_still_s,
+                terminal_settled_after_nav2=terminal_settled_after_nav2,
+                ball_moved_since_fetch=ball_moved_since_fetch,
+                approach_contact_metrics=approach_contact_metrics,
+                capture_geometry_gate=capture_geometry_gate,
+                mode=self.ai_push_coast_mode,
+            )
+
+        def _nav2_corridor_push_failure_reason(follow_path_result: dict[str, Any]) -> str:
+            dispatch_status = clean_text(follow_path_result.get("dispatch_status"))
+            if dispatch_status == "monitor_ball_escape":
+                return "nav2_corridor_push_ball_escape"
+            if dispatch_status == "monitor_stale_state":
+                return "nav2_corridor_push_stale_state"
+            if dispatch_status == "monitor_unsafe_drift":
+                return "nav2_corridor_push_unsafe_drift"
+            if bool(follow_path_result.get("timed_out", False)):
+                return "nav2_corridor_push_timeout"
+            if dispatch_status == "goal_finished":
+                return "nav2_corridor_push_action_abort"
+            return "nav2_corridor_push_failed"
+
+        def _corridor_push_dispatch_diagnostics(
+            *,
+            plan_dict: dict[str, Any],
+            follow_path_result: dict[str, Any],
+            base: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            object_motion = nav2_follow_path_no_object_motion_result(follow_path_result)
+            return {
+                **(base or {}),
+                "plan": plan_dict,
+                "dispatch_status": clean_text(follow_path_result.get("dispatch_status"), "unknown"),
+                "success": bool(follow_path_result.get("success", False)),
+                "status_code": clean_number(follow_path_result.get("status_code")),
+                "status_text": clean_text(follow_path_result.get("status_text")),
+                "error": clean_text(follow_path_result.get("error")),
+                "timeout_s": clean_rounded_number(follow_path_result.get("timeout_s")),
+                "elapsed_s": clean_rounded_number(follow_path_result.get("elapsed_s")),
+                "timed_out": bool(follow_path_result.get("timed_out", False)),
+                "cancel_requested": bool(follow_path_result.get("cancel_requested", False)),
+                "monitor_cancel_reason": clean_text(follow_path_result.get("monitor_cancel_reason")),
+                "monitor_sample": follow_path_result.get("monitor_sample", {}),
+                "monitor": follow_path_result.get("monitor", {}),
+                "first_contact_confirmed": bool(object_motion.get("object_motion_observed", False)),
+                "first_contact_no_object_motion": not bool(object_motion.get("object_motion_observed", False)),
+                "first_contact_start_displacement_m": object_motion.get("start_displacement_m"),
+                "first_contact_required_motion_m": object_motion.get("required_motion_m"),
+                "cmd_vel_counts": follow_path_result.get("cmd_vel_counts", {}),
+                "cmd_vel_last": follow_path_result.get("cmd_vel_last", {}),
+                "odom_delta": follow_path_result.get("odom_delta", {}),
+                "path_progress_last": follow_path_result.get("path_progress_last", {}),
+                "result": follow_path_result,
+            }
+
+        def _nav2_probe_contact_buffer_stop_diagnostics(follow_path_result: dict[str, Any]) -> dict[str, Any]:
+            sample = nav2_follow_path_monitor_last_sample(follow_path_result)
+            monitor = follow_path_result.get("monitor") if isinstance(follow_path_result.get("monitor"), dict) else {}
+            path_progress = (
+                follow_path_result.get("path_progress_last")
+                if isinstance(follow_path_result.get("path_progress_last"), dict)
+                else {}
+            )
+            dispatch_status = clean_text(follow_path_result.get("dispatch_status"))
+            status_text = clean_text(follow_path_result.get("status_text"))
+            robot_ball_distance_m = clean_number(sample.get("robot_ball_distance_m"))
+            lateral_error_m = clean_number(sample.get("lateral_error_m"))
+            start_displacement_m = clean_number(sample.get("start_displacement_m"))
+            terminal_path_distance_m = clean_number(path_progress.get("terminal_path_distance_m"))
+            terminal_yaw_error_deg = clean_number(path_progress.get("terminal_yaw_error_deg"))
+            nearest_path_kind = clean_text(path_progress.get("nearest_path_kind"))
+            no_object_motion = not nav2_follow_path_object_motion_observed(follow_path_result)
+            stopped_status = (
+                bool(follow_path_result.get("timed_out", False))
+                or dispatch_status in {"goal_result_timeout", "goal_finished", "monitor_contact_buffer_handoff"}
+                or status_text in {"STATUS_ABORTED", "STATUS_CANCELED"}
+            )
+            contact_stage_ok = (
+                not nearest_path_kind
+                or "corridor_contact" in nearest_path_kind
+                or (
+                    terminal_path_distance_m is not None
+                    and terminal_path_distance_m
+                    <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M)
+                )
+            )
+            close_enough = (
+                robot_ball_distance_m is not None
+                and robot_ball_distance_m <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M)
+            )
+            laterally_aligned = (
+                lateral_error_m is not None
+                and abs(float(lateral_error_m)) <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M)
+            )
+            terminal_distance_ok = (
+                terminal_path_distance_m is None
+                or terminal_path_distance_m
+                <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M)
+            )
+            terminal_yaw_ok = (
+                terminal_yaw_error_deg is None
+                or abs(float(terminal_yaw_error_deg))
+                <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG)
+            )
+            eligible = all(
+                [
+                    not bool(follow_path_result.get("success", False)),
+                    stopped_status,
+                    no_object_motion,
+                    close_enough,
+                    laterally_aligned,
+                    contact_stage_ok,
+                    terminal_distance_ok,
+                    terminal_yaw_ok,
+                ]
+            )
+            blockers: list[str] = []
+            if bool(follow_path_result.get("success", False)):
+                blockers.append("nav2_success")
+            if not stopped_status:
+                blockers.append("not_a_stopped_nav2_result")
+            if not no_object_motion:
+                blockers.append("object_motion_observed")
+            if not close_enough:
+                blockers.append("robot_not_at_contact_buffer")
+            if not laterally_aligned:
+                blockers.append("lateral_error_out_of_bounds")
+            if not contact_stage_ok:
+                blockers.append("not_at_corridor_contact_stage")
+            if not terminal_distance_ok:
+                blockers.append("terminal_path_distance_out_of_bounds")
+            if not terminal_yaw_ok:
+                blockers.append("terminal_yaw_error_out_of_bounds")
+            if clean_text(monitor.get("terminal_reason")) in {"ball_escape", "unsafe_drift", "stale_state"}:
+                blockers.append(clean_text(monitor.get("terminal_reason")))
+                eligible = False
+            return {
+                "eligible": bool(eligible),
+                "reason": "contact_buffer_stop" if eligible else ",".join(blockers),
+                "dispatch_status": dispatch_status,
+                "status_text": status_text,
+                "timed_out": bool(follow_path_result.get("timed_out", False)),
+                "robot_ball_distance_m": clean_rounded_number(robot_ball_distance_m),
+                "lateral_error_m": clean_rounded_number(lateral_error_m),
+                "start_displacement_m": clean_rounded_number(start_displacement_m),
+                "nearest_path_kind": nearest_path_kind,
+                "terminal_path_distance_m": clean_rounded_number(terminal_path_distance_m),
+                "terminal_yaw_error_deg": clean_rounded_number(terminal_yaw_error_deg),
+                "thresholds": {
+                    "max_robot_ball_distance_m": round(
+                        float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M),
+                        6,
+                    ),
+                    "max_lateral_error_m": round(
+                        float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M),
+                        6,
+                    ),
+                    "max_terminal_path_distance_m": round(
+                        float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M),
+                        6,
+                    ),
+                    "max_terminal_yaw_error_deg": round(
+                        float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG),
+                        6,
+                    ),
+                },
+            }
+
+        while time.monotonic() < deadline:
+            now_monotonic = time.monotonic()
+            fetch_elapsed_s = max(0.0, now_monotonic - fetch_started_monotonic)
+            ai_terminal_correction_active = (
+                ai_terminal_correction_active_until is not None
+                and now_monotonic < ai_terminal_correction_active_until
+            )
+            ai_first_contact_confirmation_servo_active = (
+                ai_first_contact_confirmation_servo_active_until is not None
+                and now_monotonic < ai_first_contact_confirmation_servo_active_until
+                and not ball_moved_since_fetch
+            )
+            _dashboard_state, robot_pose, ball_pose = self._control_loop_state(session_id=session_id, target=target)
+            capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
+            zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
+            ball_motion_m = pose_delta_m(previous_ball_pose, ball_pose) if previous_ball_pose is not None and ball_pose else None
+            if fetch_start_ball_pose is None and ball_pose:
+                fetch_start_ball_pose = dict(ball_pose)
+            latest_ball_displacement_m = (
+                pose_delta_m(fetch_start_ball_pose, ball_pose)
+                if fetch_start_ball_pose is not None and ball_pose
+                else None
+            )
+            if (
+                (ball_motion_m is not None and ball_motion_m > DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M)
+                or (
+                    latest_ball_displacement_m is not None
+                    and latest_ball_displacement_m > DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+                )
+            ):
+                ball_moved_since_fetch = True
+                if (
+                    ai_first_contact_confirmation_servo_attempted
+                    and not ai_first_contact_confirmation_confirmed
+                ):
+                    ai_first_contact_confirmation_confirmed = True
+                    ai_first_contact_confirmation_servo_active_until = None
+                    ai_first_contact_confirmation_servo_active = False
+                    ai_first_contact_confirmation_diagnostics = {
+                        **ai_first_contact_confirmation_diagnostics,
+                        "confirmed": True,
+                        "first_contact_confirmed": True,
+                        "first_contact_no_object_motion": False,
+                        "first_contact_confirmation_source": "deterministic_servo",
+                        "first_contact_start_displacement_m": (
+                            round(float(latest_ball_displacement_m), 6)
+                            if latest_ball_displacement_m is not None
+                            else None
+                        ),
+                        "deterministic_servo_attempted": True,
+                        "deterministic_servo_confirmed": True,
+                    }
+                    nav2_corridor_push_diagnostics = {
+                        **nav2_corridor_push_diagnostics,
+                        "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                    }
+                    append_jsonl(
+                        state_history_path,
+                        {
+                            "generated_utc": utc_now(),
+                            "event_type": "ai_push_coast_first_contact_confirmation_servo_confirmed",
+                            "phase": "fetch_to_pose",
+                            "attempt": int(attempt_index),
+                            "attempt_kind": str(attempt_kind),
+                            "target_id": target.id,
+                            "robot_pose": robot_pose,
+                            "ball_pose": ball_pose,
+                            "fetch_pose_world": fetch_pose_world,
+                            "capture_geometry_gate": capture_geometry_gate,
+                            "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                            "controller_family": self.gather_control_family,
+                        },
+                    )
+            distance_to_fetch_pose_m = _distance_to_fetch_pose(ball_pose)
+            if ball_pose:
+                latest_ball_pose = dict(ball_pose)
+                self._update_prior_from_ball_pose(target.id, ball_pose)
+            latest_capture = capture.to_dict() if capture else {}
+            latest_zone_score = zone_score.to_dict() if zone_score else {}
+            observe_count += 1
+            if (
+                self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                and ai_first_contact_confirmation_servo_active_until is not None
+                and not ball_moved_since_fetch
+                and now_monotonic >= ai_first_contact_confirmation_servo_active_until
+            ):
+                ai_first_contact_confirmation_diagnostics = {
+                    **ai_first_contact_confirmation_diagnostics,
+                    "confirmed": False,
+                    "first_contact_confirmed": False,
+                    "first_contact_no_object_motion": True,
+                    "first_contact_confirmation_source": "deterministic_servo",
+                    "deterministic_servo_attempted": True,
+                    "deterministic_servo_confirmed": False,
+                    "deterministic_servo_timeout_s": round(
+                        float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S),
+                        6,
+                    ),
+                }
+                nav2_corridor_push_diagnostics = {
+                    **nav2_corridor_push_diagnostics,
+                    "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                }
+                failure_reason = "nav2_corridor_push_first_contact_no_object_motion"
+                break
+            if distance_to_fetch_pose_m is not None:
+                if closest_distance_m is None or distance_to_fetch_pose_m < closest_distance_m:
+                    closest_distance_m = float(distance_to_fetch_pose_m)
+                    closest_pose = dict(ball_pose or {})
+                if distance_to_fetch_pose_m <= float(self.fetch_delivery_radius_m):
+                    if (
+                        self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                        and robot_pose
+                        and ball_pose
+                    ):
+                        latest_ai_push_coast = _ai_push_coast_decision(
+                            robot_pose=robot_pose,
+                            ball_pose=ball_pose,
+                            distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                            latest_still_s=latest_still_s,
+                            terminal_correction_attempted=ai_terminal_correction_attempted,
+                        )
+                    if ai_terminal_correction_attempted and not ai_terminal_correction_result_emitted:
+                        ai_terminal_correction_result_emitted = True
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_terminal_correction_result",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "result": "success",
+                                "robot_pose": robot_pose,
+                                "ball_pose": ball_pose,
+                                "fetch_pose_world": fetch_pose_world,
+                                "capture_geometry_gate": capture_geometry_gate,
+                                "push_readiness_gate": push_readiness_gate,
+                                "pre_correction_distance_m": (
+                                    round(float(ai_terminal_correction_start_distance_m), 6)
+                                    if ai_terminal_correction_start_distance_m is not None
+                                    else None
+                                ),
+                                "post_correction_distance_m": round(float(distance_to_fetch_pose_m), 6),
+                                "closest_approach_distance_m": round(float(closest_distance_m), 6),
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                **latest_ai_push_coast,
+                                "controller_family": self.gather_control_family,
+                            },
+                        )
+                    self._set_manual_drive(
+                        False,
+                        mode="fetch_to_pose_complete",
+                        rationale="Ball trajectory intersected the delivery radius.",
+                    )
+                    self._update_gather_runtime_state(
+                        mission_phase="advance",
+                        gather_phase="advance",
+                        latest_feedback=f"{target.label} fetched through the delivery pose.",
+                    )
+                    return True, {
+                        "final_ball_pose": latest_ball_pose,
+                        "failure_reason": "",
+                        "failure_stage": "",
+                        "fetch_observe_count": int(observe_count),
+                        "fetch_elapsed_s": round(float(fetch_elapsed_s), 6),
+                        "fetch_still_s": (
+                            round(float(latest_still_s), 6)
+                            if latest_still_s is not None
+                            else None
+                        ),
+                        "fetch_ball_displacement_m": (
+                            round(float(latest_ball_displacement_m), 6)
+                            if latest_ball_displacement_m is not None
+                            else None
+                        ),
+                        "fetch_ball_moved_since_fetch": bool(ball_moved_since_fetch),
+                        "fetch_min_launch_observe_s": round(float(DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S), 6),
+                        "fetch_launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                        "fetch_max_commanded_linear_x_mps": (
+                            round(float(max_commanded_linear_x_mps), 6)
+                            if max_commanded_linear_x_mps is not None
+                            else None
+                        ),
+                        "fetch_max_target_speed_scale": (
+                            round(float(max_target_speed_scale), 6)
+                            if max_target_speed_scale is not None
+                            else None
+                        ),
+                        "fetch_closest_approach_distance_m": round(float(closest_distance_m), 6),
+                        "fetch_closest_pose": closest_pose,
+                        "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                        "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                        "capture_geometry_gate": capture_geometry_gate,
+                        "push_readiness_gate": push_readiness_gate,
+                        "push_readiness_setup": push_readiness_setup_diagnostics,
+                        "ai_push_coast_mode": self.ai_push_coast_mode,
+                        **latest_ai_push_coast,
+                        "settle_exit_reason": "trajectory_intersects_delivery_radius",
+                        "rolled_away_after_release": False,
+                    }
+            if ball_motion_m is not None and ball_motion_m <= DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M:
+                still_started_monotonic = now_monotonic if still_started_monotonic is None else still_started_monotonic
+            else:
+                still_started_monotonic = None
+            latest_still_s = (
+                max(0.0, now_monotonic - still_started_monotonic)
+                if still_started_monotonic is not None
+                else None
+            )
+            corridor_push_family = self.gather_control_family in {
+                NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY,
+                AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
+            }
+            if (
+                still_started_monotonic is not None
+                and latest_still_s is not None
+                and latest_still_s >= DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
+                and (
+                    ball_moved_since_fetch
+                    or fetch_elapsed_s >= DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S
+                )
+                and distance_to_fetch_pose_m is not None
+                and distance_to_fetch_pose_m > float(self.fetch_delivery_radius_m)
+                and not ai_first_contact_confirmation_servo_active
+                and (not corridor_push_family or nav2_corridor_push_attempted)
+            ):
+                if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
+                    latest_ai_push_coast = _ai_push_coast_decision(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                        latest_still_s=latest_still_s,
+                        terminal_correction_attempted=(
+                            ai_terminal_correction_attempted
+                            and not ai_terminal_correction_active
+                        ),
+                    )
+                    guard = latest_ai_push_coast.get("ai_push_coast_guard", {})
+                    if (
+                        self.ai_push_coast_mode == AI_PUSH_COAST_MODE_GUARDED_LIVE
+                        and not ai_terminal_correction_attempted
+                        and not ai_terminal_correction_active
+                        and isinstance(guard, dict)
+                        and bool(guard.get("accepted", False))
+                    ):
+                        ai_terminal_correction_attempted = True
+                        ai_terminal_correction_start_distance_m = float(distance_to_fetch_pose_m)
+                        ai_terminal_correction_active_until = min(
+                            deadline,
+                            now_monotonic + DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S,
+                        )
+                        ai_terminal_correction_active = True
+                        still_started_monotonic = None
+                        latest_still_s = None
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_terminal_correction_start",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "robot_pose": robot_pose,
+                                "ball_pose": ball_pose,
+                                "fetch_pose_world": fetch_pose_world,
+                                "capture_geometry_gate": capture_geometry_gate,
+                                "push_readiness_gate": push_readiness_gate,
+                                "ai_terminal_correction_trigger": "settled_stop_short",
+                                "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
+                                "closest_approach_distance_m": (
+                                    round(float(closest_distance_m), 6)
+                                    if closest_distance_m is not None
+                                    else None
+                                ),
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                "ai_terminal_correction_window_s": round(
+                                    float(DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S),
+                                    6,
+                                ),
+                                **latest_ai_push_coast,
+                            },
+                        )
+                    elif not ai_terminal_correction_active:
+                        if ai_terminal_correction_attempted:
+                            failure_reason = "guarded_terminal_correction_missed_delivery_radius"
+                            if not ai_terminal_correction_result_emitted:
+                                ai_terminal_correction_result_emitted = True
+                                append_jsonl(
+                                    state_history_path,
+                                    {
+                                        "generated_utc": utc_now(),
+                                        "event_type": "ai_push_coast_terminal_correction_result",
+                                        "phase": "fetch_to_pose",
+                                        "attempt": int(attempt_index),
+                                        "attempt_kind": str(attempt_kind),
+                                        "target_id": target.id,
+                                        "result": "failed",
+                                        "failure_reason": failure_reason,
+                                        "robot_pose": robot_pose,
+                                        "ball_pose": ball_pose,
+                                        "fetch_pose_world": fetch_pose_world,
+                                        "capture_geometry_gate": capture_geometry_gate,
+                                        "push_readiness_gate": push_readiness_gate,
+                                        "pre_correction_distance_m": (
+                                            round(float(ai_terminal_correction_start_distance_m), 6)
+                                            if ai_terminal_correction_start_distance_m is not None
+                                            else None
+                                        ),
+                                        "post_correction_distance_m": round(float(distance_to_fetch_pose_m), 6),
+                                        "closest_approach_distance_m": (
+                                            round(float(closest_distance_m), 6)
+                                            if closest_distance_m is not None
+                                            else None
+                                        ),
+                                        "ai_push_coast_mode": self.ai_push_coast_mode,
+                                        **latest_ai_push_coast,
+                                        "controller_family": self.gather_control_family,
+                                    },
+                                )
+                        elif not failure_reason.startswith("nav2_corridor_push_"):
+                            failure_reason = "fetch_to_pose_ball_stopped_short"
+                        break
+                elif not ai_terminal_correction_active:
+                    if not failure_reason.startswith("nav2_corridor_push_"):
+                        failure_reason = "fetch_to_pose_ball_stopped_short"
+                    break
+
+            if (
+                self.gather_control_family in {NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY, AI_PUSH_COAST_SERVO_CONTROL_FAMILY}
+                and robot_pose
+                and ball_pose
+                and not nav2_corridor_push_attempted
+                and not ai_first_contact_confirmation_servo_active
+            ):
+                push_readiness_gate = evaluate_fetch_push_readiness(
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    fetch_pose_world=fetch_pose_world,
+                    delivery_radius_m=float(self.fetch_delivery_radius_m),
+                )
+                if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
+                    latest_ai_push_coast = _ai_push_coast_decision(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                        latest_still_s=latest_still_s,
+                        terminal_correction_attempted=ai_terminal_correction_attempted,
+                    )
+                nav2_corridor_push_diagnostics = {
+                    **nav2_corridor_push_diagnostics,
+                    "push_readiness_gate": push_readiness_gate,
+                }
+                push_readiness_setup_command: PlaceControlCommand | None = None
+                push_readiness_setup_active = bool(
+                    push_readiness_setup_active_until is not None
+                    and now_monotonic < float(push_readiness_setup_active_until)
+                )
+                push_readiness_setup_started_now = False
+                if not bool(push_readiness_gate.get("pass", False)):
+                    failure_reason = "push_readiness_gate_failed"
+                    push_readiness_setup_command = compute_fetch_push_readiness_setup_command(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        fetch_pose_world=fetch_pose_world,
+                        delivery_radius_m=float(self.fetch_delivery_radius_m),
+                    )
+                    if (
+                        push_readiness_setup_command is not None
+                        and not push_readiness_setup_active
+                        and not push_readiness_setup_attempted
+                        and now_monotonic < deadline
+                    ):
+                        push_readiness_setup_attempted = True
+                        push_readiness_setup_started_now = True
+                        push_readiness_setup_active_until = min(
+                            deadline,
+                            now_monotonic + DEFAULT_FETCH_PUSH_READINESS_SETUP_WINDOW_S,
+                        )
+                        push_readiness_setup_active = True
+                    remaining_setup_s = (
+                        max(0.0, float(push_readiness_setup_active_until) - now_monotonic)
+                        if push_readiness_setup_active_until is not None
+                        else 0.0
+                    )
+                    push_readiness_setup_diagnostics = {
+                        "attempted": bool(push_readiness_setup_attempted),
+                        "active": bool(push_readiness_setup_active),
+                        "started_now": bool(push_readiness_setup_started_now),
+                        "window_s": round(float(DEFAULT_FETCH_PUSH_READINESS_SETUP_WINDOW_S), 6),
+                        "remaining_s": round(float(remaining_setup_s), 6),
+                        "command": (
+                            push_readiness_setup_command.to_dict()
+                            if push_readiness_setup_command is not None
+                            else {}
+                        ),
+                    }
+                    nav2_corridor_push_diagnostics = {
+                        **nav2_corridor_push_diagnostics,
+                        "push_readiness_setup": push_readiness_setup_diagnostics,
+                    }
+                elif push_readiness_setup_attempted:
+                    push_readiness_setup_diagnostics = {
+                        **push_readiness_setup_diagnostics,
+                        "attempted": True,
+                        "active": False,
+                        "result": "passed_after_setup",
+                        "final_gate": push_readiness_gate,
+                    }
+                    nav2_corridor_push_diagnostics = {
+                        **nav2_corridor_push_diagnostics,
+                        "push_readiness_setup": push_readiness_setup_diagnostics,
+                    }
+                append_jsonl(
+                    state_history_path,
+                    {
+                        "generated_utc": utc_now(),
+                        "event_type": "fetch_to_pose_push_readiness_gate",
+                        "phase": "fetch_to_pose",
+                        "attempt": int(attempt_index),
+                        "attempt_kind": str(attempt_kind),
+                        "target_id": target.id,
+                        "robot_pose": robot_pose,
+                        "ball_pose": ball_pose,
+                        "fetch_pose_world": fetch_pose_world,
+                        "capture_geometry_gate": capture_geometry_gate,
+                        "push_readiness_gate": push_readiness_gate,
+                        "push_readiness_setup": push_readiness_setup_diagnostics,
+                        "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                        "ai_push_coast_mode": self.ai_push_coast_mode,
+                        **latest_ai_push_coast,
+                        "controller_family": self.gather_control_family,
+                        "control": self._control_debug_fields(
+                            strategy_name=NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE,
+                            objective_name="push_readiness_gate",
+                        ),
+                    },
+                )
+                if not bool(push_readiness_gate.get("pass", False)):
+                    if (
+                        push_readiness_setup_command is not None
+                        and push_readiness_setup_active
+                        and now_monotonic < deadline
+                    ):
+                        if push_readiness_setup_started_now:
+                            append_jsonl(
+                                state_history_path,
+                                {
+                                    "generated_utc": utc_now(),
+                                    "event_type": "fetch_to_pose_push_readiness_setup_start",
+                                    "phase": "fetch_to_pose",
+                                    "attempt": int(attempt_index),
+                                    "attempt_kind": str(attempt_kind),
+                                    "target_id": target.id,
+                                    "robot_pose": robot_pose,
+                                    "ball_pose": ball_pose,
+                                    "fetch_pose_world": fetch_pose_world,
+                                    "push_readiness_gate": push_readiness_gate,
+                                    "push_readiness_setup": push_readiness_setup_diagnostics,
+                                    "controller_family": self.gather_control_family,
+                                    "control": self._control_debug_fields(
+                                        strategy_name=NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE,
+                                        objective_name="push_readiness_setup",
+                                    ),
+                                },
+                            )
+                        self._set_manual_drive(
+                            True,
+                            linear_x=push_readiness_setup_command.linear_x,
+                            angular_z=push_readiness_setup_command.angular_z,
+                            mode=push_readiness_setup_command.mode,
+                            rationale=push_readiness_setup_command.rationale,
+                        )
+                        self._update_gather_runtime_state(
+                            latest_control_command=push_readiness_setup_command.to_dict(),
+                            latest_feedback=f"Re-aligning {target.label} to a measured push-ready pose.",
+                        )
+                        previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                        time.sleep(self.args.poll_s)
+                        continue
+                    self._set_manual_drive(
+                        False,
+                        mode=failure_reason,
+                        rationale="Robot, ball, and target geometry are not push-ready.",
+                    )
+                    break
+                if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
+                    if (
+                        not ai_first_contact_confirmation_attempted
+                        and not ball_moved_since_fetch
+                    ):
+                        ai_first_contact_confirmation_attempted = True
+                        probe_plan = build_nav2_follow_path_corridor_contact_probe_plan(
+                            robot_pose,
+                            ball_pose,
+                            fetch_pose_world,
+                        )
+                        probe_plan_dict = probe_plan.to_dict()
+                        ai_first_contact_confirmation_diagnostics = {
+                            "plan": probe_plan_dict,
+                            "attempted": True,
+                            "confirmed": False,
+                            "dispatch_status": "not_dispatched",
+                            "monitor_cancel_live": True,
+                            "monitor_cancel_live_reason": "first_contact_motion_evidence",
+                            "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                            "success_on_motion_min_longitudinal_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M),
+                                6,
+                            ),
+                        }
+                        nav2_corridor_push_diagnostics = {
+                            **nav2_corridor_push_diagnostics,
+                            "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                        }
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_first_contact_confirmation_plan",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "robot_pose": robot_pose,
+                                "ball_pose": ball_pose,
+                                "fetch_pose_world": fetch_pose_world,
+                                "capture_geometry_gate": capture_geometry_gate,
+                                "nav2_follow_path_plan": probe_plan_dict,
+                                "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                **latest_ai_push_coast,
+                                "controller_family": self.gather_control_family,
+                            },
+                        )
+                        if not bool(probe_plan_dict.get("active", False)):
+                            failure_reason = clean_text(
+                                probe_plan_dict.get("reason"),
+                                "nav2_corridor_push_first_contact_probe_unavailable",
+                            )
+                            break
+                        probe_path_poses = [
+                            dict(item)
+                            for item in probe_plan_dict.get("path_poses", [])
+                            if isinstance(item, dict)
+                        ]
+                        remaining_timeout_s = max(0.1, deadline - time.monotonic())
+                        probe_timeout_s = min(
+                            float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_TIMEOUT_S),
+                            remaining_timeout_s,
+                        )
+                        self._set_manual_drive(
+                            False,
+                            mode="ai_push_coast_first_contact_confirmation",
+                            rationale="Nav2 FollowPath probes for measured ball contact before the corridor push.",
+                        )
+                        self._update_gather_runtime_state(
+                            mission_phase="fetch_to_pose",
+                            gather_phase="fetch_to_pose",
+                            latest_feedback=f"Confirming first contact on {target.label}.",
+                        )
+                        probe_monitor = {
+                            "enabled": True,
+                            "truth_state_path": to_container_repo_path(self._truth_state_path(session_id)),
+                            "target_model_name": self._target_model_name(target),
+                            "start_ball_pose": ball_pose,
+                            "delivery_pose": fetch_pose_world,
+                            "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                            "stale_timeout_s": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_STALE_S), 6),
+                            "escape_lateral_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_ESCAPE_LATERAL_M), 6),
+                            "backtrack_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M), 6),
+                            "max_robot_ball_distance_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M), 6),
+                            "launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                            "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                            "success_on_motion_min_longitudinal_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M),
+                                6,
+                            ),
+                            "contact_buffer_handoff_max_robot_ball_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M),
+                                6,
+                            ),
+                            "contact_buffer_handoff_max_lateral_error_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M),
+                                6,
+                            ),
+                            "contact_buffer_handoff_max_terminal_path_distance_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M),
+                                6,
+                            ),
+                            "contact_buffer_handoff_max_terminal_yaw_error_deg": round(
+                                float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG),
+                                6,
+                            ),
+                        }
+                        try:
+                            probe_result = self._dispatch_nav2_follow_path_reacquire(
+                                compose_project=clean_text(_dashboard_state.get("compose_project"), session_id),
+                                path_poses=probe_path_poses,
+                                controller_id=clean_text(
+                                    probe_plan_dict.get("controller_id"),
+                                    DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID,
+                                ),
+                                goal_checker_id=clean_text(
+                                    probe_plan_dict.get("goal_checker_id"),
+                                    DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID,
+                                ),
+                                timeout_s=probe_timeout_s,
+                                monitor=probe_monitor,
+                            )
+                        except Exception as exc:
+                            probe_result = {
+                                "dispatch_status": "client_exception",
+                                "accepted": False,
+                                "success": False,
+                                "error": str(exc),
+                            }
+                        ai_first_contact_confirmation_diagnostics = _corridor_push_dispatch_diagnostics(
+                            plan_dict=probe_plan_dict,
+                            follow_path_result=probe_result,
+                            base={
+                                "attempted": True,
+                                "monitor_cancel_live": True,
+                                "monitor_cancel_live_reason": "first_contact_motion_evidence",
+                                "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                                "success_on_motion_min_longitudinal_m": round(
+                                    float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M),
+                                    6,
+                                ),
+                            },
+                        )
+                        nav2_contact_buffer_stop = _nav2_probe_contact_buffer_stop_diagnostics(probe_result)
+                        ai_first_contact_confirmation_confirmed = bool(
+                            ai_first_contact_confirmation_diagnostics.get("first_contact_confirmed", False)
+                        )
+                        ai_first_contact_confirmation_diagnostics = {
+                            **ai_first_contact_confirmation_diagnostics,
+                            "confirmed": bool(ai_first_contact_confirmation_confirmed),
+                            "nav2_probe_contact_buffer_stop": bool(nav2_contact_buffer_stop.get("eligible", False)),
+                            "nav2_probe_contact_buffer_stop_diagnostics": nav2_contact_buffer_stop,
+                        }
+                        nav2_corridor_push_diagnostics = {
+                            **nav2_corridor_push_diagnostics,
+                            "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                        }
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_first_contact_confirmation_result",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "nav2_follow_path_plan": probe_plan_dict,
+                                "nav2_follow_path_result": probe_result,
+                                "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                                "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                **latest_ai_push_coast,
+                                "controller_family": self.gather_control_family,
+                                "control": self._control_debug_fields(
+                                    strategy_name=AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
+                                    objective_name="first_contact_confirmation",
+                                ),
+                            },
+                        )
+                        if bool(probe_result.get("success", False)) and ai_first_contact_confirmation_confirmed:
+                            ball_moved_since_fetch = True
+                            previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                            time.sleep(self.args.poll_s)
+                            continue
+                        if bool(probe_result.get("success", False)) or bool(
+                            nav2_contact_buffer_stop.get("eligible", False)
+                        ):
+                            deterministic_servo_source = (
+                                "nav2_contact_buffer_stop"
+                                if bool(nav2_contact_buffer_stop.get("eligible", False))
+                                else "nav2_probe_no_object_motion"
+                            )
+                            ai_first_contact_confirmation_servo_attempted = True
+                            ai_first_contact_confirmation_servo_active_until = min(
+                                deadline,
+                                time.monotonic() + DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S,
+                            )
+                            ai_first_contact_confirmation_diagnostics = {
+                                **ai_first_contact_confirmation_diagnostics,
+                                "confirmed": False,
+                                "first_contact_confirmation_source": "deterministic_servo",
+                                "nav2_probe_no_object_motion": bool(probe_result.get("success", False)),
+                                "nav2_probe_contact_buffer_stop": bool(
+                                    nav2_contact_buffer_stop.get("eligible", False)
+                                ),
+                                "deterministic_servo_source": deterministic_servo_source,
+                                "deterministic_servo_attempted": True,
+                                "deterministic_servo_active": True,
+                                "deterministic_servo_window_s": round(
+                                    float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S),
+                                    6,
+                                ),
+                            }
+                            nav2_corridor_push_diagnostics = {
+                                **nav2_corridor_push_diagnostics,
+                                "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                            }
+                            append_jsonl(
+                                state_history_path,
+                                {
+                                    "generated_utc": utc_now(),
+                                    "event_type": "ai_push_coast_first_contact_confirmation_servo_start",
+                                    "phase": "fetch_to_pose",
+                                    "attempt": int(attempt_index),
+                                    "attempt_kind": str(attempt_kind),
+                                    "target_id": target.id,
+                                    "robot_pose": robot_pose,
+                                    "ball_pose": ball_pose,
+                                    "fetch_pose_world": fetch_pose_world,
+                                    "capture_geometry_gate": capture_geometry_gate,
+                                    "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                                    "controller_family": self.gather_control_family,
+                                    "control": self._control_debug_fields(
+                                        strategy_name=AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
+                                        objective_name="first_contact_confirmation_servo",
+                                    ),
+                                },
+                            )
+                            previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                            time.sleep(self.args.poll_s)
+                            continue
+                        else:
+                            mapped_reason = _nav2_corridor_push_failure_reason(probe_result)
+                            if mapped_reason == "nav2_corridor_push_failed":
+                                mapped_reason = "nav2_corridor_push_first_contact_failed"
+                            failure_reason = mapped_reason
+                        previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                        break
+                nav2_corridor_push_attempted = True
+                corridor_push_through_m = None
+                if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
+                    corridor_push_through_m = DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M
+                corridor_plan = build_nav2_follow_path_corridor_push_plan(
+                    robot_pose,
+                    ball_pose,
+                    fetch_pose_world,
+                    **(
+                        {"push_through_m": corridor_push_through_m}
+                        if corridor_push_through_m is not None
+                        else {}
+                    ),
+                )
+                corridor_plan_dict = corridor_plan.to_dict()
+                path_poses = [
+                    dict(item)
+                    for item in corridor_plan_dict.get("path_poses", [])
+                    if isinstance(item, dict)
+                ]
+                nav2_corridor_push_diagnostics = {
+                    "plan": corridor_plan_dict,
+                    "dispatch_status": "not_dispatched",
+                    "monitor_cancel_live": True,
+                    "monitor_cancel_live_reason": "",
+                    "push_readiness_gate": push_readiness_gate,
+                }
+                append_jsonl(
+                    state_history_path,
+                    {
+                        "generated_utc": utc_now(),
+                        "event_type": "nav2_follow_path_corridor_push_plan",
+                        "phase": "fetch_to_pose",
+                        "attempt": int(attempt_index),
+                        "attempt_kind": str(attempt_kind),
+                        "target_id": target.id,
+                        "robot_pose": robot_pose,
+                        "ball_pose": ball_pose,
+                        "fetch_pose_world": fetch_pose_world,
+                        "capture_geometry_gate": capture_geometry_gate,
+                        "push_readiness_gate": push_readiness_gate,
+                        "nav2_follow_path_plan": corridor_plan_dict,
+                        "ai_push_coast_mode": self.ai_push_coast_mode,
+                        **latest_ai_push_coast,
+                        "controller_family": self.gather_control_family,
+                    },
+                )
+                if not bool(corridor_plan_dict.get("active", False)):
+                    failure_reason = clean_text(corridor_plan_dict.get("reason"), "nav2_corridor_push_path_unavailable")
+                    break
+                remaining_timeout_s = max(0.1, deadline - time.monotonic())
+                follow_path_timeout_s = min(
+                    float(DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_GOAL_TIMEOUT_S),
+                    remaining_timeout_s,
+                )
+                self._set_manual_drive(
+                    False,
+                    mode="nav2_follow_path_corridor_push",
+                    rationale="Nav2 FollowPath owns the corridor-push contact path.",
+                )
+                self._update_gather_runtime_state(
+                    mission_phase="fetch_to_pose",
+                    gather_phase="fetch_to_pose",
+                    latest_feedback=f"Nav2 corridor-push is fetching {target.label}.",
+                )
+                corridor_monitor = {
+                    "enabled": True,
+                    "truth_state_path": to_container_repo_path(self._truth_state_path(session_id)),
+                    "target_model_name": self._target_model_name(target),
+                    "start_ball_pose": ball_pose,
+                    "delivery_pose": fetch_pose_world,
+                    "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                    "stale_timeout_s": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_STALE_S), 6),
+                    "escape_lateral_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_ESCAPE_LATERAL_M), 6),
+                    "backtrack_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M), 6),
+                    "max_robot_ball_distance_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M), 6),
+                    "launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                }
+                try:
+                    follow_path_result = self._dispatch_nav2_follow_path_reacquire(
+                        compose_project=clean_text(_dashboard_state.get("compose_project"), session_id),
+                        path_poses=path_poses,
+                        controller_id=clean_text(
+                            corridor_plan_dict.get("controller_id"),
+                            DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID,
+                        ),
+                        goal_checker_id=clean_text(
+                            corridor_plan_dict.get("goal_checker_id"),
+                            DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID,
+                        ),
+                        timeout_s=follow_path_timeout_s,
+                        monitor=corridor_monitor,
+                    )
+                except Exception as exc:
+                    follow_path_result = {
+                        "dispatch_status": "client_exception",
+                        "accepted": False,
+                        "success": False,
+                        "error": str(exc),
+                    }
+                nav2_corridor_push_diagnostics = _corridor_push_dispatch_diagnostics(
+                    plan_dict=corridor_plan_dict,
+                    follow_path_result=follow_path_result,
+                    base=nav2_corridor_push_diagnostics,
+                )
+                append_jsonl(
+                    state_history_path,
+                    {
+                        "generated_utc": utc_now(),
+                        "event_type": "nav2_follow_path_corridor_push_result",
+                        "phase": "fetch_to_pose",
+                        "attempt": int(attempt_index),
+                        "attempt_kind": str(attempt_kind),
+                        "target_id": target.id,
+                        "nav2_follow_path_plan": corridor_plan_dict,
+                        "nav2_follow_path_result": follow_path_result,
+                        "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                        "capture_geometry_gate": capture_geometry_gate,
+                        "ai_push_coast_mode": self.ai_push_coast_mode,
+                        **latest_ai_push_coast,
+                        "controller_family": self.gather_control_family,
+                        "control": self._control_debug_fields(
+                            strategy_name=NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE,
+                            objective_name="follow_path_corridor_push",
+                        ),
+                    },
+                )
+                if not bool(follow_path_result.get("success", False)):
+                    failure_reason = _nav2_corridor_push_failure_reason(follow_path_result)
+                    _post_dashboard_state, post_robot_pose, post_ball_pose = self._control_loop_state(
+                        session_id=session_id,
+                        target=target,
+                    )
+                    if post_robot_pose:
+                        robot_pose = post_robot_pose
+                    if post_ball_pose:
+                        ball_pose = post_ball_pose
+                        latest_ball_pose = dict(post_ball_pose)
+                        self._update_prior_from_ball_pose(target.id, post_ball_pose)
+                        distance_to_fetch_pose_m = _distance_to_fetch_pose(post_ball_pose)
+                        latest_ball_displacement_m = (
+                            pose_delta_m(fetch_start_ball_pose, post_ball_pose)
+                            if fetch_start_ball_pose is not None
+                            else None
+                        )
+                        if latest_ball_displacement_m is not None and (
+                            latest_ball_displacement_m > DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+                        ):
+                            ball_moved_since_fetch = True
+                        if distance_to_fetch_pose_m is not None:
+                            if closest_distance_m is None or distance_to_fetch_pose_m < closest_distance_m:
+                                closest_distance_m = float(distance_to_fetch_pose_m)
+                                closest_pose = dict(post_ball_pose)
+                    if nav2_follow_path_object_motion_observed(follow_path_result):
+                        ball_moved_since_fetch = True
+                    monitor_cancel_reason = clean_text(follow_path_result.get("monitor_cancel_reason"))
+                    if not monitor_cancel_reason:
+                        monitor_cancel_reason = clean_text(nav2_corridor_push_diagnostics.get("monitor_cancel_reason"))
+                    terminal_action_abort = clean_text(follow_path_result.get("dispatch_status")) == "goal_finished"
+                    terminal_guard_allowed = (
+                        self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                        and self.ai_push_coast_mode == AI_PUSH_COAST_MODE_GUARDED_LIVE
+                        and terminal_action_abort
+                        and bool(ball_moved_since_fetch)
+                        and not ai_terminal_correction_attempted
+                        and monitor_cancel_reason not in {"ball_escape", "unsafe_drift", "stale_state"}
+                        and distance_to_fetch_pose_m is not None
+                        and distance_to_fetch_pose_m > float(self.fetch_delivery_radius_m)
+                        and robot_pose
+                        and ball_pose
+                    )
+                    if terminal_guard_allowed:
+                        latest_ai_push_coast = _ai_push_coast_decision(
+                            robot_pose=robot_pose,
+                            ball_pose=ball_pose,
+                            distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                            latest_still_s=latest_still_s,
+                            terminal_correction_attempted=ai_terminal_correction_attempted,
+                            terminal_settled_after_nav2=True,
+                        )
+                        guard = latest_ai_push_coast.get("ai_push_coast_guard", {})
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_terminal_correction_candidate",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "robot_pose": robot_pose,
+                                "ball_pose": ball_pose,
+                                "fetch_pose_world": fetch_pose_world,
+                                "capture_geometry_gate": capture_geometry_gate,
+                                "push_readiness_gate": push_readiness_gate,
+                                "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
+                                "closest_approach_distance_m": (
+                                    round(float(closest_distance_m), 6)
+                                    if closest_distance_m is not None
+                                    else None
+                                ),
+                                "nav2_follow_path_result": follow_path_result,
+                                "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                                "original_failure_reason": failure_reason,
+                                "terminal_settled_after_nav2": True,
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                **latest_ai_push_coast,
+                                "controller_family": self.gather_control_family,
+                            },
+                        )
+                        if isinstance(guard, dict) and bool(guard.get("accepted", False)):
+                            ai_terminal_correction_attempted = True
+                            ai_terminal_correction_start_distance_m = float(distance_to_fetch_pose_m)
+                            ai_terminal_correction_active_until = min(
+                                deadline,
+                                time.monotonic() + DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S,
+                            )
+                            ai_terminal_correction_active = True
+                            still_started_monotonic = None
+                            latest_still_s = None
+                            append_jsonl(
+                                state_history_path,
+                                {
+                                    "generated_utc": utc_now(),
+                                    "event_type": "ai_push_coast_terminal_correction_start",
+                                    "phase": "fetch_to_pose",
+                                    "attempt": int(attempt_index),
+                                    "attempt_kind": str(attempt_kind),
+                                    "target_id": target.id,
+                                    "robot_pose": robot_pose,
+                                    "ball_pose": ball_pose,
+                                    "fetch_pose_world": fetch_pose_world,
+                                    "capture_geometry_gate": capture_geometry_gate,
+                                    "push_readiness_gate": push_readiness_gate,
+                                    "ai_terminal_correction_trigger": "nav2_action_abort_stop_short",
+                                    "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
+                                    "closest_approach_distance_m": (
+                                        round(float(closest_distance_m), 6)
+                                        if closest_distance_m is not None
+                                        else None
+                                    ),
+                                    "ai_push_coast_mode": self.ai_push_coast_mode,
+                                    "ai_terminal_correction_window_s": round(
+                                        float(DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S),
+                                        6,
+                                    ),
+                                    **latest_ai_push_coast,
+                                    "controller_family": self.gather_control_family,
+                                },
+                            )
+                            previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                            time.sleep(self.args.poll_s)
+                            continue
+                    previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                    break
+                if (
+                    self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                    and not ball_moved_since_fetch
+                    and not bool(nav2_corridor_push_diagnostics.get("first_contact_confirmed", False))
+                ):
+                    failure_reason = "nav2_corridor_push_first_contact_no_object_motion"
+                    previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                    break
+                previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                time.sleep(self.args.poll_s)
+                continue
+
+            command: PlaceControlCommand | None = None
+            raw_command: PlaceControlCommand | None = None
+            policy_fields: dict[str, Any] = {}
+            if (
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                decision = decide_object_centric_gather_command(
+                    robot_pose,
+                    ball_pose,
+                    phase="fetch_to_pose",
+                    zone=self.zone,
+                    envelope=self.capture_envelope,
+                    previous_command=previous_command,
+                    previous_ball_pose=previous_ball_pose,
+                )
+                command = decision.command
+                raw_command = decision.raw_command
+                latest_policy = dict(decision.diagnostics)
+                policy_fields = {
+                    "object_centric_policy": latest_policy,
+                    **self._control_debug_fields(
+                        strategy_name=str(decision.strategy_name or ""),
+                        objective_name=str(decision.objective_name or ""),
+                        progress_score=clean_number(decision.progress_score),
+                    ),
+                }
+            elif (
+                self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                if not latest_ai_push_coast or not ai_terminal_correction_active:
+                    latest_ai_push_coast = _ai_push_coast_decision(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                        latest_still_s=latest_still_s,
+                        terminal_correction_attempted=(
+                            ai_terminal_correction_attempted
+                            and not ai_terminal_correction_active
+                        ),
+                    )
+                policy_fields = {
+                    "ai_push_coast_mode": self.ai_push_coast_mode,
+                    "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                    "ai_first_contact_confirmation_servo_active": bool(ai_first_contact_confirmation_servo_active),
+                    "ai_terminal_correction_active": bool(ai_terminal_correction_active),
+                    "ai_terminal_correction_attempted": bool(ai_terminal_correction_attempted),
+                    **latest_ai_push_coast,
+                    **self._control_debug_fields(
+                        strategy_name=AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
+                        objective_name="ai_push_coast_shadow"
+                        if not ai_terminal_correction_active
+                        else "guarded_terminal_contact",
+                    ),
+                }
+                if ai_first_contact_confirmation_servo_active:
+                    decision = decide_object_centric_gather_command(
+                        robot_pose,
+                        ball_pose,
+                        phase="fetch_to_pose",
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                        previous_command=previous_command,
+                        previous_ball_pose=previous_ball_pose,
+                    )
+                    command = decision.command
+                    raw_command = decision.raw_command
+                    latest_policy = dict(decision.diagnostics)
+                    policy_fields.update(
+                        {
+                            "object_centric_policy": latest_policy,
+                            **self._control_debug_fields(
+                                strategy_name=str(decision.strategy_name or ""),
+                                objective_name="first_contact_confirmation_servo",
+                                progress_score=clean_number(decision.progress_score),
+                            ),
+                        }
+                    )
+                elif self.ai_push_coast_mode == AI_PUSH_COAST_MODE_GUARDED_LIVE and ai_terminal_correction_active:
+                    decision = decide_object_centric_gather_command(
+                        robot_pose,
+                        ball_pose,
+                        phase="fetch_to_pose",
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                        previous_command=previous_command,
+                        previous_ball_pose=previous_ball_pose,
+                    )
+                    command = decision.command
+                    raw_command = decision.raw_command
+                    latest_policy = dict(decision.diagnostics)
+                    policy_fields.update(
+                        {
+                            "object_centric_policy": latest_policy,
+                            **self._control_debug_fields(
+                                strategy_name=str(decision.strategy_name or ""),
+                                objective_name="guarded_terminal_contact",
+                                progress_score=clean_number(decision.progress_score),
+                            ),
+                        }
+                    )
+            elif self.gather_control_family == NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY:
+                policy_fields = {
+                    "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                    **self._control_debug_fields(
+                        strategy_name=NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE,
+                        objective_name="follow_path_corridor_push_observe",
+                    ),
+                }
+            elif robot_pose and ball_pose:
+                command = compute_place_command(robot_pose, ball_pose, zone=self.zone, envelope=self.capture_envelope)
+                raw_command = command
+                policy_fields = self._control_debug_fields(objective_name="fetch_to_pose_fallback")
+
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "event_type": "fetch_to_pose_tick",
+                    "phase": "fetch_to_pose",
+                    "attempt": int(attempt_index),
+                    "attempt_kind": str(attempt_kind),
+                    "target_id": target.id,
+                    "robot_pose": robot_pose,
+                    "ball_pose": ball_pose,
+                    "capture": latest_capture,
+                    "zone_score": latest_zone_score,
+                    "fetch_pose_world": fetch_pose_world,
+                    "capture_geometry_gate": capture_geometry_gate,
+                    "push_readiness_gate": push_readiness_gate,
+                    "fetch_to_pose": {
+                        "reached": bool(
+                            distance_to_fetch_pose_m is not None
+                            and distance_to_fetch_pose_m <= float(self.fetch_delivery_radius_m)
+                        ),
+                        "elapsed_s": round(float(fetch_elapsed_s), 6),
+                        "observe_count": int(observe_count),
+                        "distance_to_fetch_pose_m": (
+                            round(float(distance_to_fetch_pose_m), 6)
+                            if distance_to_fetch_pose_m is not None
+                            else None
+                        ),
+                        "closest_approach_distance_m": (
+                            round(float(closest_distance_m), 6)
+                            if closest_distance_m is not None
+                            else None
+                        ),
+                        "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                        "still_s": (
+                            round(float(latest_still_s), 6)
+                            if latest_still_s is not None
+                            else None
+                        ),
+                        "ball_displacement_m": (
+                            round(float(latest_ball_displacement_m), 6)
+                            if latest_ball_displacement_m is not None
+                            else None
+                        ),
+                        "ball_moved_since_fetch": bool(ball_moved_since_fetch),
+                        "capture_geometry_gate": capture_geometry_gate,
+                        "push_readiness_gate": push_readiness_gate,
+                        "min_launch_observe_s": round(float(DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S), 6),
+                        "launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                        "max_commanded_linear_x_mps": (
+                            round(float(max_commanded_linear_x_mps), 6)
+                            if max_commanded_linear_x_mps is not None
+                            else None
+                        ),
+                        "max_target_speed_scale": (
+                            round(float(max_target_speed_scale), 6)
+                            if max_target_speed_scale is not None
+                            else None
+                        ),
+                    },
+                    "ball_motion_m": ball_motion_m,
+                    "selected_command": command.to_dict() if command else {},
+                    "raw_command": raw_command.to_dict() if raw_command else {},
+                    **policy_fields,
+                },
+            )
+            self._update_gather_runtime_state(
+                mission_phase="fetch_to_pose",
+                gather_phase="fetch_to_pose",
+                capture_state=latest_capture,
+                zone_score=latest_zone_score,
+                latest_feedback=f"Fetching {target.label} through the delivery pose.",
+                last_fetch_to_pose_result={
+                    "distance_to_fetch_pose_m": (
+                        round(float(distance_to_fetch_pose_m), 6)
+                        if distance_to_fetch_pose_m is not None
+                        else None
+                    ),
+                    "closest_approach_distance_m": (
+                        round(float(closest_distance_m), 6)
+                        if closest_distance_m is not None
+                        else None
+                    ),
+                    "fetch_pose_world": fetch_pose_world,
+                },
+            )
+            self._update_visit_runtime_state(
+                proof_state="fetching",
+                mission_phase="fetch_to_pose",
+                latest_feedback=f"Fetching {target.label} through the delivery pose.",
+            )
+            if command is not None:
+                linear_abs = abs(float(command.linear_x))
+                max_commanded_linear_x_mps = (
+                    linear_abs
+                    if max_commanded_linear_x_mps is None
+                    else max(max_commanded_linear_x_mps, linear_abs)
+                )
+                target_speed_scale = float(command.target_speed_scale)
+                max_target_speed_scale = (
+                    target_speed_scale
+                    if max_target_speed_scale is None
+                    else max(max_target_speed_scale, target_speed_scale)
+                )
+                self._set_manual_drive(
+                    True,
+                    linear_x=command.linear_x,
+                    angular_z=command.angular_z,
+                    mode=command.mode,
+                    rationale=command.rationale,
+                )
+                self._update_gather_runtime_state(latest_control_command=command.to_dict())
+                previous_command = command
+            previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+            time.sleep(self.args.poll_s)
+
+        if ai_terminal_correction_attempted and not ai_terminal_correction_result_emitted:
+            if failure_reason == "fetch_to_pose_timeout":
+                failure_reason = "guarded_terminal_correction_missed_delivery_radius"
+            ai_terminal_correction_result_emitted = True
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "event_type": "ai_push_coast_terminal_correction_result",
+                    "phase": "fetch_to_pose",
+                    "attempt": int(attempt_index),
+                    "attempt_kind": str(attempt_kind),
+                    "target_id": target.id,
+                    "result": "failed",
+                    "failure_reason": failure_reason,
+                    "final_ball_pose": latest_ball_pose,
+                    "fetch_pose_world": fetch_pose_world,
+                    "capture_geometry_gate": capture_geometry_gate,
+                    "push_readiness_gate": push_readiness_gate,
+                    "pre_correction_distance_m": (
+                        round(float(ai_terminal_correction_start_distance_m), 6)
+                        if ai_terminal_correction_start_distance_m is not None
+                        else None
+                    ),
+                    "post_correction_distance_m": (
+                        round(float(distance_to_fetch_pose_m), 6)
+                        if distance_to_fetch_pose_m is not None
+                        else None
+                    ),
+                    "closest_approach_distance_m": (
+                        round(float(closest_distance_m), 6)
+                        if closest_distance_m is not None
+                        else None
+                    ),
+                    "ai_push_coast_mode": self.ai_push_coast_mode,
+                    **latest_ai_push_coast,
+                    "controller_family": self.gather_control_family,
+                },
+            )
+        self._set_manual_drive(False, mode=failure_reason, rationale="Fetch-to-pose observation budget ended.")
+        return False, {
+            "failure_reason": failure_reason,
+            "failure_stage": "fetch_to_pose",
+            "final_ball_pose": latest_ball_pose,
+            "capture_state": latest_capture,
+            "zone_score": latest_zone_score,
+            "object_centric_policy": latest_policy,
+            "fetch_observe_count": int(observe_count),
+            "fetch_elapsed_s": (
+                round(float(max(0.0, time.monotonic() - fetch_started_monotonic)), 6)
+            ),
+            "fetch_still_s": (
+                round(float(latest_still_s), 6)
+                if latest_still_s is not None
+                else None
+            ),
+            "fetch_ball_displacement_m": (
+                round(float(latest_ball_displacement_m), 6)
+                if latest_ball_displacement_m is not None
+                else None
+            ),
+            "fetch_ball_moved_since_fetch": bool(ball_moved_since_fetch),
+            "fetch_min_launch_observe_s": round(float(DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S), 6),
+            "fetch_launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+            "fetch_max_commanded_linear_x_mps": (
+                round(float(max_commanded_linear_x_mps), 6)
+                if max_commanded_linear_x_mps is not None
+                else None
+            ),
+            "fetch_max_target_speed_scale": (
+                round(float(max_target_speed_scale), 6)
+                if max_target_speed_scale is not None
+                else None
+            ),
+            "fetch_closest_approach_distance_m": (
+                round(float(closest_distance_m), 6)
+                if closest_distance_m is not None
+                else None
+            ),
+            "fetch_closest_pose": closest_pose,
+            "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+            "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+            "capture_geometry_gate": capture_geometry_gate,
+            "push_readiness_gate": push_readiness_gate,
+            "push_readiness_setup": push_readiness_setup_diagnostics,
+            "ai_push_coast_mode": self.ai_push_coast_mode,
+            **latest_ai_push_coast,
+            "settle_exit_reason": failure_reason,
+            "rolled_away_after_release": False,
+            "allow_full_revisit": False,
+            "local_recovery_attempted": False,
+        }
+
+    def _contact_ready_approach_progress(
+        self,
+        *,
+        contact_ready_pose: dict[str, Any],
+        elapsed_s: float,
+        passed: bool,
+        reason: str,
+        failure_reason: str = "",
+    ) -> dict[str, Any]:
+        capture_failure_reason = clean_text(failure_reason)
+        if passed:
+            capture_failure_reason = ""
+        return {
+            "pass": bool(passed),
+            "reason": clean_text(reason, "contact_ready_gate"),
+            "pre_stage": {
+                "pose_world": dict(contact_ready_pose),
+                "pose_reached": bool(passed),
+                "time_s": round(float(elapsed_s), 6),
+                "handoff_pass": bool(passed),
+            },
+            "stage": {
+                "pose_reached": bool(passed),
+                "time_s": 0.0,
+            },
+            "capture_entry": {
+                "pass": bool(passed),
+                "reached": bool(passed),
+                "entered_goal_side_before_capture": False,
+                "first_contact_push_alignment_deg": 0.0 if passed else None,
+                "push_direction_yaw_deg": round(math.degrees(float(clean_number(contact_ready_pose.get("yaw")) or 0.0)), 6),
+                "time_s": round(float(elapsed_s), 6),
+                "failure_reason": capture_failure_reason,
+            },
+        }
+
+    def _contact_ready_approach_kwargs(
+        self,
+        *,
+        contact_ready_pose: dict[str, Any],
+        elapsed_s: float,
+        passed: bool,
+        reason: str,
+        failure_reason: str = "",
+    ) -> dict[str, Any]:
+        progress = self._contact_ready_approach_progress(
+            contact_ready_pose=contact_ready_pose,
+            elapsed_s=elapsed_s,
+            passed=passed,
+            reason=reason,
+            failure_reason=failure_reason,
+        )
+        return {
+            "pre_stage_pose_world": dict(contact_ready_pose),
+            "pre_stage_pose_reached": bool(passed),
+            "pre_stage_time_s": round(float(elapsed_s), 6),
+            "pre_stage_handoff_pass": bool(passed),
+            "approach_side_verdict": {
+                "pass": bool(passed),
+                "reason": clean_text(reason, "contact_ready_gate"),
+            },
+            "staging_pose_reached": bool(passed),
+            "entered_goal_side_before_capture": False,
+            "first_contact_push_alignment_deg": 0.0 if passed else None,
+            "push_direction_yaw_deg": round(math.degrees(float(clean_number(contact_ready_pose.get("yaw")) or 0.0)), 6),
+            "stage_time_s": 0.0,
+            "capture_entry_reached": bool(passed),
+            "capture_entry_time_s": round(float(elapsed_s), 6),
+            "approach_failure_reason": "" if passed else clean_text(failure_reason, reason),
+            "latest_approach_progress": dict(progress),
+            "fresh_attempt_approach": dict(progress),
+        }
+
+    def _mark_contact_ready_fetch_complete(
+        self,
+        *,
+        target: GatherTargetSpec,
+        final_ball_pose: dict[str, Any],
+        shot_outcome: dict[str, Any],
+    ) -> None:
+        if final_ball_pose:
+            self._record_target_position(
+                target.id,
+                x=float(final_ball_pose.get("x", 0.0)),
+                y=float(final_ball_pose.get("y", 0.0)),
+                z=float(final_ball_pose.get("z", target.z_m) or target.z_m),
+            )
+        placed_targets = list(self.gather_runtime_state.get("placed_targets", []))
+        if target.id not in placed_targets:
+            placed_targets.append(target.id)
+        fetched_targets = list(self.gather_runtime_state.get("fetched_targets", []))
+        if target.id not in fetched_targets:
+            fetched_targets.append(target.id)
+        visited_targets = list(self.visit_runtime_state.get("visited_targets", []))
+        if target.id not in visited_targets:
+            visited_targets.append(target.id)
+        remaining_targets = [item for item in self.gather_runtime_state.get("remaining_targets", []) if item != target.id]
+        self._update_gather_runtime_state(
+            mission_phase="advance",
+            gather_phase="advance",
+            placed_targets=placed_targets,
+            fetched_targets=fetched_targets,
+            remaining_targets=remaining_targets,
+            latest_feedback=f"{target.label} fetched through the delivery pose from contact-ready gate.",
+            last_fetch_to_pose_result=shot_outcome,
+        )
+        self._update_visit_runtime_state(
+            visited_targets=visited_targets,
+            remaining_targets=remaining_targets,
+            last_visit_result={"target_id": target.id, "pass": True, "mission_objective": self.mission_objective},
+            current_target_prior={},
+            mission_phase="advance",
+            latest_feedback=f"{target.label} fetched through the delivery pose from contact-ready gate.",
+        )
+        self._append_runtime_event(
+            f"{target.label} fetched through the delivery pose from contact-ready gate.",
+            key=f"fetch_to_pose_contact_ready:{target.id}",
+        )
+
+    def _run_contact_ready_fetch_target(
+        self,
+        *,
+        session_id: str,
+        target: GatherTargetSpec,
+        route_index: int,
+        gather_sequence_path: Path,
+        state_history_path: Path,
+    ) -> dict[str, Any]:
+        attempt_index = 1
+        attempt_kind = "contact_ready_gate"
+        gate_started_monotonic = time.monotonic()
+        fetch_pose_world = self._fetch_pose_world()
+        ball_pose = self._ball_truth_pose(session_id, target)
+        if not ball_pose:
+            reason = "contact_ready_missing_ball_truth"
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_result",
+                    "phase": "contact_ready_gate",
+                    "attempt": attempt_index,
+                    "attempt_kind": attempt_kind,
+                    "target_id": target.id,
+                    "pass": False,
+                    "failure_reason": reason,
+                    "fetch_pose_world": fetch_pose_world,
+                    "controller_family": self.gather_control_family,
+                },
+            )
+            return self._target_failure_result(
+                target=target,
+                failure_reason=reason,
+                failure_stage="contact_ready_gate",
+                attempts=attempt_index,
+                capture_loss_count=0,
+                route_index=route_index,
+                attempt_kind=attempt_kind,
+                fetch_to_pose_failure_reason=reason,
+                fetch_pose_world=fetch_pose_world,
+                shot_outcome={},
+            )
+
+        contact_ready_pose = self._contact_ready_pose_world(
+            ball_pose=ball_pose,
+            fetch_pose_world=fetch_pose_world,
+        )
+        if not contact_ready_pose:
+            reason = "contact_ready_geometry_unavailable"
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_result",
+                    "phase": "contact_ready_gate",
+                    "attempt": attempt_index,
+                    "attempt_kind": attempt_kind,
+                    "target_id": target.id,
+                    "pass": False,
+                    "failure_reason": reason,
+                    "ball_pose": ball_pose,
+                    "fetch_pose_world": fetch_pose_world,
+                    "controller_family": self.gather_control_family,
+                },
+            )
+            return self._target_failure_result(
+                target=target,
+                failure_reason=reason,
+                failure_stage="contact_ready_gate",
+                attempts=attempt_index,
+                capture_loss_count=0,
+                route_index=route_index,
+                attempt_kind=attempt_kind,
+                fetch_to_pose_failure_reason=reason,
+                fetch_pose_world=fetch_pose_world,
+                shot_outcome={},
+            )
+
+        gate_start_event = {
+            "generated_utc": utc_now(),
+            "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_start",
+            "phase": "contact_ready_gate",
+            "attempt": attempt_index,
+            "attempt_kind": attempt_kind,
+            "target_id": target.id,
+            "ball_pose": ball_pose,
+            "fetch_pose_world": fetch_pose_world,
+            "contact_ready_pose_world": contact_ready_pose,
+            "controller_family": self.gather_control_family,
+            "fetch_gate_mode": self.fetch_gate_mode,
+        }
+        append_jsonl(state_history_path, gate_start_event)
+        append_jsonl(gather_sequence_path, gate_start_event)
+        self._update_gather_runtime_state(
+            current_target_id=target.id,
+            mission_phase="contact_ready_gate",
+            gather_phase="contact_ready_gate",
+            latest_feedback=f"{target.label} contact-ready corridor-push gate starting.",
+        )
+        self._update_visit_runtime_state(
+            current_target_id=target.id,
+            mission_phase="contact_ready_gate",
+            latest_feedback=f"{target.label} contact-ready corridor-push gate starting.",
+        )
+
+        pose_reached = False
+        setup_failure_reason = ""
+        pose_confirmation_source = "dashboard_belief"
+        dashboard_pose_wait_error = ""
+        try:
+            state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
+            self._safe_stop()
+            self._set_manual_drive(
+                False,
+                mode="contact_ready_gate_setup",
+                rationale="Contact-ready gate teleports robot behind the ball before Nav2 owns corridor push.",
+            )
+            self._set_robot_pose(
+                state,
+                x=float(contact_ready_pose["x"]),
+                y=float(contact_ready_pose["y"]),
+                yaw=float(contact_ready_pose["yaw"]),
+            )
+            try:
+                self._wait_for_robot_pose_near(
+                    x=float(contact_ready_pose["x"]),
+                    y=float(contact_ready_pose["y"]),
+                    yaw=float(contact_ready_pose["yaw"]),
+                    timeout_s=15.0,
+                    position_tolerance_m=0.08,
+                    yaw_tolerance_rad=0.20,
+                )
+            except RuntimeError as exc:
+                dashboard_pose_wait_error = clean_text(str(exc))
+                self._wait_for_robot_truth_pose_near(
+                    session_id=session_id,
+                    x=float(contact_ready_pose["x"]),
+                    y=float(contact_ready_pose["y"]),
+                    yaw=float(contact_ready_pose["yaw"]),
+                    timeout_s=5.0,
+                    position_tolerance_m=0.08,
+                    yaw_tolerance_rad=0.20,
+                )
+                pose_confirmation_source = "truth_state"
+            self._safe_stop()
+            self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+            pose_reached = True
+        except Exception as exc:
+            setup_failure_reason = clean_text(str(exc), "contact_ready_pose_not_reached")
+
+        setup_elapsed_s = time.monotonic() - gate_started_monotonic
+        ready_event = {
+            "generated_utc": utc_now(),
+            "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_ready",
+            "phase": "contact_ready_gate",
+            "attempt": attempt_index,
+            "attempt_kind": attempt_kind,
+            "target_id": target.id,
+            "pass": bool(pose_reached),
+            "failure_reason": setup_failure_reason,
+            "contact_ready_pose_world": contact_ready_pose,
+            "pose_confirmation_source": pose_confirmation_source if pose_reached else "",
+            "dashboard_pose_wait_error": dashboard_pose_wait_error,
+            "setup_elapsed_s": round(float(setup_elapsed_s), 6),
+            "controller_family": self.gather_control_family,
+        }
+        append_jsonl(state_history_path, ready_event)
+        append_jsonl(gather_sequence_path, ready_event)
+        if not pose_reached:
+            approach_kwargs = self._contact_ready_approach_kwargs(
+                contact_ready_pose=contact_ready_pose,
+                elapsed_s=setup_elapsed_s,
+                passed=False,
+                reason="contact_ready_gate_setup_failed",
+                failure_reason=setup_failure_reason,
+            )
+            return self._target_failure_result(
+                target=target,
+                failure_reason="contact_ready_pose_not_reached",
+                failure_stage="contact_ready_gate",
+                attempts=attempt_index,
+                capture_loss_count=0,
+                route_index=route_index,
+                attempt_kind=attempt_kind,
+                handoff_kind="contact_ready_gate",
+                fetch_to_pose_failure_reason="contact_ready_pose_not_reached",
+                fetch_pose_world=fetch_pose_world,
+                shot_outcome={},
+                **approach_kwargs,
+            )
+
+        fetch_pass, fetch_payload = self._fetch_to_pose_target(
+            session_id=session_id,
+            target=target,
+            state_history_path=state_history_path,
+            attempt_index=attempt_index,
+            attempt_kind=attempt_kind,
+        )
+        fetch_failure_reason = "" if fetch_pass else clean_text(fetch_payload.get("failure_reason"), "fetch_to_pose_failed")
+        final_ball_pose = pose_payload(fetch_payload.get("final_ball_pose"))
+        if not final_ball_pose:
+            final_ball_pose = self._ball_truth_pose(session_id, target) or ball_pose
+        shot_outcome = self._build_fetch_to_pose_outcome(
+            target=target,
+            state_history_path=state_history_path,
+            final_ball_pose=final_ball_pose,
+            place_payload=fetch_payload,
+            place_failure_reason=fetch_failure_reason,
+        )
+        fetch_pose_world = shot_outcome.get("fetch_pose_world", {}) if isinstance(shot_outcome.get("fetch_pose_world"), dict) else fetch_pose_world
+        final_ball_pose = pose_payload(shot_outcome.get("ball_end_pose")) or final_ball_pose
+        fetch_to_pose_reached = bool(shot_outcome.get("pass", False))
+        fetch_failure_reason = "" if fetch_to_pose_reached else clean_text(shot_outcome.get("reason"), fetch_failure_reason)
+        fetch_elapsed_s = clean_number(fetch_payload.get("fetch_elapsed_s"))
+        fetch_time_s = float(fetch_elapsed_s) if fetch_elapsed_s is not None else time.monotonic() - gate_started_monotonic
+        result_event = {
+            "generated_utc": utc_now(),
+            "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_result",
+            "phase": "contact_ready_gate",
+            "attempt": attempt_index,
+            "attempt_kind": attempt_kind,
+            "target_id": target.id,
+            "pass": bool(fetch_to_pose_reached),
+            "failure_reason": fetch_failure_reason,
+            "contact_ready_pose_world": contact_ready_pose,
+            "fetch_to_pose": {
+                "pass": bool(fetch_to_pose_reached),
+                "reached": bool(fetch_to_pose_reached),
+                "time_s": round(float(fetch_time_s), 6),
+                "closest_approach_distance_m": shot_outcome.get("closest_approach_distance_m"),
+                "failure_reason": fetch_failure_reason,
+            },
+            "fetch_pose_world": fetch_pose_world,
+            "shot_outcome": shot_outcome,
+            "controller_family": self.gather_control_family,
+        }
+        append_jsonl(state_history_path, result_event)
+        append_jsonl(gather_sequence_path, result_event)
+        approach_kwargs = self._contact_ready_approach_kwargs(
+            contact_ready_pose=contact_ready_pose,
+            elapsed_s=setup_elapsed_s,
+            passed=True,
+            reason="contact_ready_gate",
+        )
+        fetch_fields = {
+            "fetch_to_pose_reached": fetch_to_pose_reached,
+            "fetch_to_pose_time_s": fetch_time_s,
+            "fetch_to_pose_failure_reason": fetch_failure_reason,
+            "fetch_pose_world": fetch_pose_world,
+            "shot_outcome": shot_outcome,
+        }
+        if fetch_to_pose_reached:
+            self._mark_contact_ready_fetch_complete(
+                target=target,
+                final_ball_pose=final_ball_pose,
+                shot_outcome=shot_outcome,
+            )
+            return self._target_success_result(
+                target=target,
+                attempts=attempt_index,
+                capture_loss_count=0,
+                route_index=route_index,
+                final_ball_pose=final_ball_pose,
+                place_time_s=fetch_time_s,
+                attempt_kind=attempt_kind,
+                handoff_kind="contact_ready_gate",
+                settle_exit_reason=clean_text(fetch_payload.get("settle_exit_reason"), "trajectory_intersects_delivery_radius"),
+                rolled_away_after_release=bool(fetch_payload.get("rolled_away_after_release", False)),
+                **fetch_fields,
+                **approach_kwargs,
+            )
+
+        self._update_visit_runtime_state(
+            proof_state="failed",
+            mission_phase="failed",
+            latest_feedback=f"{target.label} contact-ready fetch-to-pose missed.",
+        )
+        return self._target_failure_result(
+            target=target,
+            failure_reason=fetch_failure_reason,
+            failure_stage="fetch_to_pose",
+            attempts=attempt_index,
+            capture_loss_count=0,
+            route_index=route_index,
+            attempt_kind=attempt_kind,
+            handoff_kind="contact_ready_gate",
+            rolled_away_after_release=bool(fetch_payload.get("rolled_away_after_release", False)),
+            **fetch_fields,
+            **approach_kwargs,
+        )
 
     def _run_target(
         self,
@@ -5331,6 +11504,18 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         fresh_attempt_index: int | None = None
         fresh_attempt_approach_memory: dict[str, Any] = {}
         fresh_attempt_kinds = {"initial_visit", "retry_visit", "place_loss_revisit"}
+
+        if (
+            self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            and self.fetch_gate_mode == FETCH_GATE_MODE_CONTACT_READY
+        ):
+            return self._run_contact_ready_fetch_target(
+                session_id=session_id,
+                target=target,
+                route_index=route_index,
+                gather_sequence_path=gather_sequence_path,
+                state_history_path=state_history_path,
+            )
 
         def _retention_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
             if not isinstance(payload, dict):
@@ -5635,6 +11820,159 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 ),
             }
 
+        def _mark_fetch_objective_complete(final_ball_pose: dict[str, Any], shot_outcome: dict[str, Any]) -> None:
+            if final_ball_pose:
+                self._record_target_position(
+                    target.id,
+                    x=float(final_ball_pose.get("x", 0.0)),
+                    y=float(final_ball_pose.get("y", 0.0)),
+                    z=float(final_ball_pose.get("z", target.z_m) or target.z_m),
+                )
+            placed_targets = list(self.gather_runtime_state.get("placed_targets", []))
+            if target.id not in placed_targets:
+                placed_targets.append(target.id)
+            fetched_targets = list(self.gather_runtime_state.get("fetched_targets", []))
+            if target.id not in fetched_targets:
+                fetched_targets.append(target.id)
+            visited_targets = list(self.visit_runtime_state.get("visited_targets", []))
+            if target.id not in visited_targets:
+                visited_targets.append(target.id)
+            remaining_targets = [item for item in self.gather_runtime_state.get("remaining_targets", []) if item != target.id]
+            self._update_gather_runtime_state(
+                mission_phase="advance",
+                gather_phase="advance",
+                placed_targets=placed_targets,
+                fetched_targets=fetched_targets,
+                remaining_targets=remaining_targets,
+                capture_loss_count=capture_loss_count,
+                latest_feedback=f"{target.label} fetched through the delivery pose.",
+                last_fetch_to_pose_result=shot_outcome,
+            )
+            self._update_visit_runtime_state(
+                visited_targets=visited_targets,
+                remaining_targets=remaining_targets,
+                last_visit_result={"target_id": target.id, "pass": True, "mission_objective": self.mission_objective},
+                current_target_prior={},
+                mission_phase="advance",
+                latest_feedback=f"{target.label} fetched through the delivery pose.",
+            )
+            self._append_runtime_event(
+                f"{target.label} fetched through the delivery pose.",
+                key=f"fetch_to_pose:{target.id}",
+            )
+
+        def _resolve_fetch_to_pose_place_result(
+            *,
+            place_pass: bool,
+            place_payload: dict[str, Any],
+            capture_payload: dict[str, Any],
+            attempt_kind: str,
+            local_recovery_attempted: bool,
+            terminal_failure: bool,
+        ) -> dict[str, Any] | None:
+            if self.mission_objective != MISSION_OBJECTIVE_FETCH_TO_POSE:
+                return None
+            if not place_pass and not terminal_failure:
+                return None
+            place_failure_reason = "" if place_pass else str(place_payload.get("failure_reason", "place_failed"))
+            final_ball_pose = pose_payload(place_payload.get("final_ball_pose"))
+            shot_outcome = self._build_fetch_to_pose_outcome(
+                target=target,
+                state_history_path=state_history_path,
+                final_ball_pose=final_ball_pose,
+                place_payload=place_payload,
+                place_failure_reason=place_failure_reason,
+            )
+            fetch_pose_world = shot_outcome.get("fetch_pose_world", {}) if isinstance(shot_outcome.get("fetch_pose_world"), dict) else {}
+            final_ball_pose = pose_payload(shot_outcome.get("ball_end_pose")) or final_ball_pose
+            fetch_to_pose_reached = bool(shot_outcome.get("pass", False))
+            fetch_failure_reason = "" if fetch_to_pose_reached else clean_text(shot_outcome.get("reason"), "fetch_to_pose_missed")
+            fetch_elapsed_s = clean_number(place_payload.get("fetch_elapsed_s"))
+            fetch_time_s = float(fetch_elapsed_s) if fetch_elapsed_s is not None else time.monotonic() - target_start_monotonic
+            fetch_fields = {
+                "fetch_to_pose_reached": fetch_to_pose_reached,
+                "fetch_to_pose_time_s": fetch_time_s,
+                "fetch_to_pose_failure_reason": fetch_failure_reason,
+                "fetch_pose_world": fetch_pose_world,
+                "shot_outcome": shot_outcome,
+            }
+            fetch_result_row = {
+                "generated_utc": utc_now(),
+                "event_type": "fetch_to_pose_result",
+                "phase": "fetch_to_pose",
+                "target_id": target.id,
+                "attempt": int(attempt),
+                "attempt_kind": attempt_kind,
+                "fetch_to_pose": {
+                    "pass": fetch_to_pose_reached,
+                    "reached": fetch_to_pose_reached,
+                    "time_s": round(float(fetch_time_s), 6),
+                    "distance_to_fetch_pose_m": shot_outcome.get("distance_to_fetch_pose_m"),
+                    "closest_approach_distance_m": shot_outcome.get("closest_approach_distance_m"),
+                    "failure_reason": fetch_failure_reason,
+                },
+                "fetch_pose_world": fetch_pose_world,
+                "shot_outcome": shot_outcome,
+            }
+            append_jsonl(state_history_path, fetch_result_row)
+            append_jsonl(gather_sequence_path, fetch_result_row)
+
+            settle_metrics = place_payload.get("settle_metrics") if isinstance(place_payload.get("settle_metrics"), dict) else None
+            if fetch_to_pose_reached:
+                _mark_fetch_objective_complete(final_ball_pose, shot_outcome)
+                return self._target_success_result(
+                    target=target,
+                    attempts=attempt,
+                    capture_loss_count=capture_loss_count,
+                    route_index=route_index,
+                    final_ball_pose=final_ball_pose,
+                    place_time_s=fetch_time_s,
+                    attempt_kind=attempt_kind,
+                    local_recovery_attempted=local_recovery_attempted,
+                    revisit_attempted=post_visit_revisit_count > 0,
+                    settle_metrics=settle_metrics,
+                    handoff_kind=clean_text(active_handoff_kind, "unspecified"),
+                    zone_edge_correction_count=zone_edge_correction_count,
+                    place_controller_reentry_count=place_controller_reentry_count,
+                    post_visit_revisit_count=post_visit_revisit_count,
+                    **fetch_fields,
+                    **_retention_kwargs(place_payload),
+                    **_settle_kwargs(place_payload),
+                    **_control_diag_kwargs(place_payload),
+                    **_approach_kwargs(capture_payload),
+                    **_latest_approach_progress_kwargs(),
+                    **_fresh_attempt_approach_kwargs(),
+                )
+
+            self._update_visit_runtime_state(
+                proof_state="failed",
+                mission_phase="failed",
+                latest_feedback=f"{target.label} fetch-to-pose missed.",
+            )
+            return self._target_failure_result(
+                target=target,
+                failure_reason=fetch_failure_reason,
+                failure_stage="fetch_to_pose",
+                attempts=attempt,
+                capture_loss_count=capture_loss_count,
+                route_index=route_index,
+                attempt_kind=attempt_kind,
+                local_recovery_attempted=local_recovery_attempted,
+                revisit_attempted=post_visit_revisit_count > 0,
+                settle_metrics=settle_metrics,
+                handoff_kind=clean_text(active_handoff_kind, "unspecified"),
+                zone_edge_correction_count=zone_edge_correction_count,
+                place_controller_reentry_count=place_controller_reentry_count,
+                post_visit_revisit_count=post_visit_revisit_count,
+                **fetch_fields,
+                **_retention_kwargs(place_payload),
+                **_settle_kwargs(place_payload),
+                **_control_diag_kwargs(place_payload),
+                **_approach_kwargs(capture_payload),
+                **_latest_approach_progress_kwargs(),
+                **_fresh_attempt_approach_kwargs(),
+            )
+
         while attempt <= self.args.max_retries_per_target:
             attempt += 1
             direct_recapture_attempt = resume_with_capture
@@ -5935,6 +12273,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     place_controller_reentry_count += 1
 
             if isinstance(capture_payload.get("final_ball_pose"), dict):
+                fetch_resolution = _resolve_fetch_to_pose_place_result(
+                    place_pass=True,
+                    place_payload=capture_payload,
+                    capture_payload=capture_payload,
+                    attempt_kind=attempt_kind,
+                    local_recovery_attempted=local_recovery_attempted_any,
+                    terminal_failure=False,
+                )
+                if fetch_resolution is not None:
+                    return fetch_resolution
                 final_ball_pose = capture_payload.get("final_ball_pose", {})
                 if final_ball_pose:
                     self._record_target_position(
@@ -6006,6 +12354,26 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_fresh_attempt_approach_kwargs(),
                 )
 
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+                fetch_pass, fetch_payload = self._fetch_to_pose_target(
+                    session_id=session_id,
+                    target=target,
+                    state_history_path=state_history_path,
+                    approach_payload=capture_payload,
+                    attempt_index=attempt,
+                    attempt_kind=attempt_kind,
+                )
+                fetch_resolution = _resolve_fetch_to_pose_place_result(
+                    place_pass=fetch_pass,
+                    place_payload=fetch_payload,
+                    capture_payload=capture_payload,
+                    attempt_kind=attempt_kind,
+                    local_recovery_attempted=local_recovery_attempted_any,
+                    terminal_failure=True,
+                )
+                if fetch_resolution is not None:
+                    return fetch_resolution
+
             place_pass, place_payload = self._place_target(
                 session_id=session_id,
                 target=target,
@@ -6014,6 +12382,28 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 attempt_kind=attempt_kind,
             )
             zone_edge_correction_count += int(place_payload.get("zone_edge_correction_count", 0) or 0)
+            failure_reason = str(place_payload.get("failure_reason", "place_failed")) if not place_pass else ""
+            failure_stage = str(place_payload.get("failure_stage", "place")) if not place_pass else ""
+            local_recovery_attempted = bool(place_payload.get("local_recovery_attempted", False))
+            local_recovery_attempted_any = local_recovery_attempted_any or local_recovery_attempted
+            place_recovery_failure = failure_reason in {"capture_lost", "release_unsettled", "release_roll_away"}
+            if failure_reason == "capture_lost":
+                capture_loss_count += 1
+                self._update_gather_runtime_state(capture_loss_count=capture_loss_count)
+            fetch_resolution = _resolve_fetch_to_pose_place_result(
+                place_pass=place_pass,
+                place_payload=place_payload,
+                capture_payload=capture_payload,
+                attempt_kind=attempt_kind,
+                local_recovery_attempted=local_recovery_attempted_any or bool(place_payload.get("local_recovery_attempted", False)),
+                terminal_failure=bool(
+                    failure_reason == "release_roll_away"
+                    or attempt > self.args.max_retries_per_target
+                    or (not place_recovery_failure and not place_pass and attempt > self.args.max_retries_per_target)
+                ),
+            )
+            if fetch_resolution is not None:
+                return fetch_resolution
             if place_pass:
                 final_ball_pose = place_payload.get("final_ball_pose") if isinstance(place_payload.get("final_ball_pose"), dict) else {}
                 if final_ball_pose:
@@ -6071,14 +12461,6 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_fresh_attempt_approach_kwargs(),
                 )
 
-            failure_reason = str(place_payload.get("failure_reason", "place_failed"))
-            failure_stage = str(place_payload.get("failure_stage", "place"))
-            local_recovery_attempted = bool(place_payload.get("local_recovery_attempted", False))
-            local_recovery_attempted_any = local_recovery_attempted_any or local_recovery_attempted
-            place_recovery_failure = failure_reason in {"capture_lost", "release_unsettled", "release_roll_away"}
-            if failure_reason == "capture_lost":
-                capture_loss_count += 1
-                self._update_gather_runtime_state(capture_loss_count=capture_loss_count)
             if place_recovery_failure:
                 recovery_label = "place-stage correction" if failure_reason == "capture_lost" else "release-stage correction"
                 if failure_reason != "release_roll_away" and attempt <= self.args.max_retries_per_target:
@@ -6336,6 +12718,68 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             )
             settle_time_s = float(final_result.get("settle_time_s", 0.0) or 0.0)
             release_recontact_count = sum(int(item.get("release_recontact_count", 0) or 0) for item in target_results)
+            fetch_to_pose_reached = bool(final_result.get("fetch_to_pose_reached", False))
+            fetch_to_pose_time_s = float(clean_number(final_result.get("fetch_to_pose_time_s")) or 0.0)
+            fetch_to_pose_failure_reason = clean_text(final_result.get("fetch_to_pose_failure_reason"))
+            fetch_pose_world = (
+                final_result.get("fetch_pose_world", {})
+                if isinstance(final_result.get("fetch_pose_world"), dict)
+                else {}
+            )
+            shot_outcome = (
+                final_result.get("shot_outcome", {})
+                if isinstance(final_result.get("shot_outcome"), dict)
+                else {}
+            )
+            visible_delivery_marker_pose = (
+                final_result.get("visible_delivery_marker_pose", {})
+                if isinstance(final_result.get("visible_delivery_marker_pose"), dict)
+                else {}
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE and not visible_delivery_marker_pose:
+                visible_delivery_marker_pose = self._visible_delivery_marker_pose()
+            legacy_corral_zone_pose = self._legacy_corral_zone_pose()
+            geometry_consistency = (
+                final_result.get("geometry_consistency", {})
+                if isinstance(final_result.get("geometry_consistency"), dict)
+                else {}
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+                geometry_consistency = self._fetch_geometry_consistency(
+                    fetch_pose_world=fetch_pose_world,
+                    visible_delivery_marker_pose=visible_delivery_marker_pose,
+                )
+            model_provenance = self._model_provenance()
+            model_provenance_valid = bool(model_provenance.get("model_provenance_valid", True))
+            fetch_to_pose_pass = bool(
+                mission_completed_pass
+                and fetch_to_pose_reached
+                and (
+                    self.mission_objective != MISSION_OBJECTIVE_FETCH_TO_POSE
+                    or bool(geometry_consistency.get("pass", False))
+                )
+                and (
+                    self.mission_objective != MISSION_OBJECTIVE_FETCH_TO_POSE
+                    or model_provenance_valid
+                )
+            )
+            if (
+                self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+                and mission_completed_pass
+                and fetch_to_pose_reached
+                and not bool(geometry_consistency.get("pass", False))
+                and not fetch_to_pose_failure_reason
+            ):
+                fetch_to_pose_failure_reason = "fetch_marker_geometry_mismatch"
+            if (
+                self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+                and mission_completed_pass
+                and fetch_to_pose_reached
+                and bool(geometry_consistency.get("pass", False))
+                and not model_provenance_valid
+                and not fetch_to_pose_failure_reason
+            ):
+                fetch_to_pose_failure_reason = "fetch_model_provenance_invalid"
             final_corral_audit: dict[str, Any] = {}
             final_all_targets_inside_retrieval_corral = False
             final_all_targets_stopped = False
@@ -6371,16 +12815,28 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and post_visit_revisit_count == 0
                 )
             final_mission_error = mission_error
-            if self.args.scenario_id == "gather_three_ball_zone":
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+                if mission_completed_pass and not fetch_to_pose_pass and not final_mission_error:
+                    final_mission_error = fetch_to_pose_failure_reason or "fetch_to_pose_failed"
+            elif self.args.scenario_id == "gather_three_ball_zone":
                 if mission_completed_pass and not final_three_ball_corral_pass and not final_mission_error:
                     final_mission_error = "final_corral_audit_failed"
             elif mission_completed_pass and not settled_in_corral_pass and not final_mission_error:
                 final_mission_error = "settled_in_corral_failed"
+            objective_pass = (
+                fetch_to_pose_pass
+                if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+                else final_three_ball_corral_pass
+                if self.args.scenario_id == "gather_three_ball_zone"
+                else settled_in_corral_pass
+            )
             mission_verdict = {
                 "generated_utc": utc_now(),
                 "type": "gather_mission",
-                "pass": final_three_ball_corral_pass if self.args.scenario_id == "gather_three_ball_zone" else settled_in_corral_pass,
+                "pass": bool(objective_pass),
                 "mission_completed_pass": mission_completed_pass,
+                "mission_objective": self.mission_objective,
+                "fetch_gate_mode": self.fetch_gate_mode,
                 "scenario_id": self.args.scenario_id,
                 "scenario_label": self.args.scenario_label,
                 "session_id": session_id,
@@ -6424,6 +12880,21 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "ball_stopped_in_corral": ball_stopped_in_corral,
                 "rolled_away_after_release": rolled_away_after_release,
                 "settled_in_corral_pass": settled_in_corral_pass,
+                "fetch_to_pose_reached": fetch_to_pose_reached,
+                "fetch_to_pose_pass": fetch_to_pose_pass,
+                "fetch_to_pose_time_s": round(fetch_to_pose_time_s, 6),
+                "fetch_to_pose_failure_reason": fetch_to_pose_failure_reason,
+                "fetch_pose_world": fetch_pose_world,
+                "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                "visible_delivery_marker_pose": visible_delivery_marker_pose,
+                "geometry_consistency": geometry_consistency,
+                "model_provenance": model_provenance,
+                "model_provenance_valid": model_provenance_valid,
+                "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+                "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+                "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+                "target_model_classification": str(model_provenance.get("target_model_classification", "")),
+                "shot_outcome": shot_outcome,
                 "final_corral_audit": final_corral_audit,
                 "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
                 "final_all_targets_stopped": final_all_targets_stopped,
@@ -6434,13 +12905,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "settle_time_s": round(settle_time_s, 6),
                 "release_recontact_count": release_recontact_count,
                 "mission_time_s": mission_time_s,
-                "zone_pose": {
-                    "x": round(self.zone.world_x, 6),
-                    "y": round(self.zone.world_y, 6),
-                    "radius_m": round(self.zone.retrieval_radius_m, 6),
-                    "control_radius_m": round(self.zone.control_radius_m, 6),
-                    "dwell_s": round(self.zone.dwell_s, 6),
-                },
+                "zone_pose": visible_delivery_marker_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else legacy_corral_zone_pose,
+                "legacy_corral_zone_pose": legacy_corral_zone_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
                 "mission_error": final_mission_error,
                 "mission_root": str(mission_root),
             }
@@ -6453,6 +12919,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "pass": bool(mission_verdict["pass"]),
                 "scenario_id": self.args.scenario_id,
                 "scenario_label": self.args.scenario_label,
+                "mission_objective": self.mission_objective,
+                "fetch_gate_mode": self.fetch_gate_mode,
                 "session_id": session_id,
                 "world_file": self.world_file,
                 "surface_profile": self.surface_profile,
@@ -6494,6 +12962,21 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "ball_stopped_in_corral": ball_stopped_in_corral,
                 "rolled_away_after_release": rolled_away_after_release,
                 "settled_in_corral_pass": settled_in_corral_pass,
+                "fetch_to_pose_reached": fetch_to_pose_reached,
+                "fetch_to_pose_pass": fetch_to_pose_pass,
+                "fetch_to_pose_time_s": round(fetch_to_pose_time_s, 6),
+                "fetch_to_pose_failure_reason": fetch_to_pose_failure_reason,
+                "fetch_pose_world": fetch_pose_world,
+                "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                "visible_delivery_marker_pose": visible_delivery_marker_pose,
+                "geometry_consistency": geometry_consistency,
+                "model_provenance": model_provenance,
+                "model_provenance_valid": model_provenance_valid,
+                "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+                "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+                "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+                "target_model_classification": str(model_provenance.get("target_model_classification", "")),
+                "shot_outcome": shot_outcome,
                 "final_corral_audit": final_corral_audit,
                 "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
                 "final_all_targets_stopped": final_all_targets_stopped,
@@ -6514,8 +12997,15 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 summary={
                     "pass_count": 1 if summary["pass"] else 0,
                     "promotion_gate_pass": summary["pass"],
+                    "mission_objective": self.mission_objective,
                     "settled_in_corral_pass_count": 1 if settled_in_corral_pass else 0,
                     "settled_in_corral_fail_count": 0 if settled_in_corral_pass else 1,
+                    "fetch_to_pose_pass_count": 1 if fetch_to_pose_pass else 0,
+                    "fetch_to_pose_fail_count": 0 if fetch_to_pose_pass else 1,
+                    "geometry_consistency_pass_count": 1 if bool(geometry_consistency.get("pass", False)) else 0,
+                    "geometry_consistency_fail_count": 0 if bool(geometry_consistency.get("pass", False)) else 1,
+                    "model_provenance_valid_count": 1 if model_provenance_valid else 0,
+                    "model_provenance_invalid_count": 0 if model_provenance_valid else 1,
                     "final_inside_retrieval_corral_count": 1 if final_inside_retrieval_corral else 0,
                     "final_center_inside_zone_count": 1 if final_center_inside_zone else 0,
                     "ball_stopped_in_corral_count": 1 if ball_stopped_in_corral else 0,
@@ -6565,6 +13055,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     {
                         "run_index": 1,
                         "pass": summary["pass"],
+                        "mission_objective": self.mission_objective,
                         "surface_profile": self.surface_profile,
                         "handoff_kind": handoff_kind,
                         "settle_exit_reason": settle_exit_reason,
@@ -6599,6 +13090,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "ball_stopped_in_corral": ball_stopped_in_corral,
                         "rolled_away_after_release": rolled_away_after_release,
                         "settled_in_corral_pass": settled_in_corral_pass,
+                        "fetch_to_pose_pass": fetch_to_pose_pass,
+                        "fetch_to_pose_reached": fetch_to_pose_reached,
+                        "fetch_pose_world": fetch_pose_world,
+                        "visible_delivery_marker_pose": visible_delivery_marker_pose,
+                        "geometry_consistency": geometry_consistency,
+                        "model_provenance": model_provenance,
+                        "model_provenance_valid": model_provenance_valid,
+                        "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+                        "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+                        "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+                        "target_model_classification": str(model_provenance.get("target_model_classification", "")),
                         "final_corral_audit": final_corral_audit,
                         "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
                         "final_all_targets_stopped": final_all_targets_stopped,
@@ -6661,6 +13163,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reasoning-effort", default=os.environ.get("OPENAI_SUPERVISOR_REASONING_EFFORT") or os.environ.get("OPENAI_REASONING_EFFORT") or DEFAULT_REASONING_EFFORT)
     parser.add_argument("--scenario-id", default="corral_single_ball_place")
     parser.add_argument("--scenario-label", default="Corral Single Ball Place")
+    parser.add_argument("--mission-objective", choices=ALLOWED_MISSION_OBJECTIVES, default=os.environ.get("CHASECAR_MISSION_OBJECTIVE", MISSION_OBJECTIVE_GATHER_HERE))
+    parser.add_argument("--fetch-gate-mode", choices=ALLOWED_FETCH_GATE_MODES, default=os.environ.get("CHASECAR_FETCH_GATE_MODE", FETCH_GATE_MODE_FULL_MISSION))
+    parser.add_argument("--fetch-target-x", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_X", "")))
+    parser.add_argument("--fetch-target-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Y", "")))
+    parser.add_argument("--fetch-target-z", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Z", "")))
+    parser.add_argument("--fetch-delivery-radius-m", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_DELIVERY_RADIUS_M", DEFAULT_FETCH_DELIVERY_RADIUS_M)))
     parser.add_argument("--world-file", default=os.environ.get("WORLD_FILE", ""))
     parser.add_argument("--surface-profile", default=os.environ.get("CHASECAR_SURFACE_PROFILE", "baseline"))
     parser.add_argument("--artifact-kind", default="gather_mission")
@@ -6673,6 +13181,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pursuit-settle-timeout-s", type=float, default=8.0)
     parser.add_argument("--max-retries-per-target", type=int, default=2)
     parser.add_argument("--gather-control-family", choices=ALLOWED_GATHER_CONTROL_FAMILIES, default="baseline")
+    parser.add_argument("--ai-push-coast-mode", choices=ALLOWED_AI_PUSH_COAST_MODES, default=os.environ.get("CHASECAR_AI_PUSH_COAST_MODE", AI_PUSH_COAST_MODE_SHADOW))
     parser.add_argument("--max-place-loss-revisits", type=int, default=1)
     parser.add_argument("--target-model-name", default=DEFAULT_TARGET_MODEL_NAME)
     parser.add_argument("--target-model-sdf", default=str(DEFAULT_TARGET_MODEL_SDF))

@@ -8,6 +8,7 @@ import json
 import math
 import os
 import signal
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -331,6 +332,9 @@ class VisualDemoObserver(Node):
         self.raw_video_path = visual_dir / "raw_camera.mp4"
         self.debug_video_path = visual_dir / "yolo_debug.mp4"
         self.topdown_video_path = visual_dir / "topdown_telemetry.mp4"
+        self.raw_browser_video_path = visual_dir / "raw_camera_browser.mp4"
+        self.debug_browser_video_path = visual_dir / "yolo_debug_browser.mp4"
+        self.topdown_browser_video_path = visual_dir / "topdown_telemetry_browser.mp4"
         self.timeline_path = visual_dir / "timeline.json"
         self.timeline_events_path = visual_dir / "timeline_events.jsonl"
         self.summary_path = visual_dir / "visual_demo_summary.json"
@@ -548,6 +552,168 @@ class VisualDemoObserver(Node):
     def _write_image(self, path: Path, frame: np.ndarray) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(path), frame)
+
+    def _browser_video_ok(self, path: Path) -> tuple[bool, str]:
+        if not path.is_file() or path.stat().st_size <= 0:
+            return False, "video_missing_or_empty"
+        command = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,pix_fmt",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "json",
+            str(path),
+        ]
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
+        except FileNotFoundError:
+            return False, "ffprobe_not_found"
+        except subprocess.TimeoutExpired:
+            return False, "ffprobe_timeout"
+        if completed.returncode != 0:
+            return False, (completed.stderr or completed.stdout or f"ffprobe_exit_{completed.returncode}").strip()
+        try:
+            payload = json.loads(completed.stdout or "{}")
+        except json.JSONDecodeError:
+            return False, "ffprobe_invalid_json"
+        streams = payload.get("streams", [])
+        stream = streams[0] if streams and isinstance(streams[0], dict) else {}
+        codec = str(stream.get("codec_name", "") or "")
+        pix_fmt = str(stream.get("pix_fmt", "") or "")
+        try:
+            duration = float((payload.get("format", {}) or {}).get("duration", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            duration = 0.0
+        if codec != "h264" or pix_fmt != "yuv420p" or duration <= 0.0:
+            return False, f"browser_video_unplayable:codec={codec}:pix_fmt={pix_fmt}:duration={duration}"
+        return True, ""
+
+    def _write_keyframe_concat_list(self, keyframe_suffix: str, list_path: Path) -> int:
+        frames = sorted(self.keyframes_dir.glob(f"*_{keyframe_suffix}.png"))
+        if not frames:
+            return 0
+        frame_duration_s = 1.0 / max(min(float(self.args.fps or 1.0), 5.0), 1.0)
+        lines = ["ffconcat version 1.0"]
+        for frame in frames:
+            safe_path = frame.resolve().as_posix().replace("'", "'\\''")
+            lines.append(f"file '{safe_path}'")
+            lines.append(f"duration {frame_duration_s:.6f}")
+        safe_path = frames[-1].resolve().as_posix().replace("'", "'\\''")
+        lines.append(f"file '{safe_path}'")
+        list_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return len(frames)
+
+    def _transcode_keyframes_video(self, keyframe_suffix: str, output_path: Path) -> tuple[bool, str, int]:
+        concat_list = output_path.with_suffix(f".{keyframe_suffix}.ffconcat")
+        frame_count = self._write_keyframe_concat_list(keyframe_suffix, concat_list)
+        if frame_count <= 0:
+            return False, f"no_{keyframe_suffix}_keyframes", 0
+        command = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_list),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
+        except FileNotFoundError:
+            return False, "ffmpeg_not_found", frame_count
+        except subprocess.TimeoutExpired:
+            return False, "ffmpeg_timeout", frame_count
+        finally:
+            try:
+                concat_list.unlink()
+            except FileNotFoundError:
+                pass
+        if completed.returncode != 0:
+            return False, (completed.stderr or completed.stdout or f"ffmpeg_exit_{completed.returncode}").strip(), frame_count
+        valid, validation_error = self._browser_video_ok(output_path)
+        if not valid:
+            return False, validation_error, frame_count
+        return True, "", frame_count
+
+    def _transcode_browser_video(self, source_path: Path, output_path: Path, keyframe_suffix: str) -> dict[str, object]:
+        result: dict[str, object] = {
+            "source": str(source_path),
+            "path": str(output_path),
+            "ok": False,
+            "error": "",
+            "fallback_from_keyframes": False,
+            "keyframe_count": 0,
+        }
+        if not source_path.is_file() or source_path.stat().st_size <= 0:
+            result["error"] = "source_video_missing_or_empty"
+            ok, error, frame_count = self._transcode_keyframes_video(keyframe_suffix, output_path)
+            result.update({"ok": ok, "error": error, "fallback_from_keyframes": True, "keyframe_count": frame_count})
+            return result
+        command = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(source_path),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
+        except FileNotFoundError:
+            result["error"] = "ffmpeg_not_found"
+            ok, error, frame_count = self._transcode_keyframes_video(keyframe_suffix, output_path)
+            result.update({"ok": ok, "error": error, "fallback_from_keyframes": True, "keyframe_count": frame_count})
+            return result
+        except subprocess.TimeoutExpired:
+            result["error"] = "ffmpeg_timeout"
+            ok, error, frame_count = self._transcode_keyframes_video(keyframe_suffix, output_path)
+            result.update({"ok": ok, "error": error, "fallback_from_keyframes": True, "keyframe_count": frame_count})
+            return result
+        if completed.returncode != 0:
+            result["error"] = (completed.stderr or completed.stdout or f"ffmpeg_exit_{completed.returncode}").strip()
+            ok, error, frame_count = self._transcode_keyframes_video(keyframe_suffix, output_path)
+            result.update({"ok": ok, "error": error, "fallback_from_keyframes": True, "keyframe_count": frame_count})
+            return result
+        result["ok"], result["error"] = self._browser_video_ok(output_path)
+        if not result["ok"]:
+            ok, error, frame_count = self._transcode_keyframes_video(keyframe_suffix, output_path)
+            result.update({"ok": ok, "error": error, "fallback_from_keyframes": True, "keyframe_count": frame_count})
+        return result
 
     def _render_topdown(self) -> np.ndarray:
         width, height = self.topdown_size
@@ -1071,6 +1237,14 @@ class VisualDemoObserver(Node):
             if writer is not None:
                 writer.release()
 
+        browser_videos = {
+            "raw_camera": self._transcode_browser_video(self.raw_video_path, self.raw_browser_video_path, "raw"),
+            "yolo_debug": self._transcode_browser_video(self.debug_video_path, self.debug_browser_video_path, "debug"),
+            "topdown_telemetry": self._transcode_browser_video(
+                self.topdown_video_path, self.topdown_browser_video_path, "topdown"
+            ),
+        }
+
         self._write_timeline_json()
 
         target_visible_ratio = float(self.target_visible_count / max(self.raw_frame_count, 1))
@@ -1137,6 +1311,10 @@ class VisualDemoObserver(Node):
             "raw_video": str(self.raw_video_path),
             "debug_video": str(self.debug_video_path),
             "topdown_video": str(self.topdown_video_path),
+            "raw_browser_video": str(self.raw_browser_video_path),
+            "debug_browser_video": str(self.debug_browser_video_path),
+            "topdown_browser_video": str(self.topdown_browser_video_path),
+            "browser_video_transcodes": browser_videos,
             "keyframes_dir": str(self.keyframes_dir),
             "timeline_path": str(self.timeline_path),
             "state_path": str(self.state_path),

@@ -8,6 +8,17 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
+find_package(gz-sim9 REQUIRED)
+
+add_library(chasecar_golf_ball_rolling_resistance_system SHARED
+  src/golf_ball_rolling_resistance_system.cc
+)
+target_link_libraries(chasecar_golf_ball_rolling_resistance_system
+  gz-sim9::gz-sim9
+)
+install(TARGETS chasecar_golf_ball_rolling_resistance_system
+  LIBRARY DESTINATION lib
+)
 
 # Install ROS 2 launch files
 install(DIRECTORY ros2_config/launch

@@ -250,6 +250,17 @@ def test_compute_capture_entry_command_uses_centered_close_speedup_and_bounds_of
     assert 0.0 < closing_command.linear_x < 0.07
     assert closing_command.angular_z > 0.0
 
+    zero_repair_command = compute_capture_entry_command(
+        {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        {"x": 0.70, "y": 0.12, "z": 0.05},
+        zone=zone,
+        envelope=CaptureEnvelope(),
+    )
+    assert zero_repair_command is not None
+    assert zero_repair_command.mode == "capture_entry"
+    assert zero_repair_command.linear_x >= 0.03
+    assert zero_repair_command.angular_z > 0.0
+
 
 def test_zone_edge_correction_eligible_accepts_inside_zone_or_near_zone_recapture():
     zone = build_zone_spec("corral_single_ball_place")
@@ -1354,6 +1365,29 @@ def test_final_three_ball_corral_pass_requires_all_targets_inside_stopped_and_no
     assert gather_run_pass(run) is True
     assert final_three_ball_corral_pass({**run, "final_all_targets_stopped": False, "final_three_ball_corral_pass": False}) is False
     assert gather_run_pass({**run, "post_visit_revisit_count": 1}) is False
+
+
+def test_fetch_to_pose_run_pass_uses_fetch_objective_instead_of_corral_stop():
+    run = {
+        "scenario_id": "corral_single_ball_place",
+        "mission_objective": "fetch_to_pose",
+        "pass": True,
+        "mission_completed_pass": True,
+        "fetch_to_pose_pass": True,
+        "fetch_to_pose_reached": True,
+        "final_inside_retrieval_corral": False,
+        "ball_stopped_in_corral": False,
+        "rolled_away_after_release": False,
+        "post_visit_revisit_count": 0,
+    }
+
+    assert gather_run_pass(run) is True
+    assert gather_run_pass({**run, "fetch_to_pose_pass": False}) is False
+
+    summary = summarize_runs([run])
+
+    assert summary["pass_count"] == 1
+    assert summary["settled_in_corral_pass_count"] == 0
 
 
 def test_summarize_runs_and_scorecard_include_multi_ball_final_audit_fields():

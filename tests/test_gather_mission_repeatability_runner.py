@@ -15,6 +15,18 @@ if str(SCRIPTS_DIR) not in sys.path:
 import gather_mission_repeatability_runner as repeatability_runner  # noqa: E402
 
 
+def test_dashboard_state_timeout_env_extends_default(monkeypatch):
+    monkeypatch.setenv("CHASECAR_DASHBOARD_STATE_TIMEOUT_S", "45")
+
+    assert repeatability_runner.dashboard_state_timeout_s(10.0) == 45.0
+
+
+def test_dashboard_state_timeout_ignores_invalid_env(monkeypatch):
+    monkeypatch.setenv("CHASECAR_DASHBOARD_STATE_TIMEOUT_S", "invalid")
+
+    assert repeatability_runner.dashboard_state_timeout_s(10.0) == 10.0
+
+
 def test_parse_args_allows_region_funnel_v1(monkeypatch):
     monkeypatch.setattr(
         repeatability_runner.sys,
@@ -123,6 +135,104 @@ def test_parse_args_allows_nav2_follow_path_reacquire_v1(monkeypatch):
     assert args.gather_control_family == "nav2_follow_path_reacquire_v1"
 
 
+def test_parse_args_allows_nav2_mppi_follow_path_reacquire_v1(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        ["repeatability", "--gather-control-family", "nav2_mppi_follow_path_reacquire_v1"],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "nav2_mppi_follow_path_reacquire_v1"
+
+
+def test_parse_args_allows_nav2_followpath_corridor_push_v1(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        ["repeatability", "--gather-control-family", "nav2_followpath_corridor_push_v1"],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "nav2_followpath_corridor_push_v1"
+
+
+def test_parse_args_allows_object_centric_gather_policy_v1(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        ["repeatability", "--gather-control-family", "object_centric_gather_policy_v1"],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "object_centric_gather_policy_v1"
+
+
+def test_parse_args_allows_ai_push_coast_servo_v1_guarded_live(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        [
+            "repeatability",
+            "--gather-control-family",
+            "ai_push_coast_servo_v1",
+            "--ai-push-coast-mode",
+            "guarded_live",
+        ],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "ai_push_coast_servo_v1"
+    assert args.ai_push_coast_mode == "guarded_live"
+
+
+def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        [
+            "repeatability",
+            "--mission-objective",
+            "fetch_to_pose",
+            "--fetch-target-x",
+            "2.8",
+            "--fetch-target-y",
+            "-0.2",
+            "--fetch-delivery-radius-m",
+            "0.5",
+        ],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.mission_objective == "fetch_to_pose"
+    assert args.fetch_target_x == 2.8
+    assert args.fetch_target_y == -0.2
+    assert args.fetch_delivery_radius_m == 0.5
+
+
+def test_parse_args_allows_contact_ready_fetch_gate_mode(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        [
+            "repeatability",
+            "--mission-objective",
+            "fetch_to_pose",
+            "--fetch-gate-mode",
+            "contact_ready",
+        ],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.fetch_gate_mode == "contact_ready"
+
+
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
     calls: list[tuple[str, str]] = []
 
@@ -214,6 +324,20 @@ def test_prepare_direct_environment_resets_ready_session_with_profile(monkeypatc
             "surface_profile": "short_turf",
         },
     )
+
+
+def test_latest_mission_verdict_path_maps_container_repo_path(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(repeatability_runner, "REPO_ROOT", tmp_path)
+
+    path = repeatability_runner._latest_mission_verdict_path(
+        {
+            "latest_artifacts": {
+                "mission_verdict": "/workspaces/chasecar/artifacts/session/s1/golf/mission_verdict.json",
+            }
+        }
+    )
+
+    assert path == str(tmp_path / "artifacts" / "session" / "s1" / "golf" / "mission_verdict.json")
 
 
 def test_prepare_direct_environment_starts_stopped_session_with_profile(monkeypatch):
@@ -642,6 +766,114 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
     assert summary["ball_stopped_in_corral"] is False
     assert summary["rolled_away_after_release"] is False
     assert summary["settled_in_corral_pass"] is False
+
+
+def test_summarize_gather_artifacts_reads_fetch_to_pose_fields(tmp_path: Path):
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    verdict_path = mission_root / "mission_verdict.json"
+    shot_outcome = {
+        "pass": True,
+        "reason": "trajectory_intersects_delivery_radius",
+        "closest_approach_distance_m": 0.12,
+    }
+    verdict_path.write_text(
+        json.dumps(
+            {
+                "pass": True,
+                "mission_completed_pass": True,
+                "mission_objective": "fetch_to_pose",
+                "fetch_to_pose_reached": True,
+                "fetch_to_pose_pass": True,
+                "fetch_to_pose_time_s": 4.25,
+                "fetch_to_pose_failure_reason": "",
+                "fetch_pose_world": {"x": 2.4, "y": 0.0, "z": 0.001, "radius_m": 0.5},
+                "fetch_delivery_radius_m": 0.5,
+                "model_provenance": {
+                    "model_provenance_valid": True,
+                    "model_provenance_reason": "calibrated_fetch_models",
+                    "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+                    "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
+                    "target_model_radius_m": 0.021336,
+                    "target_model_classification": "calibrated_golf_ball",
+                    "zone_model_classification": "golf_ball_delivery_zone_marker",
+                },
+                "model_provenance_valid": True,
+                "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+                "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
+                "target_model_radius_m": 0.021336,
+                "target_model_classification": "calibrated_golf_ball",
+                "shot_outcome": shot_outcome,
+                "placed_count": 1,
+                "surface_profile": "short_turf",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (mission_root / "summary.json").write_text(json.dumps({}), encoding="utf-8")
+    (mission_root / "target_results.json").write_text(json.dumps({"targets": []}), encoding="utf-8")
+
+    summary = repeatability_runner.summarize_gather_artifacts(run_index=1, mission_verdict_path=str(verdict_path))
+
+    assert summary["mission_objective"] == "fetch_to_pose"
+    assert summary["fetch_to_pose_reached"] is True
+    assert summary["fetch_to_pose_pass"] is True
+    assert summary["fetch_to_pose_time_s"] == 4.25
+    assert summary["fetch_pose_world"]["radius_m"] == 0.5
+    assert summary["model_provenance_valid"] is True
+    assert summary["target_model_classification"] == "calibrated_golf_ball"
+    assert summary["shot_outcome"] == shot_outcome
+
+
+def test_model_provenance_rollup_counts_missing_and_valid():
+    rollup = repeatability_runner._model_provenance_rollup(
+        [
+            {
+                "mission_objective": "fetch_to_pose",
+                "model_provenance": {
+                    "model_provenance_valid": True,
+                    "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+                    "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
+                    "target_model_radius_m": 0.021336,
+                    "target_model_classification": "calibrated_golf_ball",
+                    "zone_model_classification": "golf_ball_delivery_zone_marker",
+                },
+            },
+            {
+                "mission_objective": "fetch_to_pose",
+            },
+        ]
+    )
+
+    assert rollup["model_provenance_valid"] is False
+    assert rollup["model_provenance_valid_count"] == 1
+    assert rollup["model_provenance_missing_count"] == 1
+    assert rollup["target_model_classification"] == "calibrated_golf_ball"
+
+
+def test_model_provenance_rollup_reads_nested_mission_verdict():
+    rollup = repeatability_runner._model_provenance_rollup(
+        [
+            {
+                "mission_objective": "fetch_to_pose",
+                "mission_verdict": {
+                    "model_provenance": {
+                        "model_provenance_valid": True,
+                        "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+                        "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
+                        "target_model_radius_m": 0.021336,
+                        "target_model_classification": "calibrated_golf_ball",
+                        "zone_model_classification": "golf_ball_delivery_zone_marker",
+                    },
+                },
+            },
+        ]
+    )
+
+    assert rollup["model_provenance_valid"] is True
+    assert rollup["model_provenance_valid_count"] == 1
+    assert rollup["model_provenance_missing_count"] == 0
+    assert rollup["target_model_classification"] == "calibrated_golf_ball"
 
 
 def test_summarize_gather_artifacts_preserves_fresh_attempt_approach_across_release_failure(tmp_path: Path):
@@ -1104,6 +1336,10 @@ def test_run_dashboard_scenario_once_ignores_stale_error_result(monkeypatch):
         "pre_stage_path_tracker_v1",
         "pre_stage_trajectory_owner_v1",
         "nav2_follow_path_reacquire_v1",
+        "nav2_mppi_follow_path_reacquire_v1",
+        "nav2_followpath_corridor_push_v1",
+        "object_centric_gather_policy_v1",
+        "ai_push_coast_servo_v1",
     ],
 )
 def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
@@ -1171,6 +1407,16 @@ def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
             "0",
             "--gather-control-family",
             family,
+            "--ai-push-coast-mode",
+            "guarded_live",
+            "--fetch-gate-mode",
+            "contact_ready",
+            "--target-model-sdf",
+            "ros2_config/calibrated_golf_ball.sdf",
+            "--zone-model-sdf",
+            "ros2_config/golf_ball_delivery_zone_marker.sdf",
+            "--artifact-kind",
+            "gather_mission_calibrated_golf_policy_probe",
         ],
     )
 
@@ -1184,3 +1430,18 @@ def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
     assert "--gather-control-family" in subprocess_calls[0]
     family_index = subprocess_calls[0].index("--gather-control-family")
     assert subprocess_calls[0][family_index + 1] == family
+    assert "--ai-push-coast-mode" in subprocess_calls[0]
+    ai_mode_index = subprocess_calls[0].index("--ai-push-coast-mode")
+    assert subprocess_calls[0][ai_mode_index + 1] == "guarded_live"
+    assert "--fetch-gate-mode" in subprocess_calls[0]
+    gate_index = subprocess_calls[0].index("--fetch-gate-mode")
+    assert subprocess_calls[0][gate_index + 1] == "contact_ready"
+    assert "--target-model-sdf" in subprocess_calls[0]
+    target_sdf_index = subprocess_calls[0].index("--target-model-sdf")
+    assert subprocess_calls[0][target_sdf_index + 1] == "ros2_config/calibrated_golf_ball.sdf"
+    assert "--zone-model-sdf" in subprocess_calls[0]
+    zone_sdf_index = subprocess_calls[0].index("--zone-model-sdf")
+    assert subprocess_calls[0][zone_sdf_index + 1] == "ros2_config/golf_ball_delivery_zone_marker.sdf"
+    assert "--artifact-kind" in subprocess_calls[0]
+    artifact_kind_index = subprocess_calls[0].index("--artifact-kind")
+    assert subprocess_calls[0][artifact_kind_index + 1] == "gather_mission_calibrated_golf_policy_probe"

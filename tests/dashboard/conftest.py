@@ -26,6 +26,20 @@ def port_open(host: str, port: int) -> bool:
         return sock.connect_ex((host, port)) == 0
 
 
+def read_dashboard_state_file() -> dict[str, Any]:
+    if not STATE_PATH.exists():
+        return {}
+    text = STATE_PATH.read_text(encoding="utf-8")
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            payload, _end = json.JSONDecoder().raw_decode(text.lstrip())
+        except json.JSONDecodeError:
+            return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 @dataclass
 class DashboardClient:
     base_url: str
@@ -117,7 +131,7 @@ def pytest_sessionfinish(session, exitstatus):  # type: ignore[no-untyped-def]
         with urllib.request.urlopen(f"{BASE_URL}/api/state", timeout=10) as response:
             state = json.loads(response.read().decode("utf-8"))
     except Exception:
-        state = json.loads(STATE_PATH.read_text(encoding="utf-8")) if STATE_PATH.exists() else {}
+        state = read_dashboard_state_file()
 
     session_id = str(state.get("session_id", "")).strip()
     if not session_id:

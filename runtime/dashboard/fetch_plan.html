@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chasecar Fetch-To-Pose Plan</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --bg: #0c100f;
+  --surface: #121816;
+  --panel: #17201c;
+  --panel-2: #1c2422;
+  --line: rgba(255,255,255,0.1);
+  --line-strong: rgba(255,255,255,0.18);
+  --ink: #e5eee9;
+  --muted: #9bb0a8;
+  --faint: #62766f;
+  --good: #61d29d;
+  --good-bg: rgba(97,210,157,0.13);
+  --watch: #e7b85b;
+  --watch-bg: rgba(231,184,91,0.14);
+  --live: #80b8ff;
+  --live-bg: rgba(128,184,255,0.14);
+  --bad: #f17a72;
+  --radius: 8px;
+  --sans: "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Code", "Consolas", monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+}
+a { color: var(--good); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  padding: 0 22px;
+  background: rgba(18,24,22,0.96);
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.brand-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 10px rgba(97,210,157,0.7);
+}
+.brand-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.nav a:hover {
+  background: var(--panel);
+  color: var(--ink);
+  text-decoration: none;
+}
+main {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 26px 0 44px;
+}
+.intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+.hero, .status-card, .section, .evidence-card, .watch-card, .step-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.hero {
+  padding: 26px;
+}
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--good);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+.subtitle {
+  max-width: 760px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+.status-card {
+  padding: 18px;
+  background: var(--panel);
+}
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 9px;
+  border-radius: var(--radius);
+  background: var(--watch-bg);
+  color: var(--watch);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.status-card p {
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+.meta {
+  margin-top: 14px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 12px;
+  word-break: break-word;
+}
+.two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.section {
+  padding: 20px;
+  margin-bottom: 18px;
+}
+.section h2, .section h3, .evidence-card h3 {
+  margin: 0;
+  letter-spacing: 0;
+}
+.section h2 {
+  font-size: 20px;
+}
+.section h3 {
+  font-size: 15px;
+}
+.section p {
+  margin: 10px 0 0;
+  color: var(--muted);
+}
+.flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.flow-item, .ladder-item {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.flow-item h3, .ladder-item h3 {
+  color: var(--ink);
+}
+.flow-item p, .ladder-item p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.ladder {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.evidence-card {
+  overflow: hidden;
+  background: var(--surface);
+}
+.evidence-body {
+  padding: 16px;
+}
+.evidence-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+.pill {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  font-size: 11px;
+  font-weight: 800;
+  font-family: var(--mono);
+}
+.pill.green { color: var(--good); background: var(--good-bg); }
+.pill.watch { color: var(--watch); background: var(--watch-bg); }
+.pill.live { color: var(--live); background: var(--live-bg); }
+.evidence-card p {
+  margin: 10px 0 0;
+  color: var(--muted);
+}
+.metrics {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.metrics li {
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+}
+.links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.links a:hover {
+  background: var(--panel-2);
+  text-decoration: none;
+}
+.preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-bottom: 1px solid var(--line);
+  background: #080c0a;
+}
+.video-proof-grid, .watch-grid, .next-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.uat-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+.uat-panel {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.uat-panel h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.uat-panel p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+.uat-sample-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.uat-sample-card {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.uat-sample-card h4 {
+  margin: 0;
+  font-size: 13px;
+}
+.uat-sample-card p {
+  margin: 7px 0 0;
+  font-size: 12px;
+}
+.uat-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #080c0a;
+}
+.review-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.review-list li {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+.video-proof-card, .watch-card, .step-card {
+  padding: 14px;
+  background: var(--panel);
+}
+.video-proof-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.video-proof-card h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.video-proof-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.proof-label {
+  display: block;
+  margin-top: 12px;
+  color: var(--good);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.proof-label.limit {
+  color: var(--watch);
+}
+.video-player {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #080c0a;
+}
+.watch-card h3 {
+  margin: 0;
+  color: var(--watch);
+  font-size: 14px;
+}
+.watch-card p, .step-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--good-bg);
+  color: var(--good);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 800;
+}
+.error {
+  border-color: rgba(241,122,114,0.4);
+  color: var(--bad);
+}
+@media (max-width: 980px) {
+  .intro, .two-col, .evidence-grid, .flow, .ladder, .uat-grid, .uat-sample-grid, .video-proof-grid, .watch-grid, .next-grid {
+    grid-template-columns: 1fr;
+  }
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 12px 16px;
+  }
+  main {
+    width: min(100vw - 24px, 760px);
+    padding-top: 16px;
+  }
+  h1 {
+    font-size: 28px;
+  }
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-title">Chasecar Fetch Plan</span>
+  </div>
+  <nav class="nav" aria-label="Page navigation">
+    <a href="/">Dashboard</a>
+    <a href="/classic">Classic</a>
+    <a href="/fetch_plan_data.json">Data JSON</a>
+  </nav>
+</div>
+<main>
+  <section class="intro">
+    <div class="hero">
+      <p class="eyebrow" id="statusLabel">Living plan</p>
+      <h1 id="title">Generalized Fetch-To-Pose Living Plan</h1>
+      <p class="subtitle" id="statusDetail">Loading plan data...</p>
+    </div>
+    <aside class="status-card">
+      <span class="status-label">Boundary</span>
+      <p>This page is a working map for architecture, evidence, watches, and next actions.</p>
+      <div class="meta" id="meta">Loading...</div>
+    </aside>
+  </section>
+
+  <section class="two-col">
+    <article class="section">
+      <p class="eyebrow">Milestone</p>
+      <h2 id="milestoneTitle"></h2>
+      <p id="milestoneBody"></p>
+    </article>
+    <article class="section">
+      <p class="eyebrow">Current Branch</p>
+      <h2 id="branchTitle"></h2>
+      <p>Keep the moonshot branch active as a route-owner UAT harness. Treat broad batches as progress and backlog evidence until the canonical promotion ladder is rerun.</p>
+    </article>
+  </section>
+
+  <section class="section">
+    <p class="eyebrow">Architecture Direction</p>
+    <h2>Planner route -> setup owner -> bounded contact servo</h2>
+    <div class="flow" id="architecture"></div>
+  </section>
+
+  <section class="section">
+    <p class="eyebrow">Evidence Ladder</p>
+    <h2>How progress graduates</h2>
+    <div class="ladder" id="ladder"></div>
+  </section>
+
+  <section class="section">
+    <p class="eyebrow">Latest Broad Evidence</p>
+    <h2>Route-owner UAT progress</h2>
+    <div class="evidence-grid" id="evidence"></div>
+  </section>
+
+  <section class="section" id="uat-review-bundle">
+    <p class="eyebrow">UAT Review Bundle</p>
+    <h2 id="uatTitle">Browser review path</h2>
+    <p id="uatSummary">Loading UAT bundle...</p>
+    <div class="uat-grid">
+      <article class="uat-panel">
+        <h3>Route samples to watch</h3>
+        <div class="uat-sample-grid" id="uatSamples"></div>
+      </article>
+      <article class="uat-panel">
+        <h3>Review checklist</h3>
+        <ul class="review-list" id="uatChecklist"></ul>
+        <div class="links" id="uatLinks"></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" id="recent-video-proof">
+    <p class="eyebrow">Running / Recent Video Proof</p>
+    <h2>Browser-watchable visual progress evidence</h2>
+    <p>Each entry states the proof value and the evidence boundary. Onboard raw camera clips come first, followed by topdown and world-stream context when those clips exist.</p>
+    <div class="video-proof-grid" id="videoProof"></div>
+  </section>
+
+  <section class="section">
+    <p class="eyebrow">Watch Areas</p>
+    <h2>Open quality work</h2>
+    <div class="watch-grid" id="watches"></div>
+  </section>
+
+  <section class="section">
+    <p class="eyebrow">Next Steps</p>
+    <h2>Near-term integration sequence</h2>
+    <div class="next-grid" id="nextSteps"></div>
+  </section>
+</main>
+
+<script>
+function node(tag, className, text) {
+  const item = document.createElement(tag);
+  if (className) item.className = className;
+  if (text !== undefined) item.textContent = text;
+  return item;
+}
+
+function addLinks(parent, links) {
+  if (!Array.isArray(links) || !links.length) return;
+  const wrap = node('div', 'links');
+  links.forEach((link) => {
+    const anchor = node('a', '', link.label || link.url || 'Artifact');
+    anchor.href = link.url || '#';
+    anchor.target = '_blank';
+    anchor.rel = 'noopener';
+    wrap.appendChild(anchor);
+  });
+  parent.appendChild(wrap);
+}
+
+function renderTitledItems(root, items, itemClass) {
+  root.textContent = '';
+  items.forEach((item) => {
+    const card = node('article', itemClass);
+    card.appendChild(node('h3', '', item.label || item.title || 'Item'));
+    card.appendChild(node('p', '', item.body || ''));
+    root.appendChild(card);
+  });
+}
+
+function renderEvidence(items) {
+  const root = document.getElementById('evidence');
+  root.textContent = '';
+  items.forEach((item) => {
+    const card = node('article', 'evidence-card');
+    if (item.preview_image) {
+      const img = node('img', 'preview');
+      img.src = item.preview_image;
+      img.alt = item.title + ' keyframe montage';
+      img.loading = 'lazy';
+      card.appendChild(img);
+    }
+    const body = node('div', 'evidence-body');
+    const top = node('div', 'evidence-top');
+    top.appendChild(node('h3', '', item.title));
+    top.appendChild(node('span', 'pill ' + (item.tone || 'watch'), item.status));
+    body.appendChild(top);
+    body.appendChild(node('p', '', item.summary));
+    const metrics = node('ul', 'metrics');
+    (item.metrics || []).forEach((metric) => metrics.appendChild(node('li', '', metric)));
+    body.appendChild(metrics);
+    addLinks(body, item.links);
+    card.appendChild(body);
+    root.appendChild(card);
+  });
+}
+
+function renderUatBundle(bundle) {
+  document.getElementById('uatTitle').textContent = bundle.title || 'Browser review path';
+  document.getElementById('uatSummary').textContent = bundle.summary || '';
+  const sampleRoot = document.getElementById('uatSamples');
+  sampleRoot.textContent = '';
+  (bundle.route_samples || []).forEach((sample) => {
+    const card = node('article', 'uat-sample-card');
+    card.appendChild(node('h4', '', sample.label || 'Route sample'));
+    card.appendChild(node('p', '', sample.reason || ''));
+    if (sample.video_url) {
+      const video = node('video', 'uat-video');
+      video.controls = true;
+      video.preload = 'metadata';
+      video.src = sample.video_url;
+      video.setAttribute('aria-label', sample.label || 'UAT route sample');
+      card.appendChild(video);
+    }
+    addLinks(card, [
+      { label: 'Onboard', url: sample.video_url },
+      { label: 'Topdown', url: sample.topdown_url },
+      { label: 'Contact sheet', url: sample.contact_sheet_url },
+    ].filter((link) => link.url));
+    sampleRoot.appendChild(card);
+  });
+  const checklistRoot = document.getElementById('uatChecklist');
+  checklistRoot.textContent = '';
+  (bundle.review_checklist || []).forEach((item) => checklistRoot.appendChild(node('li', '', item)));
+  const linkRoot = document.getElementById('uatLinks');
+  linkRoot.textContent = '';
+  addLinks(linkRoot, bundle.links || []);
+}
+
+function renderVideoProof(items) {
+  const root = document.getElementById('videoProof');
+  root.textContent = '';
+  items.forEach((item) => {
+    const card = node('article', 'video-proof-card');
+    card.appendChild(node('h3', '', item.title || 'Video proof'));
+    card.appendChild(node('p', '', item.summary || ''));
+    if (item.primary_video) {
+      const video = node('video', 'video-player');
+      video.controls = true;
+      video.preload = 'metadata';
+      video.src = item.primary_video.url;
+      video.setAttribute('aria-label', item.primary_video.label || item.title || 'Onboard video proof');
+      card.appendChild(video);
+    } else if (item.preview_image) {
+      const img = node('img', 'preview');
+      img.src = item.preview_image;
+      img.alt = item.title + ' visual proof';
+      img.loading = 'lazy';
+      card.appendChild(img);
+    }
+    card.appendChild(node('span', 'proof-label', 'Proves'));
+    card.appendChild(node('p', '', item.proves || ''));
+    card.appendChild(node('span', 'proof-label limit', 'Limit'));
+    card.appendChild(node('p', '', item.limits || ''));
+    addLinks(card, item.links);
+    root.appendChild(card);
+  });
+}
+
+function proofItems(data) {
+  const running = data.runningProof || data.running_proof || data.running_video_proof || [];
+  const recent = data.recentVideoProof || data.recent_video_proof || [];
+  return [].concat(running, recent);
+}
+
+function renderNextSteps(items) {
+  const root = document.getElementById('nextSteps');
+  root.textContent = '';
+  items.forEach((text, index) => {
+    const card = node('article', 'step-card');
+    card.appendChild(node('span', 'step-num', String(index + 1)));
+    card.appendChild(node('p', '', text));
+    root.appendChild(card);
+  });
+}
+
+function render(data) {
+  document.getElementById('title').textContent = data.title;
+  document.getElementById('statusLabel').textContent = data.status_label;
+  document.getElementById('statusDetail').textContent = data.status_detail;
+  document.getElementById('meta').textContent = data.updated_label + ' | ' + data.branch;
+  document.getElementById('milestoneTitle').textContent = data.long_term_milestone.title;
+  document.getElementById('milestoneBody').textContent = data.long_term_milestone.body;
+  document.getElementById('branchTitle').textContent = data.branch;
+  renderTitledItems(document.getElementById('architecture'), data.architecture_direction || [], 'flow-item');
+  renderTitledItems(document.getElementById('ladder'), data.evidence_ladder || [], 'ladder-item');
+  renderEvidence(data.latest_evidence || []);
+  renderUatBundle(data.uat_review_bundle || {});
+  renderVideoProof(proofItems(data));
+  renderTitledItems(document.getElementById('watches'), data.watch_areas || [], 'watch-card');
+  renderNextSteps(data.next_steps || []);
+}
+
+fetch('/fetch_plan_data.json', { cache: 'no-store' })
+  .then((response) => {
+    if (!response.ok) throw new Error(response.status + ' ' + response.statusText);
+    return response.json();
+  })
+  .then(render)
+  .catch((error) => {
+    const detail = document.getElementById('statusDetail');
+    detail.textContent = 'Plan data could not be loaded: ' + error.message;
+    detail.classList.add('error');
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "targets": [
+    {
+      "id": "ball_1",
+      "forward_m": 0.38,
+      "lateral_m": -0.05,
+      "visit_tolerance_m": 0.22,
+      "min_dwell_s": 0.5,
+      "start_visible": true,
+      "label": "Golf ball 1 right 0.05m",
+      "z_m": 0.021336
+    }
+  ]
+}

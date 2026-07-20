@@ -8,8 +8,7 @@ from typing import Any, Dict, Optional
 from telegram_wait_bridge.config import Settings
 from telegram_wait_bridge.db import ACTIVE_WAIT_STATUSES, Database
 
-PROMPT_REPLY_FOOTER = "\n\nReply directly to this message so I can match your response."
-MAX_PROMPT_CHARS = 3900 - len(PROMPT_REPLY_FOOTER)
+MAX_PROMPT_CHARS = 3900
 TERMINAL_WAIT_STATUSES = {"fulfilled", "timed_out", "cancelled", "failed"}
 
 
@@ -46,7 +45,7 @@ def validate_prompt_text(message: str) -> str:
 
 
 def format_prompt_for_delivery(prompt_text: str) -> str:
-    return f"{prompt_text.rstrip()}{PROMPT_REPLY_FOOTER}"
+    return prompt_text.rstrip()
 
 
 def serialize_wait_request(wait_request: Dict[str, Any]) -> Dict[str, Any]:

@@ -3,6 +3,10 @@
 ## Current Docs (2026 Stack)
 
 ### Operations
+- [HARDWARE_FIRST_BOOT_STEP_CARD.md](HARDWARE_FIRST_BOOT_STEP_CARD.md) - Live one-step bench card for first Jetson login and SSH handoff
+- [HARDWARE_V0_DEPLOYMENT_PLAN.md](HARDWARE_V0_DEPLOYMENT_PLAN.md) - Beginner-friendly hardware deployment and direct-access ladder
+- [HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md](HARDWARE_V0_STACK_THROUGH_BRIDGE_PLAN.md) - Offboard Chasecar stack through the JetBot factory bridge
+- [HARDWARE_BENCH_CONNECTION_RUNBOOK.md](HARDWARE_BENCH_CONNECTION_RUNBOOK.md) - Granular Jetson, D415, network, SSH, and Tailscale bench setup
 - [ACTIVE_WORKFLOW.md](ACTIVE_WORKFLOW.md) — Canonical bring-up, UAT execution, and GUI rehearsal sequencing
 - [FIRST_UAT_RUNBOOK.md](FIRST_UAT_RUNBOOK.md) — First operator UAT procedure and triage
 - [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md) — Browser dashboard and Xpra operator view
@@ -18,6 +22,7 @@
 
 ### Planning and Research
 - [ROADMAP_2026_H2.md](ROADMAP_2026_H2.md) — H2 2026 roadmap
+- [GENERALIZED_FETCH_TO_POSE_AUTONOMOUS_EXECUTION_PLAN.md](GENERALIZED_FETCH_TO_POSE_AUTONOMOUS_EXECUTION_PLAN.md) - Default long-running execution ladder for generalized fetch-to-pose and planner-gated randomization
 - [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md) - Active bounded Generalized Fetch-To-Pose v1 subsystem milestone, Nav2 corridor-push evidence, and guarded AI push-coast plan
 - [OBJECT_CENTRIC_FETCH_POLICY_SLIDE_DECK.html](OBJECT_CENTRIC_FETCH_POLICY_SLIDE_DECK.html) - 4th-grade slide deck for the calibrated fetch architecture
 - [FETCH_BRANCH_STRATEGY.md](FETCH_BRANCH_STRATEGY.md) - Branch-role and architecture-revisit decisions for calibrated golf fetch
@@ -38,4 +43,4 @@
 
 ## Archive
 
-Historical docs from the 2025 development cycle are in [archive/](archive/). These cover the original ROS Humble stack, pre-Docker workflows, and early vision/nav integration work. They are preserved for reference but do not reflect the current system.
+Use [archive/](archive/) for historical 2025 docs covering the original ROS Humble stack, pre-Docker workflows, and early vision/nav integration work.

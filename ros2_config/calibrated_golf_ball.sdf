@@ -1,0 +1,79 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="calibrated_golf_ball">
+    <pose>0 0 0 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.04593</mass>
+        <inertia>
+          <ixx>0.00000837</ixx>
+          <iyy>0.00000837</iyy>
+          <izz>0.00000837</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <velocity_decay>
+        <linear>0.9</linear>
+        <angular>1.4</angular>
+      </velocity_decay>
+      <collision name="collision">
+        <geometry>
+          <sphere>
+            <radius>0.021336</radius>
+          </sphere>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>4.0</mu>
+              <mu2>4.0</mu2>
+              <slip1>0.0</slip1>
+              <slip2>0.0</slip2>
+            </ode>
+            <torsional>
+              <coefficient>1.6</coefficient>
+              <use_patch_radius>true</use_patch_radius>
+              <patch_radius>0.021336</patch_radius>
+              <ode>
+                <slip>0.0</slip>
+              </ode>
+            </torsional>
+          </friction>
+          <bounce>
+            <restitution_coefficient>0.02</restitution_coefficient>
+            <threshold>0.05</threshold>
+          </bounce>
+          <contact>
+            <ode>
+              <kp>350000.0</kp>
+              <kd>35.0</kd>
+              <max_vel>0.02</max_vel>
+              <min_depth>0.0004</min_depth>
+            </ode>
+          </contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <sphere>
+            <radius>0.021336</radius>
+          </sphere>
+        </geometry>
+        <material>
+          <ambient>0.9 0.9 0.9 1</ambient>
+          <diffuse>1.0 1.0 1.0 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.9 0.9 0.9 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <plugin filename="/root/ros2_ws/install/chasebot_description/lib/libchasecar_golf_ball_rolling_resistance_system.so" name="chasecar::GolfBallRollingResistance">
+      <link_name>link</link_name>
+      <linear_decel_mps2>0.72</linear_decel_mps2>
+      <ball_radius_m>0.021336</ball_radius_m>
+      <stop_speed_threshold_mps>0.03</stop_speed_threshold_mps>
+    </plugin>
+  </model>
+</sdf>

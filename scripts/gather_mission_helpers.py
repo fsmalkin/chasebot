@@ -69,7 +69,7 @@ DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MIN_BALL_X_M = 0.50
 DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_ABS_BALL_Y_M = 0.03
 DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_BEARING_RAD = 0.06
 DEFAULT_CAPTURE_ENTRY_READY_DWELL_S = 0.30
-DEFAULT_CAPTURE_ENTRY_TIMEOUT_S = 4.0
+DEFAULT_CAPTURE_ENTRY_TIMEOUT_S = 6.0
 DEFAULT_GOAL_SIDE_VIOLATION_PROJECTION_M = 0.0
 DEFAULT_FIRST_CONTACT_ALIGNMENT_PASS_DEG = 25.0
 
@@ -255,6 +255,15 @@ def final_three_ball_corral_pass(run: dict[str, Any]) -> bool:
 def gather_run_pass(run: dict[str, Any]) -> bool:
     if not isinstance(run, dict):
         return False
+    mission_objective = str(run.get("mission_objective", "") or "").strip()
+    if not mission_objective:
+        verdict = run.get("mission_verdict", {}) if isinstance(run.get("mission_verdict"), dict) else {}
+        summary = run.get("summary", {}) if isinstance(run.get("summary"), dict) else {}
+        mission_objective = str(verdict.get("mission_objective", "") or summary.get("mission_objective", "") or "").strip()
+    if mission_objective == "fetch_to_pose":
+        return bool(run.get("mission_completed_pass", run.get("pass", False))) and bool(
+            run.get("fetch_to_pose_pass", run.get("fetch_to_pose_reached", False))
+        )
     scenario_id = str(run.get("scenario_id", "") or "").strip()
     if scenario_id == "gather_three_ball_zone" or "final_three_ball_corral_pass" in run:
         return final_three_ball_corral_pass(run)
@@ -1206,11 +1215,11 @@ def compute_capture_entry_command(
             rationale="The ball is already centered; close the final capture gap before oscillation reopens it.",
         )
     angular = clamp((ball_y_m * 9.0) + (bearing_rad * 0.85), -0.45, 0.45)
-    linear = 0.045
+    linear = 0.055
     if abs(ball_y_m) > 0.06:
-        linear = 0.020
+        linear = 0.035
     elif ball_x_m > 0.55:
-        linear = 0.055
+        linear = 0.065
     return PlaceControlCommand(
         mode="capture_entry",
         linear_x=round(linear, 6),
@@ -1646,11 +1655,20 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
 
 def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], runs: list[dict[str, Any]]) -> str:
     surface_profiles = list(summary.get("surface_profiles", [])) if isinstance(summary.get("surface_profiles"), list) else []
+    fetch_objective = str(summary.get("mission_objective", "") or "").strip() == "fetch_to_pose" or any(
+        str(item.get("mission_objective", "") or "").strip() == "fetch_to_pose"
+        or "fetch_to_pose_reached" in item
+        for item in runs
+    )
     multi_ball = bool(
         summary.get("final_three_ball_corral_pass_count")
         or summary.get("final_three_ball_corral_fail_count")
         or any("final_three_ball_corral_pass" in item for item in runs)
     )
+    placement_label = "Delivery marker pass/fail" if fetch_objective else "Settled placement pass/fail"
+    inside_label = "Legacy corral inside" if fetch_objective else "Final inside retrieval corral"
+    center_label = "Legacy corral center inside" if fetch_objective else "Final center inside zone"
+    stopped_label = "Legacy corral stopped" if fetch_objective else "Ball stopped in corral"
     lines = [
         f"# {scenario_label} Scorecard",
         "",
@@ -1671,10 +1689,10 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         f"- Release gate blocks: `{', '.join(summary.get('release_gate_blocked_reasons', [])) if summary.get('release_gate_blocked_reasons') else 'none'}`",
         f"- Pass rate: `{summary.get('pass_count', 0)}/{max(len(runs), 1)}`",
         f"- Promotion gate: `{'PASS' if summary.get('promotion_gate_pass') else 'FAIL'}`",
-        f"- Settled placement pass/fail: `{summary.get('settled_in_corral_pass_count', 0)}/{summary.get('settled_in_corral_fail_count', 0)}`",
-        f"- Final inside retrieval corral: `{summary.get('final_inside_retrieval_corral_count', 0)}/{max(len(runs), 1)}`",
-        f"- Final center inside zone: `{summary.get('final_center_inside_zone_count', 0)}/{max(len(runs), 1)}`",
-        f"- Ball stopped in corral: `{summary.get('ball_stopped_in_corral_count', 0)}/{max(len(runs), 1)}`",
+        f"- {placement_label}: `{summary.get('fetch_to_pose_pass_count', summary.get('settled_in_corral_pass_count', 0)) if fetch_objective else summary.get('settled_in_corral_pass_count', 0)}/{summary.get('fetch_to_pose_fail_count', summary.get('settled_in_corral_fail_count', 0)) if fetch_objective else summary.get('settled_in_corral_fail_count', 0)}`",
+        f"- {inside_label}: `{summary.get('final_inside_retrieval_corral_count', 0)}/{max(len(runs), 1)}`",
+        f"- {center_label}: `{summary.get('final_center_inside_zone_count', 0)}/{max(len(runs), 1)}`",
+        f"- {stopped_label}: `{summary.get('ball_stopped_in_corral_count', 0)}/{max(len(runs), 1)}`",
         f"- Rolled away after release: `{summary.get('rolled_away_after_release_count', 0)}`",
         f"- Clean retention pass/fail: `{summary.get('clean_retention_pass_count', 0)}/{summary.get('clean_retention_fail_count', 0)}`",
         f"- Mission time avg/min/max: `{summary.get('mission_time_avg_s', 0.0):.3f}s / {summary.get('mission_time_min_s', 0.0):.3f}s / {summary.get('mission_time_max_s', 0.0):.3f}s`",
@@ -1703,6 +1721,9 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         settled_ok = settled_in_corral_pass(item)
         run_pass = gather_run_pass(item)
         retention_ok = clean_retention_pass(item)
+        geometry = item.get("geometry_consistency", {}) if isinstance(item.get("geometry_consistency"), dict) else {}
+        delivery_label = "delivery_marker" if fetch_objective else "retrieved"
+        delivery_value = bool(item.get("fetch_to_pose_pass", item.get("fetch_to_pose_reached", False))) if fetch_objective else bool(item.get("final_inside_retrieval_corral", False))
         approach_verdict = item.get("approach_side_verdict", {}) if isinstance(item.get("approach_side_verdict"), dict) else {}
         approach_reason = str(
             approach_verdict.get("reason", "")
@@ -1725,7 +1746,9 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
             f"release_gate=`{str(item.get('release_gate_blocked_reason', '') or 'none')}` "
             f"surface=`{str(item.get('surface_profile', '') or 'unspecified')}` "
             f"placed=`{int(item.get('placed_count', 0) or 0)}` "
-            f"retrieved=`{bool(item.get('final_inside_retrieval_corral', False))}` "
+            f"{delivery_label}=`{delivery_value}` "
+            f"geometry=`{geometry.get('pass', 'unknown') if fetch_objective else 'n/a'}` "
+            f"geometry_reason=`{geometry.get('reason', '') if fetch_objective else ''}` "
             f"center_inside=`{bool(item.get('final_center_inside_zone', False))}` "
             f"stopped=`{bool(item.get('ball_stopped_in_corral', False))}` "
             f"rolled_away=`{bool(item.get('rolled_away_after_release', False))}` "

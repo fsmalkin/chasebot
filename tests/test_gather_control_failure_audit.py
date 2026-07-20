@@ -336,6 +336,471 @@ def test_nav2_timeout_and_ball_contact_are_extracted_from_state_history(tmp_path
     assert case["nav2_debug"]["ball_drift_max_m"] >= audit.BALL_DRIFT_CONTACT_THRESHOLD_M
 
 
+def test_mppi_follow_path_timeout_is_classified_from_diagnostics(tmp_path: Path):
+    mission_root = tmp_path / "mppi_plus45"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "event_type": "nav2_follow_path_reacquire_dispatch",
+                "attempt": 1,
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "ball_pose": {"x": 5.448, "y": 0.0},
+            },
+            {
+                "event_type": "nav2_follow_path_reacquire_complete",
+                "attempt": 1,
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "nav2_follow_path_dispatch_status": "goal_result_timeout",
+                "nav2_follow_path_result": {
+                    "dispatch_status": "goal_result_timeout",
+                    "feedback_count": 4,
+                    "feedback_samples": [{"elapsed_s": 0.5, "feedback": {"distance_to_goal": 0.8}}],
+                    "timed_out": True,
+                    "cancel_requested": True,
+                },
+                "nav2_follow_path_diagnostics": {
+                    "dispatch_status": "goal_result_timeout",
+                    "robot_motion_m": 1.25,
+                    "ball_motion_m": 0.0,
+                    "completion_terminal_path_distance_m": 0.7,
+                    "completion_terminal_yaw_error_deg": 38.0,
+                    "feedback_count": 4,
+                    "measured_handoff_ready": False,
+                    "cancel_requested": True,
+                    "status_text": "STATUS_ABORTED",
+                    "controller_log_excerpt": {"excerpt": ["controller_server: MPPI goal aborted near terminal"]},
+                    "cmd_vel_counts": {"/cmd_vel_nav": 9},
+                    "cmd_vel_samples": [{"elapsed_s": 1.0, "topic": "/cmd_vel_nav", "linear_x": 0.12, "angular_z": 0.4}],
+                    "odom_count": 6,
+                    "odom_delta": {"distance_m": 1.25},
+                    "path_progress_samples": [
+                        {"elapsed_s": 1.0, "terminal_path_distance_m": 0.72, "terminal_yaw_error_deg": 39.0}
+                    ],
+                    "path_progress_last": {
+                        "elapsed_s": 2.0,
+                        "terminal_path_distance_m": 0.7,
+                        "terminal_yaw_error_deg": 38.0,
+                    },
+                },
+                "nav2_follow_path_measured_handoff_ready": False,
+            },
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "mppi",
+        family="nav2_mppi_follow_path_reacquire_v1",
+        cases=[_case("plus45", mission_root=mission_root)],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_mppi_follow_path_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+
+    assert "nav2_goal_timeout" in case["failure_labels"]
+    assert "slow_controller_convergence" in case["failure_labels"]
+    assert "no_controller_progress" not in case["failure_labels"]
+    assert "ball_motion_guard" not in case["failure_labels"]
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_timeout_count"] == 1
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_feedback_count_max"] == 4
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_cancel_requested_count"] == 1
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_status_texts"] == ["STATUS_ABORTED"]
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_cmd_vel_topic_counts"]["/cmd_vel_nav"] == 9
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_cmd_vel_sample_count"] == 1
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_odom_count_max"] == 6
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_odom_delta_max_m"] == 1.25
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_progress_min_terminal_path_distance_m"] == 0.7
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_progress_min_abs_terminal_yaw_error_deg"] == 38.0
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_controller_log_excerpt"]
+
+
+def test_capture_entry_timeout_debug_is_summarized_from_state_history(tmp_path: Path):
+    mission_root = tmp_path / "mppi_zero_capture_entry"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "phase": "capture_entry",
+                "manager_directive": "close_capture_gap",
+                "selected_command": {"mode": "capture_entry", "linear_x": 0.02, "angular_z": 0.45},
+                "capture_entry": {
+                    "ball_x_m": 0.54,
+                    "ball_y_m": 0.09,
+                    "bearing_rad": 0.16,
+                    "robot_longitudinal_projection_m": 0.58,
+                    "robot_lateral_error_m": 0.09,
+                    "capture_entry_reached": False,
+                    "robot_on_goal_side": False,
+                },
+                "capture_entry_diagnostics": {
+                    "elapsed_s": 3.5,
+                    "ready_signal": False,
+                    "ready_latched": False,
+                    "ready_reached_once": False,
+                    "timeout_cause": "ready_band_never_reached",
+                    "manager_directive": "close_capture_gap",
+                    "selected_command_mode": "capture_entry",
+                    "robot_delta_from_handoff_m": 0.12,
+                    "ball_delta_from_handoff_m": 0.0,
+                    "ball_x_m": 0.54,
+                    "ball_y_m": 0.09,
+                    "bearing_rad": 0.16,
+                    "robot_longitudinal_projection_m": 0.58,
+                    "robot_lateral_error_m": 0.09,
+                },
+            },
+            {
+                "phase": "capture_entry",
+                "manager_directive": "close_capture_gap",
+                "selected_command": {"mode": "capture_entry", "linear_x": 0.02, "angular_z": 0.42},
+                "capture_entry": {
+                    "ball_x_m": 0.52,
+                    "ball_y_m": 0.085,
+                    "bearing_rad": 0.15,
+                    "robot_longitudinal_projection_m": 0.56,
+                    "robot_lateral_error_m": 0.085,
+                    "capture_entry_reached": False,
+                    "robot_on_goal_side": False,
+                },
+                "capture_entry_diagnostics": {
+                    "elapsed_s": 4.0,
+                    "ready_signal": False,
+                    "ready_latched": False,
+                    "ready_reached_once": False,
+                    "timeout_cause": "ready_band_never_reached",
+                    "manager_directive": "close_capture_gap",
+                    "selected_command_mode": "capture_entry",
+                    "robot_delta_from_handoff_m": 0.18,
+                    "ball_delta_from_handoff_m": 0.0,
+                    "ball_x_m": 0.52,
+                    "ball_y_m": 0.085,
+                    "bearing_rad": 0.15,
+                    "robot_longitudinal_projection_m": 0.56,
+                    "robot_lateral_error_m": 0.085,
+                },
+            },
+        ],
+    )
+    mission_verdict = {
+        "failure_stage": "capture_entry",
+        "failure_reason": "capture_entry_timeout",
+        "capture_entry_snapshot": {
+            "ball_x_m": 0.52,
+            "ball_y_m": 0.085,
+            "bearing_rad": 0.15,
+            "robot_longitudinal_projection_m": 0.56,
+            "robot_lateral_error_m": 0.085,
+            "capture_entry_reached": False,
+        },
+        "capture_entry_diagnostics": {
+            "elapsed_s": 4.0,
+            "timeout_cause": "ready_band_never_reached",
+            "manager_directive": "close_capture_gap",
+            "selected_command_mode": "capture_entry",
+            "robot_delta_from_handoff_m": 0.18,
+            "ball_delta_from_handoff_m": 0.0,
+            "ball_x_m": 0.52,
+            "ball_y_m": 0.085,
+            "bearing_rad": 0.15,
+            "robot_longitudinal_projection_m": 0.56,
+            "robot_lateral_error_m": 0.085,
+        },
+    }
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "mppi_capture_entry",
+        family="nav2_mppi_follow_path_reacquire_v1",
+        cases=[
+            _case(
+                "zero",
+                mission_root=mission_root,
+                fresh_handoff=True,
+                fresh_reason="capture_entry_timeout",
+                latest_reason="capture_entry_timeout",
+                goal_side_count=0,
+                mission_verdict=mission_verdict,
+            )
+        ],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_mppi_follow_path_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+    debug = case["capture_entry_debug"]
+
+    assert debug["capture_entry_row_count"] == 2
+    assert debug["capture_entry_timeout_count"] == 1
+    assert debug["capture_entry_timeout_causes"] == ["ready_band_never_reached"]
+    assert debug["capture_entry_command_modes"] == ["capture_entry"]
+    assert debug["capture_entry_manager_directives"] == ["close_capture_gap"]
+    assert debug["capture_entry_ready_observed_count"] == 0
+    assert debug["capture_entry_final_ball_x_m"] == 0.52
+    assert debug["capture_entry_final_ball_y_m"] == 0.085
+    assert debug["capture_entry_final_bearing_rad"] == 0.15
+    assert debug["capture_entry_final_robot_longitudinal_projection_m"] == 0.56
+    assert debug["capture_entry_final_robot_lateral_error_m"] == 0.085
+    assert debug["capture_entry_robot_delta_from_handoff_max_m"] == 0.18
+    assert debug["capture_entry_ball_delta_from_handoff_max_m"] == 0.0
+
+
+def test_capture_debug_is_summarized_from_state_history(tmp_path: Path):
+    mission_root = tmp_path / "mppi_plus45_capture"
+    first_command = {
+        "mode": "capture",
+        "linear_x": 0.16,
+        "angular_z": 0.08,
+        "target_speed_scale": 1.0,
+    }
+    limited_command = {
+        "mode": "capture_handoff_hold",
+        "linear_x": 0.03,
+        "angular_z": 0.30,
+        "target_speed_scale": 0.45,
+    }
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "phase": "capture",
+                "selected_command": first_command,
+                "capture": {
+                    "ball_x_m": 0.50,
+                    "ball_y_m": 0.04,
+                    "bearing_rad": 0.08,
+                    "captured": False,
+                    "within_capture_window": False,
+                },
+                "capture_diagnostics": {
+                    "terminal_cause": "",
+                    "command_source": "capture_command",
+                    "command_limited": False,
+                    "selected_command": first_command,
+                    "selected_command_mode": "capture",
+                    "linear_x": 0.16,
+                    "angular_z": 0.08,
+                    "target_speed_scale": 1.0,
+                    "capture_snapshot": {
+                        "ball_x_m": 0.50,
+                        "ball_y_m": 0.04,
+                        "bearing_rad": 0.08,
+                        "captured": False,
+                    },
+                    "captured_now": False,
+                    "secure_capture_ready": False,
+                    "soft_capture_handoff_ready": False,
+                    "zone_entry_handoff_ready": False,
+                    "first_contact_alignment_seen": False,
+                    "robot_delta_from_capture_entry_handoff_m": 0.10,
+                    "ball_delta_from_capture_entry_handoff_m": 0.01,
+                },
+            },
+            {
+                "phase": "capture",
+                "selected_command": limited_command,
+                "capture": {
+                    "ball_x_m": 0.32,
+                    "ball_y_m": 0.02,
+                    "bearing_rad": 0.05,
+                    "captured": True,
+                    "within_capture_window": True,
+                },
+                "capture_diagnostics": {
+                    "terminal_cause": "",
+                    "command_source": "near_zone_place_handoff",
+                    "command_limited": True,
+                    "command_limit_reason": "Near zone gentle hold.",
+                    "selected_command": limited_command,
+                    "raw_selected_command": {
+                        "mode": "place",
+                        "linear_x": 0.14,
+                        "angular_z": 0.60,
+                        "target_speed_scale": 1.0,
+                    },
+                    "selected_command_mode": "capture_handoff_hold",
+                    "linear_x": 0.03,
+                    "angular_z": 0.30,
+                    "target_speed_scale": 0.45,
+                    "capture_snapshot": {
+                        "ball_x_m": 0.32,
+                        "ball_y_m": 0.02,
+                        "bearing_rad": 0.05,
+                        "captured": True,
+                    },
+                    "captured_now": True,
+                    "secure_capture_ready": False,
+                    "soft_capture_handoff_ready": True,
+                    "zone_entry_handoff_ready": False,
+                    "first_contact_alignment_seen": True,
+                    "first_contact_push_alignment_deg": 7.5,
+                    "robot_delta_from_capture_entry_handoff_m": 0.20,
+                    "ball_delta_from_capture_entry_handoff_m": 0.03,
+                },
+            },
+        ],
+    )
+    mission_verdict = {
+        "failure_stage": "capture",
+        "failure_reason": "capture_timeout",
+        "capture_state": {
+            "ball_x_m": 0.31,
+            "ball_y_m": 0.018,
+            "bearing_rad": 0.04,
+            "captured": True,
+        },
+        "capture_diagnostics": {
+            "terminal_cause": "capture_timeout",
+            "command_source": "near_zone_place_handoff",
+            "command_limited": True,
+            "command_limit_reason": "Near zone gentle hold.",
+            "selected_command": limited_command,
+            "selected_command_mode": "capture_handoff_hold",
+            "linear_x": 0.03,
+            "angular_z": 0.30,
+            "target_speed_scale": 0.45,
+            "ball_x_m": 0.31,
+            "ball_y_m": 0.018,
+            "bearing_rad": 0.04,
+            "captured_now": True,
+            "secure_capture_ready": False,
+            "soft_capture_handoff_ready": True,
+            "zone_entry_handoff_ready": False,
+            "first_contact_alignment_seen": True,
+            "first_contact_push_alignment_deg": 7.5,
+            "robot_delta_from_capture_entry_handoff_m": 0.20,
+            "ball_delta_from_capture_entry_handoff_m": 0.03,
+        },
+    }
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "mppi_capture",
+        family="nav2_mppi_follow_path_reacquire_v1",
+        cases=[
+            _case(
+                "plus45",
+                mission_root=mission_root,
+                fresh_handoff=True,
+                fresh_reason="missing_first_contact_alignment",
+                latest_reason="missing_first_contact_alignment",
+                goal_side_count=0,
+                mission_verdict=mission_verdict,
+            )
+        ],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_mppi_follow_path_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    debug = branch["cases"][0]["capture_debug"]
+
+    assert debug["capture_row_count"] == 2
+    assert debug["capture_command_modes"] == ["capture", "capture_handoff_hold"]
+    assert debug["capture_command_sources"] == ["capture_command", "near_zone_place_handoff"]
+    assert debug["capture_command_limited_count"] == 1
+    assert debug["capture_command_limit_reasons"] == ["Near zone gentle hold."]
+    assert debug["capture_linear_x_max"] == 0.16
+    assert debug["capture_max_abs_angular_z"] == 0.3
+    assert debug["capture_captured_count"] == 1
+    assert debug["capture_soft_handoff_ready_count"] == 1
+    assert debug["capture_zone_entry_ready_count"] == 0
+    assert debug["capture_first_contact_alignment_count"] == 1
+    assert debug["capture_first_contact_alignment_final_deg"] == 7.5
+    assert debug["capture_terminal_causes"] == ["capture_timeout"]
+    assert debug["capture_final_ball_x_m"] == 0.31
+    assert debug["capture_final_ball_y_m"] == 0.018
+    assert debug["capture_final_bearing_rad"] == 0.04
+    assert debug["capture_min_abs_ball_y_m"] == 0.018
+    assert debug["capture_robot_delta_from_capture_entry_handoff_max_m"] == 0.2
+    assert debug["capture_ball_delta_from_capture_entry_handoff_max_m"] == 0.03
+
+
+def test_mppi_follow_path_clearance_action_and_handoff_labels_are_extracted(tmp_path: Path):
+    clearance_root = tmp_path / "mppi_clearance"
+    action_root = tmp_path / "mppi_action"
+    handoff_root = tmp_path / "mppi_handoff"
+    _write_jsonl(
+        clearance_root / "state_history.jsonl",
+        [
+            {
+                "event_type": "nav2_follow_path_reacquire_plan_blocked",
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "nav2_follow_path_dispatch_status": "follow_path_clearance_guard",
+                "nav2_follow_path_plan": {"reason": "follow_path_clearance_guard"},
+            }
+        ],
+    )
+    _write_jsonl(
+        action_root / "state_history.jsonl",
+        [
+            {
+                "event_type": "nav2_follow_path_reacquire_complete",
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "nav2_follow_path_result": {"dispatch_status": "server_unavailable", "error": "no server"},
+            }
+        ],
+    )
+    _write_jsonl(
+        handoff_root / "state_history.jsonl",
+        [
+            {
+                "event_type": "nav2_follow_path_reacquire_complete",
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "nav2_follow_path_result": {"dispatch_status": "goal_succeeded", "success": True},
+                "nav2_follow_path_diagnostics": {
+                    "dispatch_status": "goal_succeeded",
+                    "robot_motion_m": 1.0,
+                    "ball_motion_m": 0.061,
+                    "completion_terminal_path_distance_m": 0.08,
+                    "measured_handoff_ready": False,
+                },
+            }
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "mppi_multi",
+        family="nav2_mppi_follow_path_reacquire_v1",
+        cases=[
+            _case(
+                "zero",
+                mission_root=clearance_root,
+                mission_verdict={"failure_stage": "pre_stage", "failure_reason": "nav2_follow_path_path_clearance_guard"},
+            ),
+            _case(
+                "minus45",
+                mission_root=action_root,
+                mission_verdict={"failure_stage": "pre_stage", "failure_reason": "nav2_follow_path_failed"},
+            ),
+            _case(
+                "backside180",
+                mission_root=handoff_root,
+                mission_verdict={"failure_stage": "pre_stage", "failure_reason": "nav2_follow_path_post_action_not_handoff_ready"},
+            ),
+        ],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_mppi_follow_path_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    cases = {case["case_id"]: case for case in branch["cases"]}
+
+    assert "path_clearance_guard" in cases["zero"]["failure_labels"]
+    assert "action_error" in cases["minus45"]["failure_labels"]
+    assert "handoff_gate_mismatch" in cases["backside180"]["failure_labels"]
+    assert "ball_motion_guard" in cases["backside180"]["failure_labels"]
+    assert "ball_contact_during_reacquire" in cases["backside180"]["failure_labels"]
+
+
 def test_stage_timeout_after_prestage_is_classified_from_verdict(tmp_path: Path):
     matrix_path = _matrix_summary(
         tmp_path,
@@ -1016,3 +1481,68 @@ def test_write_failure_audit_bundle_writes_summary_and_scorecard(tmp_path: Path)
     scorecard = paths["scorecard_path"].read_text(encoding="utf-8")
     assert "# Gather Control Failure Audit" in scorecard
     assert "recommended_next_action" in scorecard
+
+
+def test_failure_audit_scorecard_surfaces_mppi_repro_gap_debug():
+    summary = {
+        "campaign_id": "mppi_repro_gap",
+        "status": "needs_review",
+        "recommended_next_action": "inspect_blocked_primary_case_evidence",
+        "branches": [
+            {
+                "branch_name": "nav2_mppi_follow_path_reacquire_v1",
+                "primary_cases_pre_stage_handoff_blocked": True,
+                "labels": ["pre_stage_handoff_blocked", "slow_controller_convergence"],
+                "cases": [
+                    {
+                        "case_id": "zero",
+                        "fresh_pre_stage_handoff_pass": False,
+                        "fresh_attempt_reason": "entered_goal_side_before_capture",
+                        "missing_evidence": [],
+                        "nav2_follow_path_debug": {
+                            "nav2_follow_path_statuses": ["goal_result_timeout"],
+                            "nav2_follow_path_errors": ["goal_result_timeout"],
+                            "nav2_follow_path_min_terminal_path_distance_m": 0.342288,
+                            "nav2_follow_path_min_abs_terminal_yaw_error_deg": 81.342492,
+                            "nav2_follow_path_robot_motion_max_m": 6.314278,
+                            "nav2_follow_path_ball_motion_max_m": 0.0,
+                            "nav2_follow_path_handoff_ready_count": 0,
+                            "nav2_follow_path_handoff_not_ready_count": 1,
+                        },
+                        "capture_entry_debug": {"capture_entry_row_count": 0},
+                        "capture_debug": {"capture_row_count": 0},
+                    },
+                    {
+                        "case_id": "plus45",
+                        "fresh_pre_stage_handoff_pass": False,
+                        "fresh_attempt_reason": "entered_goal_side_before_capture",
+                        "missing_evidence": [],
+                        "nav2_follow_path_debug": {
+                            "nav2_follow_path_statuses": ["goal_result_timeout"],
+                            "nav2_follow_path_errors": ["goal_result_timeout"],
+                            "nav2_follow_path_min_terminal_path_distance_m": 1.27683,
+                            "nav2_follow_path_min_abs_terminal_yaw_error_deg": 144.489815,
+                            "nav2_follow_path_robot_motion_max_m": 6.039194,
+                            "nav2_follow_path_ball_motion_max_m": 0.0,
+                            "nav2_follow_path_handoff_ready_count": 0,
+                            "nav2_follow_path_handoff_not_ready_count": 1,
+                        },
+                        "capture_entry_debug": {"capture_entry_row_count": 0},
+                        "capture_debug": {"capture_row_count": 0},
+                    },
+                ],
+            }
+        ],
+    }
+
+    scorecard = audit.build_scorecard_markdown(summary)
+
+    assert "zero FollowPath/capture" in scorecard
+    assert "plus45 FollowPath/capture" in scorecard
+    assert "fp=goal_result_timeout/goal_result_timeout" in scorecard
+    assert "dist=0.342288" in scorecard
+    assert "yaw=144.489815" in scorecard
+    assert "robot=6.314278" in scorecard
+    assert "ball=0.0" in scorecard
+    assert "handoff=0/1" in scorecard
+    assert "rows=0/0" in scorecard

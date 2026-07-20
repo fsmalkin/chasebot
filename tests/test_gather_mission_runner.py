@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -149,6 +150,48 @@ def test_gather_control_family_allows_nav2_follow_path_reacquire_v1(tmp_path, mo
     assert runner.gather_control_family == "nav2_follow_path_reacquire_v1"
 
 
+def test_gather_control_family_allows_nav2_mppi_follow_path_reacquire_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "nav2_mppi_follow_path_reacquire_v1"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "nav2_mppi_follow_path_reacquire_v1"
+
+
+def test_gather_control_family_allows_nav2_followpath_corridor_push_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "nav2_followpath_corridor_push_v1"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "nav2_followpath_corridor_push_v1"
+
+
+def test_gather_control_family_allows_object_centric_gather_policy_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "object_centric_gather_policy_v1"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "object_centric_gather_policy_v1"
+
+
+def test_gather_control_family_allows_ai_push_coast_servo_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "ai_push_coast_servo_v1"
+    args.ai_push_coast_mode = "guarded_live"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "ai_push_coast_servo_v1"
+    assert runner.ai_push_coast_mode == "guarded_live"
+
+
 def test_parse_args_allows_region_funnel_v1(monkeypatch):
     monkeypatch.setattr(
         gather_runner.sys,
@@ -257,6 +300,104 @@ def test_parse_args_allows_nav2_follow_path_reacquire_v1(monkeypatch):
     assert args.gather_control_family == "nav2_follow_path_reacquire_v1"
 
 
+def test_parse_args_allows_nav2_mppi_follow_path_reacquire_v1(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        ["gather_mission_runner.py", "--gather-control-family", "nav2_mppi_follow_path_reacquire_v1"],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "nav2_mppi_follow_path_reacquire_v1"
+
+
+def test_parse_args_allows_nav2_followpath_corridor_push_v1(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        ["gather_mission_runner.py", "--gather-control-family", "nav2_followpath_corridor_push_v1"],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "nav2_followpath_corridor_push_v1"
+
+
+def test_parse_args_allows_object_centric_gather_policy_v1(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        ["gather_mission_runner.py", "--gather-control-family", "object_centric_gather_policy_v1"],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "object_centric_gather_policy_v1"
+
+
+def test_parse_args_allows_ai_push_coast_servo_v1_guarded_live(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        [
+            "gather_mission_runner.py",
+            "--gather-control-family",
+            "ai_push_coast_servo_v1",
+            "--ai-push-coast-mode",
+            "guarded_live",
+        ],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "ai_push_coast_servo_v1"
+    assert args.ai_push_coast_mode == "guarded_live"
+
+
+def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        [
+            "gather_mission_runner.py",
+            "--mission-objective",
+            "fetch_to_pose",
+            "--fetch-target-x",
+            "2.8",
+            "--fetch-target-y",
+            "-0.2",
+            "--fetch-delivery-radius-m",
+            "0.5",
+        ],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.mission_objective == "fetch_to_pose"
+    assert args.fetch_target_x == 2.8
+    assert args.fetch_target_y == -0.2
+    assert args.fetch_delivery_radius_m == 0.5
+
+
+def test_parse_args_allows_contact_ready_fetch_gate_mode(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        [
+            "gather_mission_runner.py",
+            "--mission-objective",
+            "fetch_to_pose",
+            "--fetch-gate-mode",
+            "contact_ready",
+        ],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.fetch_gate_mode == "contact_ready"
+
+
 def test_nav2_reacquire_goal_generation_covers_zero_plus_minus_and_ready_states():
     zone = gather_runner.build_zone_spec("corral_single_ball_place")
     zero_ball = {"x": 5.448, "y": 0.0, "z": 0.05}
@@ -356,6 +497,178 @@ def test_init_runtime_state_seeds_dashboard_friendly_fields(tmp_path, monkeypatc
     assert runner.gather_runtime_state["zone_pose"]["radius_m"] == 0.762
     assert runner.gather_runtime_state["zone_pose"]["control_radius_m"] == 0.2
     assert runner.gather_runtime_state["artifact_dir"] == str(mission_root)
+
+
+def test_fetch_runtime_state_uses_fetch_pose_as_visible_marker(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.args.fetch_target_x = 0.95
+    runner.args.fetch_target_y = 0.0
+    runner.args.fetch_target_z = 0.001
+    runner.fetch_delivery_radius_m = 0.30
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    assert runner.gather_runtime_state["zone_pose"]["x"] == 0.95
+    assert runner.gather_runtime_state["zone_pose"]["radius_m"] == 0.30
+    assert runner.gather_runtime_state["visible_delivery_marker_pose"]["x"] == 0.95
+    assert runner.gather_runtime_state["legacy_corral_zone_pose"]["x"] == 2.4
+    assert runner.gather_runtime_state["geometry_consistency"]["pass"] is True
+
+
+def test_fetch_objective_defaults_to_delivery_marker_sdf(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.mission_objective = "fetch_to_pose"
+    args.fetch_target_x = 0.95
+    args.fetch_target_y = 0.0
+    args.fetch_target_z = 0.001
+    args.fetch_delivery_radius_m = 0.30
+    args.zone_model_name = gather_runner.DEFAULT_ZONE_MODEL_NAME
+    args.zone_model_sdf = str(gather_runner.DEFAULT_ZONE_MODEL_SDF)
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.args.zone_model_name == gather_runner.DEFAULT_FETCH_ZONE_MODEL_NAME
+    assert Path(runner.args.zone_model_sdf).name == "golf_ball_delivery_zone_marker.sdf"
+    assert Path(runner.args.target_model_sdf).name == "ball.sdf"
+    assert runner._visible_delivery_marker_pose()["radius_m"] == 0.30
+    assert runner._fetch_geometry_consistency()["pass"] is True
+
+
+def test_fetch_objective_uses_delivery_pose_for_approach_geometry(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.mission_objective = "fetch_to_pose"
+    args.fetch_target_x = 0.95
+    args.fetch_target_y = 0.0
+    args.fetch_target_z = 0.001
+    args.fetch_delivery_radius_m = 0.30
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.zone.id == "fetch_delivery_zone"
+    assert runner.zone.world_x == 0.95
+    assert runner.zone.retrieval_radius_m == 0.30
+    assert runner.legacy_zone.world_x == 2.4
+    snapshot = gather_runner.pre_stage_arrival_snapshot(
+        {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        {"x": 1.35, "y": 0.0},
+        zone=runner.zone,
+    )
+    assert snapshot is not None
+    assert snapshot["push_direction_yaw_deg"] == 180.0
+    assert snapshot["pre_stage_pose_world"]["x"] > 1.35
+
+
+def test_fetch_objective_defaults_to_calibrated_golf_ball_sdf(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.mission_objective = "fetch_to_pose"
+    args.target_model_sdf = str(gather_runner.DEFAULT_TARGET_MODEL_SDF)
+    args.zone_model_sdf = str(gather_runner.DEFAULT_ZONE_MODEL_SDF)
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert Path(runner.args.target_model_sdf).name == "calibrated_golf_ball.sdf"
+    assert Path(runner.args.zone_model_sdf).name == "golf_ball_delivery_zone_marker.sdf"
+    provenance = runner._model_provenance()
+    assert provenance["model_provenance_valid"] is True
+    assert provenance["target_model_classification"] == "calibrated_golf_ball"
+    assert provenance["target_model_radius_m"] == gather_runner.CALIBRATED_GOLF_BALL_RADIUS_M
+
+
+def test_fetch_model_provenance_rejects_legacy_target_ball(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.mission_objective = "fetch_to_pose"
+    args.target_model_sdf = str(gather_runner.DEFAULT_TARGET_MODEL_SDF)
+    args.zone_model_sdf = str(gather_runner.DEFAULT_FETCH_ZONE_MODEL_SDF)
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+    # Re-apply an explicit legacy target after constructor defaults to prove the guard itself.
+    runner.args.target_model_sdf = str(gather_runner.DEFAULT_TARGET_MODEL_SDF)
+
+    provenance = runner._model_provenance()
+
+    assert provenance["model_provenance_valid"] is False
+    assert provenance["model_provenance_reason"] == "invalid_target_model:legacy_frisbee_target_ball"
+    assert provenance["target_model_classification"] == "legacy_frisbee_target_ball"
+
+
+def test_fetch_runtime_state_detects_visible_marker_sdf_radius_mismatch(tmp_path, monkeypatch):
+    zone_sdf = tmp_path / "zone.sdf"
+    zone_sdf.write_text(
+        """<?xml version="1.0"?>
+<sdf version="1.9"><model name="zone"><link name="link"><visual name="disc"><geometry><cylinder><radius>0.762</radius><length>0.002</length></cylinder></geometry></visual></link></model></sdf>
+""",
+        encoding="utf-8",
+    )
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.args.fetch_target_x = 0.95
+    runner.args.fetch_target_y = 0.0
+    runner.args.fetch_target_z = 0.001
+    runner.args.zone_model_sdf = str(zone_sdf)
+    runner.fetch_delivery_radius_m = 0.30
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    assert runner.gather_runtime_state["zone_pose"]["x"] == 0.95
+    assert runner.gather_runtime_state["zone_pose"]["radius_m"] == 0.762
+    assert runner.gather_runtime_state["geometry_consistency"]["pass"] is False
+    assert runner.gather_runtime_state["geometry_consistency"]["reason"] == "radius_mismatch"
+
+
+def test_fetch_spawn_uses_fetch_pose_for_visible_marker(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.args.fetch_target_x = 0.95
+    runner.args.fetch_target_y = 0.0
+    runner.args.fetch_target_z = 0.001
+    runner.fetch_delivery_radius_m = 0.30
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir()
+    spawn_calls: list[dict[str, float | str]] = []
+
+    monkeypatch.setattr(runner, "_set_robot_pose", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_wait_for_robot_pose_near", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_remove_model", lambda **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_spawn_model",
+        lambda **kwargs: spawn_calls.append(
+            {
+                "model_name": kwargs["model_name"],
+                "x": kwargs["x"],
+                "y": kwargs["y"],
+                "z": kwargs["z"],
+            }
+        ),
+    )
+    monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+
+    runner._spawn_mission_models({"compose_project": "proj", "world_name": "world"}, mission_root)
+
+    zone_call = next(item for item in spawn_calls if item["model_name"] == runner.args.zone_model_name)
+    assert zone_call["x"] == 0.95
+    assert zone_call["y"] == 0.0
+    assert zone_call["z"] == 0.001
+
+
+def test_fetch_geometry_consistency_detects_old_corral_marker_mismatch():
+    result = gather_runner.fetch_geometry_consistency(
+        fetch_pose_world={"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3},
+        visible_delivery_marker_pose={"x": 2.4, "y": 0.0, "z": 0.001, "radius_m": 0.762},
+    )
+
+    assert result["pass"] is False
+    assert result["reason"] == "center_mismatch"
+    assert result["center_delta_m"] == 1.45
 
 
 def test_inter_target_quiet_timeout_is_shorter_for_three_ball(tmp_path, monkeypatch):
@@ -980,6 +1293,101 @@ def test_pre_stage_target_records_short_horizon_v2_debug_fields(tmp_path, monkey
     assert isinstance(first_row["projected_projection_gain"], float)
     assert isinstance(first_row["projected_lateral_gain"], float)
     assert isinstance(first_row["projected_distance_gain"], float)
+
+
+def test_pre_stage_target_records_object_centric_policy_diagnostics(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    ready_pose = {"x": 0.1, "y": 0.0, "yaw": 0.0}
+    sequence = [ready_pose, ready_pose, ready_pose, ready_pose]
+    index = {"value": 0}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        current = sequence[min(index["value"], len(sequence) - 1)]
+        index["value"] += 1
+        return {}, current, ball_pose
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-object-centric",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_handoff_pass"] is True
+    assert payload["object_centric_policy"]["phase"] == "pre_stage"
+    assert state_rows
+    first_row = state_rows[0]
+    assert first_row["controller_family"] == "object_centric_gather_policy_v1"
+    assert first_row["strategy_name"] == "object_centric_gather_policy"
+    assert first_row["objective_name"] == "pre_stage_object_state"
+    assert first_row["selected_command"]["mode"] == "pre_stage_ready"
+    assert first_row["object_centric_policy"]["selected_command"]["mode"] == "pre_stage_ready"
+    assert first_row["object_centric_policy"]["guard_rejection_reason"] == ""
+
+
+def test_pre_stage_target_object_centric_uses_extended_timeout_budget(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.5
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner, "DEFAULT_PRE_STAGE_TIMEOUT_S", 1.0)
+    monkeypatch.setattr(gather_runner, "DEFAULT_OBJECT_CENTRIC_PRE_STAGE_TIMEOUT_S", 3.0)
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", lambda **kwargs: ({}, robot_pose, ball_pose))
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-object-centric-timeout",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    timeout_payload = read_json(mission_root / f"{target.id}_pre_stage_timeout.json")
+    assert pre_stage_pass is False
+    assert payload["failure_reason"] == "pre_stage_timeout"
+    assert payload["pre_stage_time_s"] >= 3.0
+    assert payload["pre_stage_timeout_budget_s"] == 3.0
+    assert timeout_payload["pre_stage_timeout_budget_s"] == 3.0
 
 
 def test_pre_stage_target_records_region_funnel_v1_debug_fields(tmp_path, monkeypatch):
@@ -2274,6 +2682,18 @@ def test_nav2_follow_path_failed_dispatch_returns_pre_stage_failure_with_goal_si
             "status_code": 0,
             "elapsed_s": 0.25,
             "error": "follow_path_action_server_unavailable",
+            "feedback_count": 2,
+            "feedback_samples": [{"elapsed_s": 0.1, "feedback": {"speed": 0.02}}],
+            "feedback_last": {"elapsed_s": 0.2, "feedback": {"speed": 0.01}},
+            "cancel_requested": False,
+            "status_text": "STATUS_UNKNOWN",
+            "controller_log_excerpt": {"excerpt": ["controller_server: MPPI failed to converge"]},
+            "cmd_vel_counts": {"/cmd_vel_nav": 3},
+            "cmd_vel_samples": [{"elapsed_s": 0.1, "topic": "/cmd_vel_nav", "linear_x": 0.02, "angular_z": 0.1}],
+            "odom_count": 2,
+            "odom_delta": {"distance_m": 0.0, "dyaw_deg": 0.0},
+            "path_progress_samples": [{"elapsed_s": 0.2, "terminal_path_distance_m": 6.348, "terminal_yaw_error_deg": 180.0}],
+            "path_progress_last": {"elapsed_s": 0.2, "terminal_path_distance_m": 6.348, "terminal_yaw_error_deg": 180.0},
         }
 
     monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
@@ -2329,6 +2749,99 @@ def test_nav2_follow_path_failed_dispatch_returns_pre_stage_failure_with_goal_si
     assert command_log[0]["mode"] == "nav2_follow_path_reacquire_path"
     assert command_log[-1]["mode"] == "nav2_follow_path_failed"
     assert all(not bool(item["enabled"]) for item in command_log)
+
+
+def test_nav2_mppi_follow_path_dispatch_uses_mppi_controller_and_dense_path(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "nav2_mppi_follow_path_reacquire_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    dispatch_calls: list[dict[str, object]] = []
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(dict(kwargs))
+        return {
+            "dispatch_status": "server_unavailable",
+            "accepted": False,
+            "success": False,
+            "status_code": 0,
+            "elapsed_s": 0.25,
+            "error": "follow_path_action_server_unavailable",
+            "feedback_count": 2,
+            "feedback_samples": [{"elapsed_s": 0.1, "feedback": {"speed": 0.02}}],
+            "feedback_last": {"elapsed_s": 0.2, "feedback": {"speed": 0.01}},
+            "cancel_requested": False,
+            "status_text": "STATUS_UNKNOWN",
+            "controller_log_excerpt": {"excerpt": ["controller_server: MPPI failed to converge"]},
+            "cmd_vel_counts": {"/cmd_vel_nav": 3},
+            "cmd_vel_samples": [{"elapsed_s": 0.1, "topic": "/cmd_vel_nav", "linear_x": 0.02, "angular_z": 0.1}],
+            "odom_count": 2,
+            "odom_delta": {"distance_m": 0.0, "dyaw_deg": 0.0},
+            "path_progress_samples": [{"elapsed_s": 0.2, "terminal_path_distance_m": 6.348, "terminal_yaw_error_deg": 180.0}],
+            "path_progress_last": {"elapsed_s": 0.2, "terminal_path_distance_m": 6.348, "terminal_yaw_error_deg": 180.0},
+        }
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: ({"compose_project": "gate"}, robot_pose, ball_pose),
+    )
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-mppi-follow-path-fail",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    dispatch_rows = [item for item in state_rows if item["event_type"] == "nav2_follow_path_reacquire_dispatch"]
+    complete_rows = [item for item in state_rows if item["event_type"] == "nav2_follow_path_reacquire_complete"]
+    assert pre_stage_pass is False
+    assert payload["failure_reason"] == "nav2_follow_path_failed"
+    assert dispatch_calls
+    assert dispatch_calls[0]["controller_id"] == "MppiFollowPath"
+    assert dispatch_calls[0]["timeout_s"] == gather_runner.DEFAULT_NAV2_MPPI_FOLLOW_PATH_GOAL_TIMEOUT_S
+    assert len(dispatch_calls[0]["path_poses"]) > 4
+    assert dispatch_calls[0]["path_poses"][0]["kind"] == "start"
+    assert dispatch_rows
+    assert dispatch_rows[0]["controller_family"] == "nav2_mppi_follow_path_reacquire_v1"
+    assert dispatch_rows[0]["strategy_name"] == "nav2_mppi_follow_path_reacquire"
+    assert dispatch_rows[0]["nav2_follow_path_controller_id"] == "MppiFollowPath"
+    assert complete_rows
+    diagnostics = complete_rows[0]["nav2_follow_path_diagnostics"]
+    assert diagnostics["controller_id"] == "MppiFollowPath"
+    assert diagnostics["feedback_count"] == 2
+    assert diagnostics["feedback_samples"] == [{"elapsed_s": 0.1, "feedback": {"speed": 0.02}}]
+    assert diagnostics["status_text"] == "STATUS_UNKNOWN"
+    assert diagnostics["controller_log_excerpt"]["excerpt"]
+    assert diagnostics["cmd_vel_counts"]["/cmd_vel_nav"] == 3
+    assert diagnostics["cmd_vel_samples"][0]["angular_z"] == 0.1
+    assert diagnostics["odom_count"] == 2
+    assert diagnostics["odom_delta"]["distance_m"] == 0.0
+    assert diagnostics["path_progress_last"]["terminal_path_distance_m"] == 6.348
+    assert diagnostics["robot_motion_m"] == 0.0
+    assert diagnostics["ball_motion_m"] == 0.0
+    assert diagnostics["measured_handoff_ready"] is False
+    assert "nav2_follow_path_diagnostics" in payload
 
 
 def test_nav2_follow_path_success_returns_to_measured_handoff_dwell(tmp_path, monkeypatch):
@@ -3049,7 +3562,7 @@ def test_capture_target_close_in_stage_ready_hands_off_into_capture_entry(tmp_pa
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
     clock = {"now": 0.0}
-    phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
 
     def fake_monotonic():
         return clock["now"]
@@ -3062,7 +3575,7 @@ def test_capture_target_close_in_stage_ready_hands_off_into_capture_entry(tmp_pa
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3089,6 +3602,7 @@ def test_capture_target_close_in_stage_ready_hands_off_into_capture_entry(tmp_pa
     assert payload["failure_stage"] == "capture_entry"
     assert payload["staging_pose_reached"] is True
     assert payload["capture_entry_reached"] is False
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
     assert phase_entries.count("stage") > 0
     assert phase_entries.count("capture_entry") > 0
     assert phase_entries.index("stage") < phase_entries.index("capture_entry")
@@ -3213,7 +3727,7 @@ def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
     clock = {"now": 0.0}
-    phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
 
     def fake_monotonic():
         return clock["now"]
@@ -3226,7 +3740,7 @@ def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3259,8 +3773,99 @@ def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_
     assert payload["capture_entry_reached"] is False
     assert payload["capture_entry_time_s"] >= 4.0
     assert timeout_payload["failure_stage"] == "capture_entry"
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
     assert phase_entries.count("capture_entry") > 0
     assert "capture" not in phase_entries
+
+
+def test_capture_target_gap_fills_missing_ball_pose_after_stage_handoff(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    control_calls = {"count": 0}
+    command_ball_poses: list[dict[str, object]] = []
+
+    class _FakeCommand:
+        mode = "capture_entry_gap_fill_close"
+        linear_x = 0.035
+        angular_z = 0.0
+        rationale = "gap fill"
+
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "mode": self.mode,
+                "linear_x": self.linear_x,
+                "angular_z": self.angular_z,
+                "rationale": self.rationale,
+            }
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        control_calls["count"] += 1
+        robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+        ball_pose = {"x": 1.0, "y": 0.06, "z": 0.05}
+        if control_calls["count"] >= 5:
+            ball_pose = None
+        return {}, robot_pose, ball_pose
+
+    def fake_compute_capture_entry_command(robot_pose, ball_pose, **kwargs):
+        command_ball_poses.append(dict(ball_pose))
+        return _FakeCommand()
+
+    monkeypatch.setattr(gather_runner, "DEFAULT_CAPTURE_ENTRY_TIMEOUT_S", 1.0)
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(
+        gather_runner,
+        "goal_side_approach_snapshot",
+        lambda *args, **kwargs: {
+            "robot_on_goal_side": False,
+            "staging_pose_reached": True,
+            "push_direction_yaw_deg": 0.0,
+        },
+    )
+    monkeypatch.setattr(gather_runner, "compute_stage_command", lambda *args, **kwargs: _FakeCommand())
+    monkeypatch.setattr(gather_runner, "compute_capture_entry_command", fake_compute_capture_entry_command)
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-capture-entry-gap-fill",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    capture_entry_rows = [row for row in state_rows if row.get("phase") == "capture_entry"]
+    gap_fill_rows = [row for row in capture_entry_rows if row.get("ball_pose_source") == "handoff_gap_fill"]
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture_entry"
+    assert command_ball_poses
+    assert command_ball_poses[-1]["x"] == 1.0
+    assert gap_fill_rows
+    assert gap_fill_rows[-1]["capture_entry_gap_fill"]["active"] is True
+    assert gap_fill_rows[-1]["capture_entry_diagnostics"]["gap_fill_active"] is True
+    assert gap_fill_rows[-1]["capture_entry_diagnostics"]["ball_pose_source"] == "handoff_gap_fill"
+    assert gap_fill_rows[-1]["capture_entry_diagnostics"]["selected_command_mode"] == "capture_entry_gap_fill_close"
 
 
 def test_capture_target_late_ready_sample_skips_same_loop_capture_entry_timeout(tmp_path, monkeypatch):
@@ -3271,7 +3876,7 @@ def test_capture_target_late_ready_sample_skips_same_loop_capture_entry_timeout(
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
     clock = {"now": 0.0}
-    phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
     capture_entry_calls = {"count": 0}
 
     class _FakeCommand:
@@ -3323,7 +3928,7 @@ def test_capture_target_late_ready_sample_skips_same_loop_capture_entry_timeout(
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3369,6 +3974,7 @@ def test_capture_target_late_ready_sample_skips_same_loop_capture_entry_timeout(
     assert payload["capture_entry_reached"] is True
     assert payload["capture_entry_time_s"] >= 4.0
     assert capture_entry_calls["count"] >= 9
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
     assert phase_entries.count("capture_entry") > 0
     assert "capture" in phase_entries
     assert phase_entries.index("capture_entry") < phase_entries.index("capture")
@@ -3383,7 +3989,7 @@ def test_capture_target_centered_extended_corridor_hands_off_before_capture_time
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
     clock = {"now": 0.0}
-    phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
 
     def fake_monotonic():
         return clock["now"]
@@ -3396,7 +4002,7 @@ def test_capture_target_centered_extended_corridor_hands_off_before_capture_time
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3423,9 +4029,24 @@ def test_capture_target_centered_extended_corridor_hands_off_before_capture_time
     assert payload["failure_stage"] == "capture"
     assert payload["capture_entry_reached"] is True
     assert payload["capture_entry_time_s"] >= 0.3
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
     assert "capture_entry" in phase_entries
     assert "capture" in phase_entries
     assert phase_entries.index("capture_entry") < phase_entries.index("capture")
+    capture_rows = [row for row in state_rows if row.get("phase") == "capture"]
+    assert capture_rows
+    capture_row = capture_rows[-1]
+    assert capture_row["selected_command"]["mode"] == "capture"
+    assert capture_row["capture_entry"]["capture_entry_reached"] is True
+    assert capture_row["capture_diagnostics"]["selected_command_mode"] == "capture"
+    assert capture_row["capture_diagnostics"]["command_source"] == "capture_command"
+    assert capture_row["capture_diagnostics"]["command_limited"] is False
+    assert capture_row["capture_diagnostics"]["raw_selected_command"]["mode"] == "capture"
+    assert capture_row["capture_diagnostics"]["captured_now"] is False
+    assert capture_row["capture_diagnostics"]["terminal_cause"] == ""
+    assert capture_row["capture_diagnostics"]["robot_delta_from_capture_entry_handoff_m"] is not None
+    assert payload["capture_diagnostics"]["terminal_cause"] == "capture_timeout"
+    assert payload["capture_diagnostics"]["selected_command_mode"] == "capture"
 
 
 def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_entry(tmp_path, monkeypatch):
@@ -3437,6 +4058,7 @@ def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_en
     target = runner.targets[0]
     clock = {"now": 0.0}
     phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
 
     def fake_monotonic():
         return clock["now"]
@@ -3449,7 +4071,11 @@ def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_en
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: (
+            state_rows.append(payload) or phase_entries.append(str(payload.get("phase", "")))
+            if isinstance(payload, dict)
+            else None
+        ),
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3478,6 +4104,245 @@ def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_en
     assert payload["capture_entry_time_s"] >= 4.0
     assert phase_entries.count("capture_entry") > 0
     assert "capture" not in phase_entries
+    capture_entry_rows = [row for row in state_rows if row.get("phase") == "capture_entry"]
+    assert capture_entry_rows
+    diagnostics = capture_entry_rows[-1]["capture_entry_diagnostics"]
+    assert diagnostics["timeout_cause"] == "ready_band_never_reached"
+    assert diagnostics["selected_command_mode"] == "capture_entry"
+    assert diagnostics["manager_directive"] == "close_capture_gap"
+    assert abs(float(diagnostics["ball_x_m"]) - 0.54) <= 0.02
+    assert abs(float(diagnostics["ball_y_m"]) - 0.09) <= 0.02
+    assert abs(float(diagnostics["robot_delta_from_handoff_m"]) - 0.0) <= 1.0e-6
+    assert abs(float(diagnostics["ball_delta_from_handoff_m"]) - 0.0) <= 1.0e-6
+    assert payload["capture_entry_diagnostics"]["timeout_cause"] == "ready_band_never_reached"
+    assert abs(float(payload["capture_entry_diagnostics"]["robot_delta_from_handoff_m"]) - 0.0) <= 1.0e-6
+    assert payload["capture_entry_snapshot"]["capture_entry_reached"] is False
+
+
+def test_capture_target_fetch_push_ready_hands_off_without_generic_capture(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = gather_runner.MISSION_OBJECTIVE_FETCH_TO_POSE
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.3
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.1
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+
+    class _FakeCommand:
+        def __init__(self, mode: str):
+            self.mode = mode
+            self.linear_x = 0.035
+            self.angular_z = 0.1
+            self.target_speed_scale = 0.45
+            self.rationale = mode
+
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "mode": self.mode,
+                "linear_x": self.linear_x,
+                "angular_z": self.angular_z,
+                "target_speed_scale": self.target_speed_scale,
+                "rationale": self.rationale,
+            }
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        return (
+            {},
+            {"x": 0.0, "y": 0.0, "yaw": 0.0},
+            {"x": 0.45, "y": 0.0, "z": 0.05},
+        )
+
+    def fake_capture_entry_snapshot(*args, **kwargs):
+        return {
+            "ball_x_m": 0.60,
+            "ball_y_m": 0.09,
+            "bearing_rad": 0.15,
+            "robot_on_goal_side": False,
+            "entered_goal_side_before_capture": False,
+            "capture_entry_reached": False,
+        }
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_fetch_pose_world", lambda: {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3})
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda *args, **kwargs: command_log.append(dict(kwargs)),
+    )
+    monkeypatch.setattr(
+        gather_runner,
+        "goal_side_approach_snapshot",
+        lambda *args, **kwargs: {
+            "robot_on_goal_side": False,
+            "staging_pose_reached": True,
+            "push_direction_yaw_deg": 0.0,
+            "robot_longitudinal_projection_m": -0.45,
+            "robot_lateral_error_m": 0.0,
+        },
+    )
+    monkeypatch.setattr(gather_runner, "compute_stage_command", lambda *args, **kwargs: _FakeCommand("stage_ready"))
+    monkeypatch.setattr(gather_runner, "capture_entry_snapshot", fake_capture_entry_snapshot)
+    monkeypatch.setattr(gather_runner, "compute_capture_entry_command", lambda *args, **kwargs: _FakeCommand("capture_entry"))
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-fetch-push-ready",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
+    capture_entry_rows = [row for row in state_rows if row.get("phase") == "capture_entry"]
+    diagnostics = capture_entry_rows[-1]["capture_entry_diagnostics"]
+
+    assert capture_pass is True
+    assert payload["handoff_kind"] == "fetch_push_ready"
+    assert payload["approach_side_verdict"] == {"pass": True, "reason": ""}
+    assert payload["approach_failure_reason"] == ""
+    assert payload["capture_entry_reached"] is True
+    assert payload["capture_entry_ready_source"] == "fetch_push_readiness"
+    assert payload["capture_entry_push_readiness_gate"]["pass"] is True
+    assert payload["first_contact_push_alignment_deg"] is None
+    assert payload["capture_entry_snapshot"]["capture_entry_ball_frame_reached"] is False
+    assert payload["capture_entry_snapshot"]["capture_entry_ready_source"] == "fetch_push_readiness"
+    assert diagnostics["ready_source"] == "fetch_push_readiness"
+    assert diagnostics["capture_entry_push_readiness_gate"]["thresholds"]["max_standoff_m"] == 0.58
+    assert diagnostics["selected_command_mode"] == "capture_entry_fetch_push_ready"
+    assert "capture_entry" in phase_entries
+    assert "capture" not in phase_entries
+    assert not (mission_root / f"{target.id}_capture_entry_timeout.json").exists()
+    assert any(item.get("mode") == "capture_entry_fetch_push_ready" for item in command_log)
+
+
+def test_capture_target_fetch_mode_does_not_handoff_on_ball_frame_capture_entry_only(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = gather_runner.MISSION_OBJECTIVE_FETCH_TO_POSE
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.3
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+
+    class _FakeCommand:
+        def __init__(self, mode: str):
+            self.mode = mode
+            self.linear_x = 0.0
+            self.angular_z = 0.0
+            self.target_speed_scale = 0.0
+            self.rationale = mode
+
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "mode": self.mode,
+                "linear_x": self.linear_x,
+                "angular_z": self.angular_z,
+                "target_speed_scale": self.target_speed_scale,
+                "rationale": self.rationale,
+            }
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        return (
+            {},
+            {"x": -0.70, "y": 0.0, "yaw": 0.0},
+            {"x": 0.0, "y": 0.0, "z": 0.05},
+        )
+
+    def fake_capture_entry_snapshot(*args, **kwargs):
+        return {
+            "ball_x_m": 0.20,
+            "ball_y_m": 0.0,
+            "bearing_rad": 0.0,
+            "robot_on_goal_side": False,
+            "entered_goal_side_before_capture": False,
+            "capture_entry_reached": True,
+        }
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_fetch_pose_world", lambda: {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3})
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda *args, **kwargs: command_log.append(dict(kwargs)),
+    )
+    monkeypatch.setattr(
+        gather_runner,
+        "goal_side_approach_snapshot",
+        lambda *args, **kwargs: {
+            "robot_on_goal_side": False,
+            "staging_pose_reached": True,
+            "push_direction_yaw_deg": 0.0,
+            "robot_longitudinal_projection_m": -0.45,
+            "robot_lateral_error_m": 0.0,
+        },
+    )
+    monkeypatch.setattr(gather_runner, "compute_stage_command", lambda *args, **kwargs: _FakeCommand("stage_ready"))
+    monkeypatch.setattr(gather_runner, "capture_entry_snapshot", fake_capture_entry_snapshot)
+    monkeypatch.setattr(gather_runner, "compute_capture_entry_command", lambda *args, **kwargs: _FakeCommand("capture_entry_ready"))
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-fetch-ball-frame-only",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
+    capture_entry_rows = [row for row in state_rows if row.get("phase") == "capture_entry"]
+    diagnostics = capture_entry_rows[-1]["capture_entry_diagnostics"]
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture_entry"
+    assert payload["capture_entry_ready_source"] == ""
+    assert payload["capture_entry_snapshot"]["capture_entry_ball_frame_reached"] is True
+    assert payload["capture_entry_snapshot"]["capture_entry_reached"] is False
+    assert payload["capture_entry_push_readiness_gate"]["pass"] is False
+    assert "robot_too_far_for_push" in payload["capture_entry_push_readiness_gate"]["flags"]
+    assert diagnostics["ready_source"] == ""
+    assert diagnostics["selected_command_mode"] == "capture_entry_push_readiness_advance"
+    assert "capture" not in phase_entries
+    assert any(item.get("mode") == "capture_entry_push_readiness_advance" for item in command_log)
 
 
 def test_capture_target_records_capture_entry_before_generic_capture_timeout(tmp_path, monkeypatch):
@@ -4061,6 +4926,3541 @@ def test_place_target_switches_to_recovery_on_first_uncaptured_frame(tmp_path, m
     assert any(item["mode"] in {"capture_recovery", "capture_recovery_hold"} for item in command_log[1:])
 
 
+def test_object_centric_place_recovery_keeps_far_recapture_push(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.69418, "y": 2.378654, "yaw": -1.991557}, {"x": 4.556202, "y": 2.117243, "z": 0.05}),
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -2.252642}, {"x": 4.558144, "y": 2.038701, "z": 0.05}),
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    far_recapture_commands = [
+        item
+        for item in command_log
+        if item["mode"] in {"object_place_recapture_drive", "object_place_far_line_recenter"}
+    ]
+    assert far_recapture_commands
+    assert max(float(item["linear_x"]) for item in far_recapture_commands) > 0.0
+    assert all(item["mode"] != "capture_recovery_hold" for item in command_log)
+
+
+def test_object_centric_place_recovery_recenters_far_recapture_lateral_drift(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 5.698247, "y": -0.086831, "yaw": 2.783439}, {"x": 5.448, "y": 0.0, "z": 0.05}),
+        ({}, {"x": 5.5499, "y": -0.02795, "yaw": 3.049913}, {"x": 5.20407, "y": 0.165779, "z": 0.05}),
+        ({}, {"x": 5.5499, "y": -0.02795, "yaw": 3.049913}, {"x": 5.20407, "y": 0.165779, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 5.5499, "y": -0.02795, "yaw": 3.049913}, {"x": 5.20407, "y": 0.165779, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    recenter_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert max(float(item["angular_z"]) for item in recenter_commands) > 0.0
+
+
+def test_object_centric_place_recovery_preserves_keepup_near_recapture_edge(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 5.404268, "y": -0.105692, "yaw": -2.674277}, {"x": 4.851202, "y": -0.548933, "z": 0.05}),
+        ({}, {"x": 5.394441, "y": -0.110745, "yaw": -2.650547}, {"x": 4.812162, "y": -0.584774, "z": 0.05}),
+        ({}, {"x": 5.376267, "y": -0.121163, "yaw": -2.611708}, {"x": 4.735505, "y": -0.655147, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 5.376267, "y": -0.121163, "yaw": -2.611708}, {"x": 4.735505, "y": -0.655147, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    keepup_commands = [
+        item
+        for item in command_log
+        if item["mode"] == "object_place_recapture_drive" and float(item["linear_x"]) >= 0.06
+    ]
+    assert keepup_commands
+    assert max(float(item["linear_x"]) for item in keepup_commands) >= 0.06
+
+
+def test_object_centric_place_recovery_preserves_near_zone_recapture_drive(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.023405, "y": -0.251181, "yaw": -3.066374}, {"x": 3.183476, "y": -0.376122, "z": 0.05}),
+        ({}, {"x": 4.023405, "y": -0.251181, "yaw": -3.066374}, {"x": 3.183476, "y": -0.376122, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.023405, "y": -0.251181, "yaw": -3.066374}, {"x": 3.183476, "y": -0.376122, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    near_zone_commands = [item for item in command_log if item["mode"] == "object_place_near_zone_recapture_drive"]
+    assert near_zone_commands
+    assert max(float(item["linear_x"]) for item in near_zone_commands) <= 0.04
+    assert max(abs(float(item["angular_z"])) for item in near_zone_commands) >= 0.12
+
+
+def test_object_centric_place_recovery_preserves_latest_zero_finish_keepup(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.689164, "y": -0.146194, "yaw": -2.962577}, {"x": 4.291016, "y": -0.262700, "z": 0.05}),
+        ({}, {"x": 4.054540, "y": -0.248286, "yaw": -3.037836}, {"x": 3.182366, "y": -0.482841, "z": 0.05}),
+        ({}, {"x": 4.054540, "y": -0.248286, "yaw": -3.037276}, {"x": 3.147311, "y": -0.489802, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.054540, "y": -0.248286, "yaw": -3.037276}, {"x": 3.147311, "y": -0.489802, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    near_zone_commands = [item for item in command_log if item["mode"] == "object_place_near_zone_recapture_drive"]
+    assert near_zone_commands
+    assert max(float(item["linear_x"]) for item in near_zone_commands) <= 0.018
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_near_zone_lateral_recenter(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 3.897466, "y": -0.316284, "yaw": -3.087496}, {"x": 3.280489, "y": -0.491072, "z": 0.05}),
+        ({}, {"x": 3.884518, "y": -0.315963, "yaw": 3.083363}, {"x": 3.211271, "y": -0.502858, "z": 0.05}),
+        ({}, {"x": 3.884518, "y": -0.315963, "yaw": 3.083363}, {"x": 3.211271, "y": -0.502858, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 3.884518, "y": -0.315963, "yaw": 3.083363}, {"x": 3.211271, "y": -0.502858, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    recenter_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold"} for item in command_log)
+
+
+def test_object_centric_place_holds_unsecured_ball_inside_retrieval_corral(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 3.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 3.540, "y": -0.160, "yaw": 2.937}
+    centered_ball = {"x": 2.349, "y": 0.049, "z": 0.05}
+
+    def _control_loop_state(**kwargs):
+        return {}, robot_pose, centered_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settled_in_corral_pass"] is True
+    modes = [str(item["mode"]) for item in command_log]
+    assert "object_place_inside_retrieval_hold" in modes
+    assert "settle_no_chase" in modes
+    first_settle_index = modes.index("settle_no_chase")
+    assert all(
+        mode not in {"retrieval_shepherd", "capture_recovery", "capture_recovery_hold"}
+        for mode in modes[:first_settle_index]
+    )
+
+
+def test_object_centric_place_starts_no_chase_for_moving_center_zone_ball(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 4.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 3.546642, "y": -0.140912, "yaw": 2.630410}
+    moving_center_ball = {"x": 2.527145, "y": -0.130904, "z": 0.05}
+    states = [
+        ({}, robot_pose, {"x": 2.561844, "y": -0.131995, "z": 0.05}),
+        ({}, robot_pose, moving_center_ball),
+        ({}, robot_pose, moving_center_ball),
+        ({}, robot_pose, moving_center_ball),
+        ({}, robot_pose, moving_center_ball),
+        ({}, robot_pose, moving_center_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, moving_center_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settled_in_corral_pass"] is True
+    assert payload["settle_no_chase_activated"] is True
+    assert payload["release_gate_blocked_reason"] == "none"
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_starts_no_chase_for_low_lateral_center_rollthrough(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 4.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 3.921, "y": -0.083, "yaw": 3.048}
+    settled_center_ball = {"x": 2.400, "y": -0.030, "z": 0.05}
+    states = [
+        ({}, robot_pose, {"x": 2.597, "y": -0.037, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.465, "y": -0.031, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.432, "y": -0.030, "z": 0.05}),
+        ({}, robot_pose, settled_center_ball),
+        ({}, robot_pose, settled_center_ball),
+        ({}, robot_pose, settled_center_ball),
+        ({}, robot_pose, settled_center_ball),
+        ({}, robot_pose, settled_center_ball),
+        ({}, robot_pose, settled_center_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, settled_center_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settled_in_corral_pass"] is True
+    assert payload["settle_no_chase_activated"] is True
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_blocks_no_chase_for_single_stale_center_rollthrough_sample(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 4.748657, "y": -0.002424, "yaw": 3.107756}
+    stale_center_ball = {"x": 2.564882, "y": -0.039820, "z": 0.05}
+    states = [
+        ({}, robot_pose, {"x": 2.617130, "y": -0.038168, "z": 0.05}),
+        ({}, robot_pose, stale_center_ball),
+        ({}, robot_pose, stale_center_ball),
+        ({}, robot_pose, {"x": 2.466712, "y": -0.042923, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, {"x": 2.416019, "y": -0.044526, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["settle_no_chase_activated"] is False
+    assert all(item["mode"] != "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_preserves_positive_world_edge_hold_during_local_recovery(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.243663, "y": -0.001597, "yaw": 3.100962}
+    positive_edge_robot = {"x": 5.210430, "y": -0.003143, "yaw": 2.109981}
+    terminal_edge_robot = {"x": 5.209441, "y": -0.000869, "yaw": 1.963221}
+    recapture_entry_ball = {"x": 4.841624, "y": 0.068254, "z": 0.05}
+    positive_edge_ball = {"x": 3.796629, "y": 0.537616, "z": 0.05}
+    terminal_edge_ball = {"x": 3.758530, "y": 0.554729, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, positive_edge_robot, positive_edge_ball),
+        ({}, terminal_edge_robot, terminal_edge_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_edge_robot, terminal_edge_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert any(
+        item["mode"] == "object_place_lateral_recenter" and float(item["angular_z"]) <= -0.75
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_preserves_far_reorient_during_high_lateral_local_recovery(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.491187, "y": -0.040509, "yaw": 2.972132}
+    high_lateral_robot = {"x": 5.362558, "y": -0.033062, "yaw": 1.437501}
+    reorient_robot = {"x": 5.362558, "y": -0.033062, "yaw": 1.231217}
+    recapture_entry_ball = {"x": 5.076434, "y": 0.014904, "z": 0.05}
+    high_lateral_ball = {"x": 4.122304, "y": 0.388281, "z": 0.05}
+    reorient_ball = {"x": 4.076648, "y": 0.406147, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, high_lateral_robot, high_lateral_ball),
+        ({}, reorient_robot, reorient_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, reorient_robot, reorient_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert any(
+        item["mode"] == "capture_recovery_turn" and float(item["angular_z"]) >= 0.85
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_preserves_latest_zero_far_negative_x_reorient(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.425296, "y": -0.032842, "yaw": 3.026466}
+    high_lateral_robot = {"x": 5.393983, "y": -0.019308, "yaw": 1.353937}
+    reorient_robot = {"x": 5.393983, "y": -0.019308, "yaw": 1.152615}
+    recapture_entry_ball = {"x": 4.646811, "y": 0.216956, "z": 0.05}
+    high_lateral_ball = {"x": 4.208882, "y": 0.389998, "z": 0.05}
+    reorient_ball = {"x": 4.165617, "y": 0.407093, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, high_lateral_robot, high_lateral_ball),
+        ({}, reorient_robot, reorient_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, reorient_robot, reorient_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["local_recovery_attempted"] is True
+    assert any(
+        item["mode"] == "capture_recovery_turn" and float(item["angular_z"]) >= 0.85
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_preserves_latest_zero_deeper_far_negative_x_reorient(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.193506, "y": -0.003195, "yaw": 3.048016}
+    reorient_entry_robot = {"x": 5.193506, "y": -0.003195, "yaw": 1.221753}
+    terminal_reorient_robot = {"x": 5.193506, "y": -0.003195, "yaw": 1.024585}
+    recapture_entry_ball = {"x": 4.637266, "y": 0.153496, "z": 0.05}
+    reorient_entry_ball = {"x": 4.044365, "y": 0.396935, "z": 0.05}
+    terminal_reorient_ball = {"x": 4.005398, "y": 0.412934, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, reorient_entry_robot, reorient_entry_ball),
+        ({}, terminal_reorient_robot, terminal_reorient_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_reorient_robot, terminal_reorient_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["local_recovery_attempted"] is True
+    assert any(
+        item["mode"] == "capture_recovery_turn" and float(item["angular_z"]) >= 0.85
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_preserves_latest_zero_deepest_far_negative_x_reorient(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.193506, "y": -0.003195, "yaw": 3.048016}
+    reorient_entry_robot = {"x": 5.139726, "y": 0.004154, "yaw": 1.068533}
+    terminal_reorient_robot = {"x": 5.139726, "y": 0.004154, "yaw": 0.902574}
+    recapture_entry_ball = {"x": 4.637266, "y": 0.153496, "z": 0.05}
+    reorient_entry_ball = {"x": 4.011377, "y": 0.394718, "z": 0.05}
+    terminal_reorient_ball = {"x": 4.011377, "y": 0.394718, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, reorient_entry_robot, reorient_entry_ball),
+        ({}, terminal_reorient_robot, terminal_reorient_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_reorient_robot, terminal_reorient_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["local_recovery_attempted"] is True
+    assert any(
+        item["mode"] == "capture_recovery_turn" and float(item["angular_z"]) >= 0.85
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_preserves_same_side_low_x_edge_hold_during_local_recovery(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.101721, "y": 0.009222, "yaw": -3.017964}
+    same_side_edge_entry_robot = {"x": 4.979227, "y": 0.017618, "yaw": 2.428310}
+    terminal_edge_robot = {"x": 4.979227, "y": 0.017618, "yaw": 1.940913}
+    recapture_entry_ball = {"x": 4.670404, "y": 0.070749, "z": 0.05}
+    same_side_edge_entry_ball = {"x": 3.355849, "y": 0.425937, "z": 0.05}
+    terminal_edge_ball = {"x": 3.313291, "y": 0.437436, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, same_side_edge_entry_robot, same_side_edge_entry_ball),
+        ({}, terminal_edge_robot, terminal_edge_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_edge_robot, terminal_edge_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["local_recovery_attempted"] is True
+    assert any(
+        item["mode"] == "object_place_near_zone_wide_reel"
+        and float(item["linear_x"]) == 0.0
+        and float(item["angular_z"]) <= -0.45
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_preserves_high_x_final_edge_hold_during_local_recovery(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.511623, "y": -0.030283, "yaw": 2.818823}
+    high_x_edge_entry_robot = {"x": 5.087228, "y": 0.017337, "yaw": 2.688127}
+    terminal_edge_robot = {"x": 5.087228, "y": 0.017337, "yaw": 3.011586}
+    recapture_entry_ball = {"x": 5.085754, "y": -0.015761, "z": 0.05}
+    high_x_edge_entry_ball = {"x": 3.190756, "y": 0.383169, "z": 0.05}
+    terminal_edge_ball = {"x": 3.137094, "y": 0.394466, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, high_x_edge_entry_robot, high_x_edge_entry_ball),
+        ({}, terminal_edge_robot, terminal_edge_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_edge_robot, terminal_edge_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["local_recovery_attempted"] is True
+    assert any(
+        item["mode"] == "object_place_near_zone_wide_reel"
+        and float(item["linear_x"]) == 0.0
+        and float(item["angular_z"]) <= -0.35
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_preserves_stale_high_x_final_edge_hold_during_local_recovery(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.511623, "y": -0.030283, "yaw": 2.818823}
+    high_x_edge_entry_robot = {"x": 5.022008, "y": 0.016536, "yaw": 2.387891}
+    terminal_edge_robot = {"x": 5.022008, "y": 0.016536, "yaw": 2.661431}
+    recapture_entry_ball = {"x": 5.085754, "y": -0.015761, "z": 0.05}
+    high_x_edge_entry_ball = {"x": 3.040647, "y": 0.554660, "z": 0.05}
+    terminal_edge_ball = {"x": 3.040647, "y": 0.554660, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, high_x_edge_entry_robot, high_x_edge_entry_ball),
+        ({}, terminal_edge_robot, terminal_edge_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_edge_robot, terminal_edge_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["local_recovery_attempted"] is True
+    assert any(
+        item["mode"] == "object_place_near_zone_wide_reel"
+        and float(item["linear_x"]) == 0.0
+        and float(item["angular_z"]) <= -0.45
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_preserves_mid_x_opposed_edge_hold_during_local_recovery(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.511623, "y": -0.030283, "yaw": 2.818823}
+    opposed_edge_entry_robot = {"x": 4.913819, "y": 0.019717, "yaw": 2.582049}
+    terminal_edge_robot = {"x": 4.912046, "y": 0.020860, "yaw": 2.574674}
+    recapture_entry_ball = {"x": 5.085754, "y": -0.015761, "z": 0.05}
+    opposed_edge_entry_ball = {"x": 3.453349, "y": -0.344227, "z": 0.05}
+    terminal_edge_ball = {"x": 3.406073, "y": -0.355983, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, opposed_edge_entry_robot, opposed_edge_entry_ball),
+        ({}, terminal_edge_robot, terminal_edge_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_edge_robot, terminal_edge_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["local_recovery_attempted"] is True
+    assert any(
+        item["mode"] == "object_place_near_zone_wide_reel"
+        and float(item["linear_x"]) == 0.0
+        and float(item["angular_z"]) >= 0.45
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_preserves_high_x_opposed_edge_hold_during_local_recovery(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.511623, "y": -0.030283, "yaw": 2.818823}
+    opposed_edge_entry_robot = {"x": 5.033396, "y": 0.014405, "yaw": -2.935897}
+    terminal_edge_robot = {"x": 5.027208, "y": 0.011826, "yaw": -2.610997}
+    recapture_entry_ball = {"x": 5.085754, "y": -0.015761, "z": 0.05}
+    opposed_edge_entry_ball = {"x": 3.430477, "y": 0.482467, "z": 0.05}
+    terminal_edge_ball = {"x": 3.385274, "y": 0.496924, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, opposed_edge_entry_robot, opposed_edge_entry_ball),
+        ({}, terminal_edge_robot, terminal_edge_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_edge_robot, terminal_edge_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["local_recovery_attempted"] is True
+    assert any(
+        item["mode"] == "object_place_near_zone_wide_reel"
+        and float(item["linear_x"]) == 0.0
+        and float(item["angular_z"]) <= -0.45
+        for item in command_log
+    )
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_starts_no_chase_for_retrieval_shoulder_rollthrough(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 4.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    live_robot = {"x": 3.798, "y": 0.050, "yaw": -2.917}
+    shoulder_ball = {"x": 2.550, "y": 0.258, "z": 0.05}
+    states = [
+        ({}, live_robot, {"x": 2.664, "y": 0.242, "z": 0.05}),
+        ({}, live_robot, {"x": 2.625, "y": 0.248, "z": 0.05}),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, live_robot, shoulder_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settled_in_corral_pass"] is True
+    assert payload["settle_no_chase_activated"] is True
+    assert payload["release_gate_blocked_reason"] == "none"
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_starts_no_chase_for_high_local_lateral_retrieval_shoulder(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 4.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    live_robot = {"x": 4.161, "y": -0.119, "yaw": 2.364}
+    shoulder_ball = {"x": 2.597, "y": -0.282, "z": 0.05}
+    states = [
+        ({}, live_robot, {"x": 2.635, "y": -0.278, "z": 0.05}),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+        ({}, live_robot, shoulder_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, live_robot, shoulder_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settled_in_corral_pass"] is True
+    assert payload["settle_no_chase_activated"] is True
+    assert payload["release_gate_blocked_reason"] == "none"
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_starts_no_chase_for_inside_retrieval_rollthrough(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 4.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    live_robot = {"x": 3.786819, "y": -0.173937, "yaw": 2.552909}
+    rollthrough_ball = {"x": 2.810206, "y": -0.311309, "z": 0.05}
+    states = [
+        ({}, live_robot, {"x": 2.893745, "y": -0.305391, "z": 0.05}),
+        ({}, live_robot, {"x": 2.865580, "y": -0.307391, "z": 0.05}),
+        ({}, live_robot, {"x": 2.837335, "y": -0.309393, "z": 0.05}),
+        ({}, live_robot, rollthrough_ball),
+        ({}, live_robot, rollthrough_ball),
+        ({}, live_robot, rollthrough_ball),
+        ({}, live_robot, rollthrough_ball),
+        ({}, live_robot, rollthrough_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, live_robot, rollthrough_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settled_in_corral_pass"] is True
+    assert payload["settle_no_chase_activated"] is True
+    assert payload["release_gate_blocked_reason"] == "none"
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_starts_no_chase_for_inside_retrieval_high_lateral_roll(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 4.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    live_robot = {"x": 4.801, "y": -0.129, "yaw": 2.790}
+    high_lateral_ball = {"x": 3.024, "y": -0.295, "z": 0.05}
+    states = [
+        ({}, live_robot, {"x": 3.095, "y": -0.290, "z": 0.05}),
+        ({}, live_robot, {"x": 3.060, "y": -0.293, "z": 0.05}),
+        ({}, live_robot, high_lateral_ball),
+        ({}, live_robot, high_lateral_ball),
+        ({}, live_robot, high_lateral_ball),
+        ({}, live_robot, high_lateral_ball),
+        ({}, live_robot, high_lateral_ball),
+        ({}, live_robot, high_lateral_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, live_robot, high_lateral_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settled_in_corral_pass"] is True
+    assert payload["settle_no_chase_activated"] is True
+    assert payload["release_gate_blocked_reason"] == "none"
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_ignores_single_stale_high_lateral_no_chase_sample(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    live_robot = {"x": 4.649462, "y": -0.008525, "yaw": -2.905234}
+    stale_edge_sample = {"x": 2.863355, "y": 0.520620, "z": 0.05}
+    states = [
+        ({}, live_robot, stale_edge_sample),
+        ({}, live_robot, stale_edge_sample),
+        ({}, live_robot, {"x": 2.815591, "y": 0.534477, "z": 0.05}),
+        ({}, live_robot, {"x": 2.767228, "y": 0.548507, "z": 0.05}),
+        ({}, live_robot, {"x": 2.720264, "y": 0.562132, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, live_robot, {"x": 2.674099, "y": 0.575524, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["settle_no_chase_activated"] is False
+    assert all(item["mode"] != "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_ignores_single_stale_no_chase_sample_for_unsecured_ball(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    live_robot = {"x": 3.972, "y": -0.041, "yaw": 2.819}
+    center_sample = {"x": 2.378, "y": -0.072, "z": 0.05}
+    states = [
+        ({}, live_robot, center_sample),
+        ({}, live_robot, center_sample),
+        ({}, live_robot, {"x": 2.343, "y": -0.073, "z": 0.05}),
+        ({}, live_robot, {"x": 2.307, "y": -0.073, "z": 0.05}),
+        ({}, live_robot, {"x": 2.273, "y": -0.074, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, live_robot, {"x": 2.238, "y": -0.074, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["settle_no_chase_activated"] is False
+    assert all(item["mode"] != "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_waits_to_no_chase_until_moving_ball_is_centered(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 3.353616, "y": 0.945910, "yaw": -2.446903}
+    previous_ball = {"x": 2.658363, "y": 0.202674, "z": 0.05}
+    moving_not_centered_ball = {"x": 2.635335, "y": 0.178370, "z": 0.05}
+    states = [
+        ({}, robot_pose, previous_ball),
+        ({}, robot_pose, moving_not_centered_ball),
+        ({}, robot_pose, moving_not_centered_ball),
+        ({}, robot_pose, moving_not_centered_ball),
+        ({}, robot_pose, moving_not_centered_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, moving_not_centered_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    assert payload["settle_no_chase_activated"] is False
+    assert all(item["mode"] != "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_starts_no_chase_for_deep_unsecured_retrieval_ball(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 4.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    live_robot = {"x": 3.426054, "y": 0.83522, "yaw": -3.096978}
+    deep_moving_ball = {"x": 2.725738, "y": -0.129731, "z": 0.05}
+    centered_ball = {"x": 2.4, "y": 0.0, "z": 0.05}
+    states = [
+        ({}, live_robot, {"x": 2.748106, "y": -0.101795, "z": 0.05}),
+        ({}, live_robot, deep_moving_ball),
+        ({}, live_robot, centered_ball),
+        ({}, live_robot, centered_ball),
+        ({}, live_robot, centered_ball),
+        ({}, live_robot, centered_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, live_robot, centered_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settle_no_chase_activated"] is True
+    assert payload["release_gate_blocked_reason"] == "none"
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_does_not_start_no_chase_after_ball_slips_behind(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 3.844664, "y": -0.278383, "yaw": 1.636664}
+    slipped_ball = {"x": 2.480997, "y": -0.551251, "z": 0.05}
+
+    def _control_loop_state(**kwargs):
+        return {}, robot_pose, slipped_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    assert payload["settle_no_chase_activated"] is False
+    assert all(item["mode"] != "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_no_chase_recontacts_before_leaving_retrieval_overlap(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 5.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    center_robot = {"x": 3.546642, "y": -0.140912, "yaw": 2.630410}
+    center_ball = {"x": 2.527145, "y": -0.130904, "z": 0.05}
+    edge_robot = {"x": 3.939261, "y": 0.146912, "yaw": -1.682438}
+    edge_overlap_ball = {"x": 1.910181, "y": 0.611092, "z": 0.05}
+    states = [
+        ({}, center_robot, {"x": 2.561844, "y": -0.131995, "z": 0.05}),
+        ({}, center_robot, center_ball),
+        ({}, center_robot, center_ball),
+        ({}, center_robot, center_ball),
+        ({}, edge_robot, edge_overlap_ball),
+        ({}, center_robot, center_ball),
+        ({}, center_robot, center_ball),
+        ({}, center_robot, center_ball),
+        ({}, center_robot, center_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, center_robot, center_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settled_in_corral_pass"] is True
+    assert payload["release_recontact_count"] == 1
+    assert payload["settle_no_chase_activated"] is True
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_object_centric_place_shepherds_shallow_unsecured_ball_inside_retrieval_corral(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 3.817853, "y": -0.218638, "yaw": 3.077252}
+    shallow_ball = {"x": 2.941005, "y": -0.362959, "z": 0.05}
+
+    def _control_loop_state(**kwargs):
+        return {}, robot_pose, shallow_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    shepherd_commands = [item for item in command_log if item["mode"] == "object_place_inside_retrieval_shepherd"]
+    assert shepherd_commands
+    assert all(item["enabled"] is True for item in shepherd_commands)
+    assert max(float(item["linear_x"]) for item in shepherd_commands) <= 0.014
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold"} for item in command_log)
+
+
+def test_object_centric_place_shepherds_retrieval_edge_overlap(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 3.871232, "y": -0.082077, "yaw": 3.129361}
+    overlap_ball = {"x": 3.169866, "y": -0.102835, "z": 0.05}
+
+    def _control_loop_state(**kwargs):
+        return {}, robot_pose, overlap_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    shepherd_commands = [item for item in command_log if item["mode"] == "object_place_inside_retrieval_shepherd"]
+    assert shepherd_commands
+    assert max(float(item["linear_x"]) for item in shepherd_commands) <= 0.006
+    assert all(item["mode"] not in {"retrieval_hold", "capture_recovery", "capture_recovery_hold"} for item in command_log)
+
+
+def test_object_centric_place_holds_latest_zero_high_x_negative_edge_inside_retrieval(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    edge_entry_robot = {"x": 4.843193, "y": -0.008037, "yaw": -2.999394}
+    terminal_inside_robot = {"x": 4.843193, "y": -0.008037, "yaw": -3.099394}
+    edge_entry_ball = {"x": 3.051366, "y": -0.418591, "z": 0.05}
+    terminal_inside_ball = {"x": 3.002925, "y": -0.429871, "z": 0.05}
+    states = [
+        ({}, edge_entry_robot, edge_entry_ball),
+        ({}, terminal_inside_robot, terminal_inside_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_inside_robot, terminal_inside_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    hold_commands = [item for item in command_log if item["mode"] == "object_place_inside_retrieval_hold"]
+    assert hold_commands
+    assert all(item["enabled"] is False for item in hold_commands)
+    assert all(float(item["linear_x"]) == 0.0 and float(item["angular_z"]) == 0.0 for item in hold_commands)
+    first_hold_index = next(
+        index for index, item in enumerate(command_log) if item["mode"] == "object_place_inside_retrieval_hold"
+    )
+    assert all(
+        not (item["mode"] == "object_place_inside_retrieval_shepherd" and float(item["linear_x"]) > 0.0)
+        for item in command_log[first_hold_index:]
+    )
+
+
+def test_object_centric_place_recovery_preserves_lateral_recenter(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 5.668368, "y": 0.06432, "yaw": -2.876083}, {"x": 5.30795, "y": -0.120153, "z": 0.05}),
+        ({}, {"x": 5.661493, "y": 0.063102, "yaw": -3.020963}, {"x": 5.266925, "y": -0.154873, "z": 0.05}),
+        ({}, {"x": 5.661493, "y": 0.063102, "yaw": -3.020963}, {"x": 5.266925, "y": -0.154873, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 5.661493, "y": 0.063102, "yaw": -3.020963}, {"x": 5.266925, "y": -0.154873, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    recenter_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert all(float(item["angular_z"]) < 0.0 for item in recenter_commands)
+
+
+def test_object_centric_place_recovery_preserves_far_lateral_recenter_outside_recapture(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.966751, "y": -0.208337, "yaw": -2.882975}, {"x": 4.416685, "y": -0.452844, "z": 0.05}),
+        ({}, {"x": 4.935988, "y": -0.213790, "yaw": -3.056155}, {"x": 4.383710, "y": -0.465903, "z": 0.05}),
+        ({}, {"x": 4.935988, "y": -0.213790, "yaw": -3.056155}, {"x": 4.383710, "y": -0.465903, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.935988, "y": -0.213790, "yaw": -3.056155}, {"x": 4.383710, "y": -0.465903, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    recenter_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_forward_far_lateral_recenter(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.882334, "y": -0.260975, "yaw": -2.877648}, {"x": 4.133749, "y": -0.627520, "z": 0.05}),
+        ({}, {"x": 4.829201, "y": -0.268236, "yaw": -2.947252}, {"x": 4.058018, "y": -0.661010, "z": 0.05}),
+        ({}, {"x": 4.781566, "y": -0.287712, "yaw": -2.919598}, {"x": 3.946967, "y": -0.710120, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.781566, "y": -0.287712, "yaw": -2.919598}, {"x": 3.946967, "y": -0.710120, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    recenter_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_latest_wide_far_lateral_recenter(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.25
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 5.150, "y": 0.0, "yaw": 3.141593}, {"x": 5.448, "y": 0.0, "z": 0.05}),
+        ({}, {"x": 5.177560, "y": -0.152114, "yaw": -2.912301}, {"x": 4.661209, "y": -0.414212, "z": 0.05}),
+        ({}, {"x": 4.872030, "y": -0.263390, "yaw": -2.985890}, {"x": 3.946211, "y": -0.790637, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.872030, "y": -0.263390, "yaw": -2.985890}, {
+            "x": 3.946211,
+            "y": -0.790637,
+            "z": 0.05,
+        }
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    recenter_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert min(float(item["angular_z"]) for item in recenter_commands) < 0.0
+    assert all(item["mode"] != "release_roll_away" for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_far_keepup_outside_recapture(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.418972, "y": -0.416256, "yaw": -2.811240}, {"x": 3.687352, "y": -0.849203, "z": 0.05}),
+        ({}, {"x": 4.409990, "y": -0.419350, "yaw": -2.806556}, {"x": 3.660217, "y": -0.861470, "z": 0.05}),
+        ({}, {"x": 4.399423, "y": -0.423122, "yaw": -2.795907}, {"x": 3.628719, "y": -0.875709, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.399423, "y": -0.423122, "yaw": -2.795907}, {"x": 3.628719, "y": -0.875709, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    keepup_commands = [item for item in command_log if item["mode"] == "object_place_recapture_drive"]
+    assert keepup_commands
+    assert max(float(item["linear_x"]) for item in keepup_commands) > 0.0
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_far_recapture_reel_outside_recapture(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+        ({}, {"x": 5.286221, "y": -0.114683, "yaw": -2.959096}, {"x": 4.131349, "y": -0.581556, "z": 0.05}),
+        ({}, {"x": 5.004266, "y": -0.026968, "yaw": 2.63545}, {"x": 3.763898, "y": 0.032231, "z": 0.05}),
+        ({}, {"x": 5.220518, "y": 0.035618, "yaw": 2.904654}, {"x": 4.178999, "y": 0.968452, "z": 0.05}),
+        ({}, {"x": 5.180412, "y": -0.095391, "yaw": -2.729457}, {"x": 3.807159, "y": -0.421644, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 5.286221, "y": -0.114683, "yaw": -2.959096}, {"x": 4.131349, "y": -0.581556, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    reel_commands = [item for item in command_log if item["mode"] == "object_place_far_recapture_reel"]
+    assert reel_commands
+    assert max(float(item["linear_x"]) for item in reel_commands) > 0.0
+    assert max(float(item["angular_z"]) for item in reel_commands) > 0.45
+    assert len(reel_commands) >= 3
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_outer_near_zone_wide_reel(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+        ({}, {"x": 4.781375, "y": 0.002758, "yaw": 2.650113}, {"x": 3.333699, "y": 0.706385, "z": 0.05}),
+        ({}, {"x": 4.762638, "y": 0.006483, "yaw": 3.061473}, {"x": 3.292312, "y": 0.728096, "z": 0.05}),
+        ({}, {"x": 4.762638, "y": 0.006483, "yaw": 3.061473}, {"x": 3.292312, "y": 0.728096, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.762638, "y": 0.006483, "yaw": 3.061473}, {"x": 3.292312, "y": 0.728096, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    reel_commands = [item for item in command_log if item["mode"] == "object_place_near_zone_wide_reel"]
+    assert reel_commands
+    assert max(float(item["linear_x"]) for item in reel_commands) > 0.0
+    assert min(float(item["angular_z"]) for item in reel_commands) < -0.45
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_low_x_near_zone_wide_reel(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.392772, "y": -0.109889, "yaw": 3.02611}, {"x": 3.829318, "y": -0.228337, "z": 0.05}),
+        ({}, {"x": 4.349147, "y": -0.115901, "yaw": -3.04577}, {"x": 3.538411, "y": -0.298348, "z": 0.05}),
+        ({}, {"x": 4.326316, "y": -0.1167, "yaw": 3.083367}, {"x": 3.505316, "y": -0.306313, "z": 0.05}),
+        ({}, {"x": 4.326316, "y": -0.1167, "yaw": 3.083367}, {"x": 3.505316, "y": -0.306313, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.326316, "y": -0.1167, "yaw": 3.083367}, {"x": 3.505316, "y": -0.306313, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    reel_commands = [item for item in command_log if item["mode"] == "object_place_near_zone_wide_reel"]
+    assert reel_commands
+    assert max(float(item["linear_x"]) for item in reel_commands) > 0.0
+    assert max(float(item["angular_z"]) for item in reel_commands) > 0.45
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_high_x_near_zone_edge_wide_reel(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+        ({}, {"x": 4.953242, "y": 0.008763, "yaw": 2.459923}, {"x": 3.19051, "y": 0.410466, "z": 0.05}),
+        ({}, {"x": 4.951442, "y": 0.010059, "yaw": 2.749263}, {"x": 3.148718, "y": 0.419865, "z": 0.05}),
+        ({}, {"x": 4.951442, "y": 0.010059, "yaw": 2.749263}, {"x": 3.148718, "y": 0.419865, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.951442, "y": 0.010059, "yaw": 2.749263}, {"x": 3.148718, "y": 0.419865, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    assert payload["local_recovery_attempted"] is True
+    reel_commands = [item for item in command_log if item["mode"] == "object_place_near_zone_wide_reel"]
+    assert reel_commands
+    assert any(float(item["linear_x"]) == 0.0 for item in reel_commands)
+    assert max(float(item["angular_z"]) for item in reel_commands) > 0.45
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_preserves_high_x_escape_edge_after_inside_rollout(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 5.015922, "y": 0.013950, "yaw": 3.073187}, {"x": 4.445784, "y": -0.039761, "z": 0.05}),
+        ({}, {"x": 4.819610, "y": 0.000922, "yaw": 2.830849}, {"x": 1.770361, "y": -0.448410, "z": 0.05}),
+        ({}, {"x": 4.819610, "y": 0.000922, "yaw": 2.659589}, {"x": 1.724528, "y": -0.455410, "z": 0.05}),
+        ({}, {"x": 4.819610, "y": 0.000922, "yaw": 2.659589}, {"x": 1.724528, "y": -0.455410, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.819610, "y": 0.000922, "yaw": 2.659589}, {"x": 1.724528, "y": -0.455410, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    assert payload["local_recovery_attempted"] is True
+    reel_commands = [item for item in command_log if item["mode"] == "object_place_near_zone_wide_reel"]
+    assert reel_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in reel_commands)
+    assert max(float(item["angular_z"]) for item in reel_commands) > 0.45
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_low_x_high_lateral_near_zone_reel(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+        ({}, {"x": 4.543265, "y": -0.000564, "yaw": -2.789976}, {"x": 3.639395, "y": 0.118687, "z": 0.05}),
+        ({}, {"x": 4.543265, "y": -0.000564, "yaw": -2.691081}, {"x": 3.587776, "y": 0.126222, "z": 0.05}),
+        ({}, {"x": 4.543265, "y": -0.000564, "yaw": -2.576281}, {"x": 3.536379, "y": 0.133725, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.543265, "y": -0.000564, "yaw": -2.576281}, {"x": 3.536379, "y": 0.133725, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    assert payload["local_recovery_attempted"] is True
+    reel_commands = [item for item in command_log if item["mode"] == "object_place_near_zone_wide_reel"]
+    assert reel_commands
+    assert min(float(item["angular_z"]) for item in reel_commands) < -0.45
+    assert max(float(item["linear_x"]) for item in reel_commands) <= 0.014
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_far_wide_lateral_recenter(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+        ({}, {"x": 5.479095, "y": -0.059575, "yaw": 3.0124}, {"x": 4.583494, "y": -0.450093, "z": 0.05}),
+        ({}, {"x": 5.479095, "y": -0.059575, "yaw": 3.0124}, {"x": 4.583494, "y": -0.450093, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 5.479095, "y": -0.059575, "yaw": 3.0124}, {"x": 4.583494, "y": -0.450093, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    wide_recenter_commands = [item for item in command_log if item["mode"] == "object_place_far_wide_lateral_recenter"]
+    assert wide_recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in wide_recenter_commands)
+    assert min(float(item["angular_z"]) for item in wide_recenter_commands) < -0.45
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_same_side_high_lateral_far_recenter(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    recapture_entry_robot = {"x": 5.193506, "y": -0.003195, "yaw": 3.048016}
+    high_lateral_robot = {"x": 5.384625, "y": -0.021094, "yaw": 1.805223}
+    terminal_high_lateral_robot = {"x": 5.384625, "y": -0.021094, "yaw": 1.570593}
+    recapture_entry_ball = {"x": 4.637266, "y": 0.153496, "z": 0.05}
+    high_lateral_ball = {"x": 3.827900, "y": 0.524276, "z": 0.05}
+    terminal_high_lateral_ball = {"x": 3.782314, "y": 0.542019, "z": 0.05}
+    states = [
+        ({}, recapture_entry_robot, recapture_entry_ball),
+        ({}, high_lateral_robot, high_lateral_ball),
+        ({}, terminal_high_lateral_robot, terminal_high_lateral_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, terminal_high_lateral_robot, terminal_high_lateral_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    assert payload["local_recovery_attempted"] is True
+    wide_recenter_commands = [item for item in command_log if item["mode"] == "object_place_far_wide_lateral_recenter"]
+    assert wide_recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in wide_recenter_commands)
+    assert max(float(item["angular_z"]) for item in wide_recenter_commands) > 0.75
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_far_captured_gap_keepup(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 5.035712, "y": 0.022386, "yaw": -3.088952}, {"x": 4.701802, "y": -0.043917, "z": 0.05}),
+        ({}, {"x": 5.035712, "y": 0.022386, "yaw": -3.064912}, {"x": 4.664488, "y": -0.060630, "z": 0.05}),
+        ({}, {"x": 5.035712, "y": 0.022386, "yaw": -3.096912}, {"x": 4.625905, "y": -0.077911, "z": 0.05}),
+        ({}, {"x": 5.035712, "y": 0.022386, "yaw": 3.058828}, {"x": 4.550563, "y": -0.111656, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 5.035712, "y": 0.022386, "yaw": 3.058828}, {"x": 4.550563, "y": -0.111656, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    gap_keepup_commands = [
+        item
+        for item in command_log
+        if item["mode"] in {"object_place_drive_to_zone", "object_place_recapture_drive"}
+    ]
+    assert gap_keepup_commands
+    assert max(float(item["linear_x"]) for item in gap_keepup_commands) > 0.0
+    assert any(item["mode"] == "object_place_recapture_drive" for item in gap_keepup_commands)
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_far_wide_opposed_local_lateral_recenter(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+        ({}, {"x": 4.776, "y": -0.006, "yaw": -2.714}, {"x": 3.865, "y": 0.127, "z": 0.05}),
+        ({}, {"x": 4.766, "y": -0.012, "yaw": -2.594}, {"x": 3.718, "y": 0.154, "z": 0.05}),
+        ({}, {"x": 4.763059, "y": -0.013893, "yaw": -2.496476}, {"x": 3.668598, "y": 0.162922, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.763059, "y": -0.013893, "yaw": -2.496476}, {"x": 3.668598, "y": 0.162922, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    assert payload["local_recovery_attempted"] is True
+    wide_recenter_commands = [item for item in command_log if item["mode"] == "object_place_far_wide_lateral_recenter"]
+    assert wide_recenter_commands
+    assert min(float(item["angular_z"]) for item in wide_recenter_commands) < -0.45
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_middle_band_far_line_recenter(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+        ({}, {"x": 4.767767, "y": -0.082648, "yaw": -2.88414}, {"x": 3.733392, "y": -0.201453, "z": 0.05}),
+        ({}, {"x": 4.767767, "y": -0.082648, "yaw": -2.88414}, {"x": 3.733392, "y": -0.201453, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.767767, "y": -0.082648, "yaw": -2.88414}, {"x": 3.733392, "y": -0.201453, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    recenter_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_outer_near_zone_line_keepup(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.659868, "y": -0.068780, "yaw": 3.061464}, {"x": 3.957698, "y": -0.132648, "z": 0.05}),
+        ({}, {"x": 4.563013, "y": -0.069812, "yaw": -3.080568}, {"x": 3.619218, "y": -0.149185, "z": 0.05}),
+        ({}, {"x": 4.563013, "y": -0.069812, "yaw": -2.938548}, {"x": 3.583252, "y": -0.150942, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 4.563013, "y": -0.069812, "yaw": -2.938548}, {"x": 3.583252, "y": -0.150942, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    line_keepup_commands = [item for item in command_log if item["mode"] == "object_place_far_line_recenter"]
+    assert line_keepup_commands
+    assert max(float(item["linear_x"]) for item in line_keepup_commands) >= 0.025
+    assert all(item["mode"] not in {"capture_recovery", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_moving_far_middle_lateral_line_keepup(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 5.223762, "y": -0.077807, "yaw": -3.056275}, {"x": 4.570348, "y": -0.320465, "z": 0.05}),
+        ({}, {"x": 5.223762, "y": -0.077807, "yaw": -3.056275}, {"x": 4.531365, "y": -0.341697, "z": 0.05}),
+        ({}, {"x": 5.223762, "y": -0.077807, "yaw": -3.140955}, {"x": 4.489411, "y": -0.364547, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 5.223762, "y": -0.077807, "yaw": -3.140955}, {"x": 4.489411, "y": -0.364547, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    line_keepup_commands = [item for item in command_log if item["mode"] == "object_place_far_line_recenter"]
+    assert line_keepup_commands
+    assert max(float(item["linear_x"]) for item in line_keepup_commands) > 0.0
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_high_x_far_line_recenter(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+        ({}, {"x": 5.16131, "y": 0.080435, "yaw": 2.968147}, {"x": 3.701421, "y": 1.144426, "z": 0.05}),
+        ({}, {"x": 5.153666, "y": 0.08338, "yaw": 2.543747}, {"x": 3.664873, "y": 1.173711, "z": 0.05}),
+        ({}, {"x": 5.153666, "y": 0.08338, "yaw": 2.543747}, {"x": 3.664873, "y": 1.173711, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 5.153666, "y": 0.08338, "yaw": 2.543747}, {"x": 3.664873, "y": 1.173711, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    recenter_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert max(float(item["angular_z"]) for item in recenter_commands) >= 0.45
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_late_zero_high_x_far_line_boundary(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    states = [
+        ({}, {"x": 4.688528, "y": 2.367859, "yaw": -1.882207}, {"x": 4.561107, "y": 1.918943, "z": 0.05}),
+        ({}, {"x": 5.280991, "y": -0.182392, "yaw": -2.167528}, {"x": 3.634386, "y": -1.231736, "z": 0.05}),
+        ({}, {"x": 5.27704, "y": -0.186986, "yaw": -2.439828}, {"x": 3.60319, "y": -1.252923, "z": 0.05}),
+        ({}, {"x": 5.27704, "y": -0.186986, "yaw": -2.439828}, {"x": 3.60319, "y": -1.252923, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, {"x": 5.27704, "y": -0.186986, "yaw": -2.439828}, {"x": 3.60319, "y": -1.252923, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    assert payload["local_recovery_attempted"] is True
+    recenter_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert min(float(item["angular_z"]) for item in recenter_commands) <= -0.45
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
+def test_object_centric_place_recovery_preserves_low_x_far_line_keepup(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    runner.args.place_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 5.294000, "y": -0.058000, "yaw": 2.936000}
+    states = [
+        ({}, robot_pose, {"x": 4.878253, "y": 0.129931, "z": 0.05}),
+        ({}, robot_pose, {"x": 4.844693, "y": 0.161069, "z": 0.05}),
+        ({}, robot_pose, {"x": 4.811133, "y": 0.192207, "z": 0.05}),
+        ({}, robot_pose, {"x": 4.811133, "y": 0.192207, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, {"x": 4.811133, "y": 0.192207, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_stage"] == "place"
+    line_commands = [item for item in command_log if item["mode"] == "object_place_lateral_recenter"]
+    assert line_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in line_commands)
+    assert max(float(item["angular_z"]) for item in line_commands) >= 0.25
+    assert all(item["mode"] not in {"capture_recovery", "capture_recovery_hold", "release_roll_away"} for item in command_log)
+
+
 def test_place_target_prefers_no_chase_or_turn_recovery_when_ball_slips_behind_inside_corral(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.place_timeout_s = 1.5
@@ -4503,6 +8903,1393 @@ def test_place_target_three_ball_advances_after_practical_retrieval_without_full
     assert payload["settled_in_corral_pass"] is False
     assert payload["settle_no_chase_activated"] is True
     assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_run_target_fetch_to_pose_accepts_rollthrough_delivery_intersection(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.args.target_model_sdf = str(gather_runner.DEFAULT_FETCH_TARGET_MODEL_SDF)
+    runner.args.zone_model_sdf = str(gather_runner.DEFAULT_FETCH_ZONE_MODEL_SDF)
+    runner.fetch_delivery_radius_m = 0.30
+
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {
+            "brain": {"last_feedback_status": "", "last_feedback_text": ""},
+            "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+        },
+    )
+    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: None)
+    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 1.0, "y": 0.0, "z": 0.05})
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_capture_target",
+        lambda **kwargs: (True, {"capture_state": {"captured": True}, "zone_score": {}, "handoff_kind": "secure_capture"}),
+    )
+
+    def _fetch_to_pose_target(**kwargs):
+        gather_runner.append_jsonl(
+            kwargs["state_history_path"],
+            {
+                "generated_utc": "2026-05-13T00:00:00Z",
+                "event_type": "fetch_to_pose_tick",
+                "phase": "fetch_to_pose",
+                "target_id": "ball_1",
+                "ball_pose": {"x": 2.4, "y": 0.0, "z": 0.05},
+            },
+        )
+        return (
+            True,
+            {
+                "failure_reason": "",
+                "failure_stage": "",
+                "final_ball_pose": {"x": 2.4, "y": 0.0, "z": 0.05},
+                "fetch_elapsed_s": 1.25,
+                "settle_exit_reason": "trajectory_intersects_delivery_radius",
+                "rolled_away_after_release": False,
+            },
+        )
+
+    monkeypatch.setattr(runner, "_fetch_to_pose_target", _fetch_to_pose_target)
+    monkeypatch.setattr(
+        runner,
+        "_place_target",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("fetch_to_pose should not run legacy place")),
+    )
+
+    result = runner._run_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        route_index=1,
+        gather_sequence_path=tmp_path / "gather_sequence.jsonl",
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=tmp_path / "mission",
+    )
+
+    assert result["pass"] is True
+    assert result["mission_objective"] == "fetch_to_pose"
+    assert result["fetch_to_pose_reached"] is True
+    assert result["fetch_to_pose_time_s"] == 1.25
+    assert result["shot_outcome"]["reason"] == "trajectory_intersects_delivery_radius"
+    assert result["settled_in_corral_pass"] is False
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "state_history.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert any(row.get("phase") == "fetch_to_pose" for row in rows)
+
+
+def test_contact_ready_fetch_gate_starts_robot_behind_ball_and_preserves_nav2_monitor_payload(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.fetch_gate_mode = "contact_ready"
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.args.fetch_target_x = 0.95
+    runner.args.fetch_target_y = 0.0
+    runner.args.fetch_target_z = 0.001
+    runner.args.target_model_sdf = str(gather_runner.DEFAULT_FETCH_TARGET_MODEL_SDF)
+    runner.args.zone_model_sdf = str(gather_runner.DEFAULT_FETCH_ZONE_MODEL_SDF)
+    runner.fetch_delivery_radius_m = 0.30
+    runner.visit_runtime_state = {
+        "visited_targets": [],
+        "remaining_targets": ["ball_1"],
+        "target_positions": {},
+    }
+    runner.gather_runtime_state = {
+        "placed_targets": [],
+        "remaining_targets": ["ball_1"],
+        "manual_drive": {},
+    }
+    state_history_path = tmp_path / "state_history.jsonl"
+    gather_sequence_path = tmp_path / "gather_sequence.jsonl"
+    target = runner.targets_by_id["ball_1"]
+    set_pose_calls: list[dict[str, float]] = []
+    truth_pose_waits: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {
+            "compose_project": "session-contact-ready",
+            "world_name": "default",
+            "belief": {"latest_robot_pose": {"x": 0.03, "y": 0.0, "yaw": 0.0}},
+        },
+    )
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: runner.gather_runtime_state.update(kwargs))
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: runner.visit_runtime_state.update(kwargs))
+    monkeypatch.setattr(
+        runner,
+        "_ball_truth_pose",
+        lambda session_id, target: {"x": 0.38, "y": 0.0, "z": 0.021336},
+    )
+    monkeypatch.setattr(
+        runner,
+        "_set_robot_pose",
+        lambda state, *, x, y, yaw: set_pose_calls.append({"x": x, "y": y, "yaw": yaw}),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_wait_for_robot_pose_near",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("dashboard pose stale")),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_wait_for_robot_truth_pose_near",
+        lambda **kwargs: truth_pose_waits.append(kwargs) or {},
+    )
+
+    def fake_fetch_to_pose_target(**kwargs):
+        assert kwargs["attempt_kind"] == "contact_ready_gate"
+        return (
+            True,
+            {
+                "failure_reason": "",
+                "failure_stage": "",
+                "final_ball_pose": {"x": 0.95, "y": 0.0, "z": 0.021336},
+                "fetch_elapsed_s": 1.25,
+                "settle_exit_reason": "trajectory_intersects_delivery_radius",
+                "rolled_away_after_release": False,
+                "nav2_follow_path_corridor_push": {
+                    "dispatch_status": "monitor_success",
+                    "monitor_cancel_reason": "success",
+                    "monitor_sample": {
+                        "delivery_distance_m": 0.0,
+                        "lateral_error_m": 0.0,
+                        "robot_ball_distance_m": 0.12,
+                    },
+                    "status_code": 5,
+                },
+            },
+        )
+
+    monkeypatch.setattr(runner, "_fetch_to_pose_target", fake_fetch_to_pose_target)
+
+    result = runner._run_contact_ready_fetch_target(
+        session_id="session-contact-ready",
+        target=target,
+        route_index=1,
+        gather_sequence_path=gather_sequence_path,
+        state_history_path=state_history_path,
+    )
+
+    assert result["pass"] is True
+    assert result["attempt_kind"] == "contact_ready_gate"
+    assert result["pre_stage_pose_reached"] is True
+    assert result["capture_entry_reached"] is True
+    assert set_pose_calls == [{"x": 0.03, "y": 0.0, "yaw": 0.0}]
+    assert truth_pose_waits and truth_pose_waits[0]["session_id"] == "session-contact-ready"
+    assert result["shot_outcome"]["closest_approach_distance_m"] == 0.0
+    assert result["shot_outcome"]["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+    assert result["shot_outcome"]["nav2_follow_path_corridor_push"]["monitor_sample"]["robot_ball_distance_m"] == 0.12
+    events = [
+        json.loads(line)["event_type"]
+        for line in state_history_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert "nav2_follow_path_corridor_push_contact_ready_gate_start" in events
+    assert "nav2_follow_path_corridor_push_contact_ready_gate_result" in events
+    ready_rows = [
+        json.loads(line)
+        for line in state_history_path.read_text(encoding="utf-8").splitlines()
+        if "nav2_follow_path_corridor_push_contact_ready_gate_ready" in line
+    ]
+    assert ready_rows[0]["pose_confirmation_source"] == "truth_state"
+    assert ready_rows[0]["dashboard_pose_wait_error"] == "dashboard pose stale"
+
+
+def test_fetch_to_pose_outcome_ignores_pre_fetch_ball_samples(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.fetch_delivery_radius_m = 0.25
+    state_history_path = tmp_path / "state_history.jsonl"
+    target = runner.targets_by_id["ball_1"]
+
+    gather_runner.append_jsonl(
+        state_history_path,
+        {
+            "generated_utc": "2026-05-13T00:00:00Z",
+            "event_type": "capture_tick",
+            "phase": "capture",
+            "target_id": target.id,
+            "ball_pose": {"x": 2.4, "y": 0.0, "z": 0.05},
+        },
+    )
+    gather_runner.append_jsonl(
+        state_history_path,
+        {
+            "generated_utc": "2026-05-13T00:00:01Z",
+            "event_type": "fetch_to_pose_tick",
+            "phase": "fetch_to_pose",
+            "target_id": target.id,
+            "ball_pose": {"x": 3.0, "y": 0.0, "z": 0.05},
+        },
+    )
+
+    outcome = runner._build_fetch_to_pose_outcome(
+        target=target,
+        state_history_path=state_history_path,
+        final_ball_pose={"x": 3.0, "y": 0.0, "z": 0.05},
+        place_payload={},
+    )
+
+    assert outcome["pass"] is False
+    assert outcome["closest_approach_distance_m"] == 0.6
+    assert outcome["sample_count"] == 2
+
+
+def test_fetch_to_pose_outcome_preserves_ai_push_coast_fields(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.fetch_delivery_radius_m = 0.25
+    state_history_path = tmp_path / "state_history.jsonl"
+    target = runner.targets_by_id["ball_1"]
+    gather_runner.append_jsonl(
+        state_history_path,
+        {
+            "generated_utc": "2026-05-13T00:00:01Z",
+            "event_type": "fetch_to_pose_tick",
+            "phase": "fetch_to_pose",
+            "target_id": target.id,
+            "ball_pose": {"x": 3.0, "y": 0.0, "z": 0.05},
+        },
+    )
+
+    outcome = runner._build_fetch_to_pose_outcome(
+        target=target,
+        state_history_path=state_history_path,
+        final_ball_pose={"x": 3.0, "y": 0.0, "z": 0.05},
+        place_payload={
+            "ai_first_contact_confirmation": {"confirmed": True, "first_contact_start_displacement_m": 0.031},
+            "nav2_follow_path_corridor_push": {"dispatch_status": "monitor_success"},
+            "ai_push_coast_mode": "shadow",
+            "ai_push_coast_shadow": {"model_id": "heuristic_hybrid_stage_supervisor_v0"},
+            "ai_push_coast_proposal": {"maneuver_class": "terminal_repush"},
+            "ai_push_coast_guard": {"accepted": False, "reasons": ["shadow_mode"]},
+            "ai_push_coast_latency_ms": 0.25,
+            "capture_geometry_gate": {
+                "pass": False,
+                "flags": ["capture_yaw_watch"],
+                "capture_yaw_travel_deg": 82.5,
+            },
+        },
+    )
+
+    assert outcome["ai_push_coast_mode"] == "shadow"
+    assert outcome["ai_first_contact_confirmation"]["confirmed"] is True
+    assert outcome["nav2_follow_path_corridor_push"]["first_contact_confirmation"]["first_contact_start_displacement_m"] == 0.031
+    assert outcome["ai_push_coast_shadow"]["model_id"] == "heuristic_hybrid_stage_supervisor_v0"
+    assert outcome["ai_push_coast_proposal"]["maneuver_class"] == "terminal_repush"
+    assert outcome["ai_push_coast_guard"]["reasons"] == ["shadow_mode"]
+    assert outcome["ai_push_coast_latency_ms"] == 0.25
+    assert outcome["capture_geometry_gate"]["pass"] is False
+    assert outcome["capture_geometry_gate"]["flags"] == ["capture_yaw_watch"]
+
+
+def test_fetch_to_pose_waits_for_launch_window_before_short_stop(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.place_timeout_s = 2.5
+    runner.args.poll_s = 0.5
+
+    monkeypatch.setattr(gather_runner, "DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S", 2.5)
+    monkeypatch.setattr(gather_runner, "DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S", 2.0)
+    clock = {"now": 0.0}
+    monkeypatch.setattr(gather_runner.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(gather_runner.time, "sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds))
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+
+    robot_pose = {"x": 4.736887, "y": 2.375382, "yaw": -2.234298}
+    ball_pose = {"x": 4.555261, "y": 2.155261, "z": 0.05}
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: ({}, robot_pose, ball_pose),
+    )
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "fetch_to_pose_ball_stopped_short"
+    assert payload["fetch_ball_moved_since_fetch"] is False
+    assert payload["fetch_elapsed_s"] >= 2.0
+    assert payload["fetch_launch_motion_evidence_m"] == 0.03
+    assert payload["fetch_max_commanded_linear_x_mps"] == 0.08
+    assert payload["fetch_max_target_speed_scale"] == 0.35
+    launch_commands = [item for item in command_log if item["enabled"] and item["mode"] == "object_fetch_to_pose_launch"]
+    assert len(launch_commands) >= 4
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "state_history.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert any(row["fetch_to_pose"]["elapsed_s"] >= 1.5 for row in rows)
+    assert all(row["fetch_to_pose"]["ball_moved_since_fetch"] is False for row in rows)
+
+
+def test_nav2_corridor_push_dispatch_uses_live_monitor_payload(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    captured_dispatch: dict[str, object] = {}
+    command_log: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: (
+            {"compose_project": "chasecar_dashboard_contact_ready"},
+            robot_pose,
+            ball_pose,
+        ),
+    )
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "mode": mode, "rationale": rationale}
+        ),
+    )
+
+    def fake_dispatch(**kwargs):
+        captured_dispatch.update(kwargs)
+        return {
+            "dispatch_status": "monitor_ball_escape",
+            "accepted": True,
+            "success": False,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "ball_escape",
+            "monitor_sample": {"lateral_error_m": 0.62},
+        }
+
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-nav2-corridor-monitor",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    monitor = captured_dispatch["monitor"]
+    assert passed is False
+    assert payload["failure_reason"] == "nav2_corridor_push_ball_escape"
+    assert captured_dispatch["compose_project"] == "chasecar_dashboard_contact_ready"
+    assert monitor["enabled"] is True
+    assert monitor["target_model_name"] == "visit_mission_target_ball_1"
+    assert monitor["truth_state_path"].endswith(
+        "/artifacts/session/session-nav2-corridor-monitor/visual/truth_state.json"
+    )
+    assert monitor["delivery_radius_m"] == 0.25
+    assert payload["nav2_follow_path_corridor_push"]["monitor_cancel_live"] is True
+    assert payload["nav2_follow_path_corridor_push"]["monitor_cancel_reason"] == "ball_escape"
+    assert any(item["mode"] == "nav2_follow_path_corridor_push" for item in command_log)
+
+
+def test_nav2_corridor_push_monitor_success_observes_delivery_pass(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_samples = [
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05},
+    ]
+
+    def fake_control_loop_state(session_id, target):
+        index = 0 if len(ball_samples) > 1 else 0
+        ball_pose = ball_samples.pop(index) if len(ball_samples) > 1 else ball_samples[0]
+        return {}, robot_pose, ball_pose
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_dispatch_nav2_follow_path_reacquire",
+        lambda **kwargs: {
+            "dispatch_status": "monitor_success",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "success",
+            "monitor_sample": {"delivery_distance_m": 0.0},
+        },
+    )
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-nav2-corridor-success",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["failure_reason"] == ""
+    assert payload["settle_exit_reason"] == "trajectory_intersects_delivery_radius"
+    assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+    assert payload["nav2_follow_path_corridor_push"]["monitor_cancel_reason"] == "success"
+
+
+def test_nav2_corridor_push_blocks_dispatch_when_push_readiness_fails(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.01
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.25, "yaw": 0.55}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    dispatch_calls: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(gather_runner, "DEFAULT_FETCH_PUSH_READINESS_SETUP_WINDOW_S", 0.02)
+
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: (
+            {"compose_project": "chasecar_dashboard_not_push_ready"},
+            robot_pose,
+            ball_pose,
+        ),
+    )
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "mode": mode, "rationale": rationale}
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_dispatch_nav2_follow_path_reacquire",
+        lambda **kwargs: dispatch_calls.append(kwargs) or {"success": True},
+    )
+
+    state_history_path = tmp_path / "state_history.jsonl"
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-nav2-push-readiness-fail",
+        target=target,
+        state_history_path=state_history_path,
+    )
+
+    history = [json.loads(line) for line in state_history_path.read_text(encoding="utf-8").splitlines()]
+    gate_event = next(item for item in history if item["event_type"] == "fetch_to_pose_push_readiness_gate")
+    assert passed is False
+    assert dispatch_calls == []
+    assert payload["failure_reason"] == "push_readiness_gate_failed"
+    assert payload["push_readiness_gate"]["pass"] is False
+    assert "robot_lateral_error_out_of_bounds" in payload["push_readiness_gate"]["flags"]
+    assert "robot_yaw_error_out_of_bounds" in payload["push_readiness_gate"]["flags"]
+    assert payload["push_readiness_setup"]["attempted"] is True
+    assert payload["nav2_follow_path_corridor_push"]["push_readiness_gate"]["pass"] is False
+    assert gate_event["push_readiness_gate"]["reason"] == "push_readiness_gate_failed"
+    assert gate_event["push_readiness_setup"]["attempted"] is True
+    assert any(str(item["mode"]).startswith("push_readiness_") for item in command_log)
+    assert any(item["mode"] == "push_readiness_gate_failed" for item in command_log)
+
+
+def test_nav2_corridor_push_dispatches_after_push_readiness_setup(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.01
+    target = runner.targets_by_id["ball_1"]
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    state_samples = [
+        ({"x": 0.93, "y": 0.0, "yaw": 0.0}, ball_pose),
+        ({"x": 0.76, "y": 0.0, "yaw": 0.0}, ball_pose),
+        ({"x": 0.76, "y": 0.0, "yaw": 0.0}, {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05}),
+    ]
+    dispatch_calls: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+
+    def fake_control_loop_state(session_id, target):
+        robot, ball = state_samples.pop(0) if len(state_samples) > 1 else state_samples[0]
+        return {"compose_project": "chasecar_dashboard_push_ready_after_setup"}, robot, ball
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "general_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": 0.76, "y": 0.0, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": 1.25, "y": 0.0, "yaw": 0.0},
+                ],
+            }
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "mode": mode, "linear_x": linear_x, "angular_z": angular_z}
+        ),
+    )
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(
+        runner,
+        "_dispatch_nav2_follow_path_reacquire",
+        lambda **kwargs: dispatch_calls.append(kwargs)
+        or {
+            "dispatch_status": "monitor_success",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "success",
+            "monitor_sample": {"delivery_distance_m": 0.0},
+        },
+    )
+
+    state_history_path = tmp_path / "state_history.jsonl"
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-nav2-push-readiness-setup",
+        target=target,
+        state_history_path=state_history_path,
+    )
+
+    history = [json.loads(line) for line in state_history_path.read_text(encoding="utf-8").splitlines()]
+    assert passed is True
+    assert payload["failure_reason"] == ""
+    assert payload["push_readiness_setup"]["result"] == "passed_after_setup"
+    assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+    assert len(dispatch_calls) == 1
+    assert any(item["mode"] == "push_readiness_backoff" for item in command_log)
+    assert any(item["event_type"] == "fetch_to_pose_push_readiness_setup_start" for item in history)
+
+
+def test_ai_push_coast_corridor_push_uses_bounded_push_through(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_SHADOW
+    runner.fetch_delivery_radius_m = 0.25
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_samples = [
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": 1.04, "y": 0.0, "z": 0.05},
+        {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05},
+    ]
+    captured_build: dict[str, object] = {}
+    dispatch_calls: list[dict[str, object]] = []
+
+    def fake_control_loop_state(session_id, target):
+        ball_pose = ball_samples.pop(0) if len(ball_samples) > 1 else ball_samples[0]
+        return {}, robot_pose, ball_pose
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "general_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": 0.45, "y": 0.0, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": 1.25, "y": 0.0, "yaw": 0.0},
+                ],
+                "trigger": {"push_through_m": gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M},
+            }
+
+    def fake_build_plan(robot_pose_arg, ball_pose_arg, delivery_pose_arg, **kwargs):
+        captured_build.update(kwargs)
+        return FakePlan()
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", fake_build_plan)
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        if kwargs.get("monitor", {}).get("success_on_motion_m") is not None:
+            return {
+                "dispatch_status": "monitor_first_contact_confirmed",
+                "accepted": True,
+                "success": True,
+                "timed_out": False,
+                "cancel_requested": True,
+                "monitor_cancel_reason": "first_contact_confirmed",
+                "monitor_sample": {"start_displacement_m": 0.031, "delivery_distance_m": 0.8},
+            }
+        return {
+            "dispatch_status": "monitor_success",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "success",
+            "monitor_sample": {"start_displacement_m": 0.75, "delivery_distance_m": 0.0},
+        }
+
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-corridor-push-cap",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert captured_build["push_through_m"] == gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M
+    assert len(dispatch_calls) == 2
+    assert dispatch_calls[0]["monitor"]["success_on_motion_m"] == gather_runner.DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+    assert (
+        dispatch_calls[0]["monitor"]["success_on_motion_min_longitudinal_m"]
+        == gather_runner.DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M
+    )
+    assert payload["ai_first_contact_confirmation"]["confirmed"] is True
+    assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+
+
+def test_ai_push_coast_first_contact_probe_fails_closed_when_nav2_finishes_without_ball_motion(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_SHADOW
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.5
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    dispatch_calls: list[dict[str, object]] = []
+    clock = {"now": 0.0}
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(gather_runner.time, "sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds))
+    monkeypatch.setattr(gather_runner, "DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S", 1.0)
+
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: (
+            {"compose_project": "chasecar_dashboard_contact_ready"},
+            robot_pose,
+            ball_pose,
+        ),
+    )
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        return {
+            "dispatch_status": "goal_succeeded",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": False,
+            "monitor": {"last_sample": {"start_displacement_m": 0.0, "delivery_distance_m": 0.55}},
+        }
+
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-first-contact-no-motion",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "nav2_corridor_push_first_contact_no_object_motion"
+    assert len(dispatch_calls) == 1
+    assert dispatch_calls[0]["monitor"]["success_on_motion_m"] == gather_runner.DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+    assert (
+        dispatch_calls[0]["monitor"]["success_on_motion_min_longitudinal_m"]
+        == gather_runner.DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M
+    )
+    assert payload["ai_first_contact_confirmation"]["confirmed"] is False
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_attempted"] is True
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_confirmed"] is False
+    assert payload["ai_first_contact_confirmation"]["first_contact_no_object_motion"] is True
+    assert payload["ai_first_contact_confirmation"]["first_contact_start_displacement_m"] == 0.0
+
+
+def test_ai_push_coast_first_contact_servo_can_confirm_then_dispatch_corridor_push(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_SHADOW
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.5
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_samples = [
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": 1.04, "y": 0.0, "z": 0.05},
+        {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05},
+    ]
+    dispatch_calls: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+    captured_build: dict[str, object] = {}
+    clock = {"now": 0.0}
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(gather_runner.time, "sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds))
+    monkeypatch.setattr(gather_runner, "DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S", 2.0)
+
+    def fake_control_loop_state(session_id, target):
+        ball_pose = ball_samples.pop(0) if len(ball_samples) > 1 else ball_samples[0]
+        return {"compose_project": "chasecar_dashboard_contact_ready"}, robot_pose, ball_pose
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "general_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": 0.45, "y": 0.0, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": 1.25, "y": 0.0, "yaw": 0.0},
+                ],
+                "trigger": {"push_through_m": gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M},
+            }
+
+    def fake_build_plan(robot_pose_arg, ball_pose_arg, delivery_pose_arg, **kwargs):
+        captured_build.update(kwargs)
+        return FakePlan()
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        if kwargs.get("monitor", {}).get("success_on_motion_m") is not None:
+            return {
+                "dispatch_status": "goal_succeeded",
+                "accepted": True,
+                "success": True,
+                "timed_out": False,
+                "cancel_requested": False,
+                "monitor": {"last_sample": {"start_displacement_m": 0.0, "delivery_distance_m": 0.55}},
+            }
+        return {
+            "dispatch_status": "monitor_success",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "success",
+            "monitor_sample": {"start_displacement_m": 0.75, "delivery_distance_m": 0.0},
+        }
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "linear_x": linear_x, "angular_z": angular_z, "mode": mode}
+        ),
+    )
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", fake_build_plan)
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-first-contact-servo-confirms",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert len(dispatch_calls) == 2
+    assert captured_build["push_through_m"] == gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M
+    assert any(item["enabled"] and item["mode"].startswith("object_fetch_to_pose") for item in command_log)
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_attempted"] is True
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_confirmed"] is True
+    assert payload["ai_first_contact_confirmation"]["first_contact_confirmation_source"] == "deterministic_servo"
+
+
+def test_ai_push_coast_nav2_contact_buffer_stop_hands_off_to_servo(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_SHADOW
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.5
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_samples = [
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": 1.04, "y": 0.0, "z": 0.05},
+        {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05},
+    ]
+    dispatch_calls: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+    clock = {"now": 0.0}
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(gather_runner.time, "sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds))
+    monkeypatch.setattr(gather_runner, "DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S", 2.0)
+
+    def fake_control_loop_state(session_id, target):
+        ball_pose = ball_samples.pop(0) if len(ball_samples) > 1 else ball_samples[0]
+        return {"compose_project": "chasecar_dashboard_contact_ready"}, robot_pose, ball_pose
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "corridor_push_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": 0.45, "y": 0.0, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": 1.25, "y": 0.0, "yaw": 0.0},
+                ],
+                "trigger": {"push_through_m": gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M},
+            }
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        if kwargs.get("monitor", {}).get("success_on_motion_m") is not None:
+            assert kwargs["monitor"]["contact_buffer_handoff_max_robot_ball_m"] == (
+                gather_runner.DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M
+            )
+            assert kwargs["monitor"]["contact_buffer_handoff_max_terminal_yaw_error_deg"] == (
+                gather_runner.DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG
+            )
+            assert kwargs["monitor"]["success_on_motion_min_longitudinal_m"] == (
+                gather_runner.DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M
+            )
+            return {
+                "dispatch_status": "monitor_contact_buffer_handoff",
+                "accepted": True,
+                "success": False,
+                "timed_out": False,
+                "status_text": "STATUS_CANCELED",
+                "monitor_cancel_reason": "contact_buffer_handoff",
+                "monitor": {
+                    "last_sample": {
+                        "start_displacement_m": 0.0,
+                        "delivery_distance_m": 0.55,
+                        "robot_ball_distance_m": 0.15,
+                        "lateral_error_m": 0.0,
+                    }
+                },
+                "path_progress_last": {
+                    "nearest_path_kind": "corridor_contact_approach_2",
+                    "terminal_path_distance_m": 0.23,
+                    "terminal_yaw_error_deg": -1.0,
+                },
+            }
+        return {
+            "dispatch_status": "monitor_success",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "success",
+            "monitor_sample": {"start_displacement_m": 0.75, "delivery_distance_m": 0.0},
+        }
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "linear_x": linear_x, "angular_z": angular_z, "mode": mode}
+        ),
+    )
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-contact-buffer-stop-servo",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert len(dispatch_calls) == 2
+    assert any(item["enabled"] and item["mode"].startswith("object_fetch_to_pose") for item in command_log)
+    assert payload["ai_first_contact_confirmation"]["nav2_probe_contact_buffer_stop"] is True
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_source"] == "nav2_contact_buffer_stop"
+    assert (
+        payload["ai_first_contact_confirmation"]["nav2_probe_contact_buffer_stop_diagnostics"][
+            "terminal_yaw_error_deg"
+        ]
+        == -1.0
+    )
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_confirmed"] is True
+    assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+
+
+def test_ai_push_coast_nav2_contact_buffer_stop_rejects_yaw_misalignment(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_SHADOW
+    runner.fetch_delivery_radius_m = 0.25
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: (
+            {"compose_project": "chasecar_dashboard_contact_ready"},
+            robot_pose,
+            ball_pose,
+        ),
+    )
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+
+    def fake_dispatch(**kwargs):
+        return {
+            "dispatch_status": "monitor_contact_buffer_handoff",
+            "accepted": True,
+            "success": False,
+            "timed_out": False,
+            "status_text": "STATUS_CANCELED",
+            "monitor_cancel_reason": "contact_buffer_handoff",
+            "monitor": {
+                "terminal_reason": "contact_buffer_handoff",
+                "last_sample": {
+                    "start_displacement_m": 0.0,
+                    "delivery_distance_m": 0.55,
+                    "robot_ball_distance_m": 0.15,
+                    "lateral_error_m": 0.0,
+                },
+            },
+            "path_progress_last": {
+                "nearest_path_kind": "start",
+                "terminal_path_distance_m": 0.23,
+                "terminal_yaw_error_deg": (
+                    gather_runner.DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG
+                    + 5.0
+                ),
+            },
+        }
+
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-contact-buffer-yaw-reject",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "nav2_corridor_push_first_contact_failed"
+    diagnostics = payload["ai_first_contact_confirmation"]["nav2_probe_contact_buffer_stop_diagnostics"]
+    assert diagnostics["eligible"] is False
+    assert "terminal_yaw_error_out_of_bounds" in diagnostics["reason"]
+    assert payload["ai_first_contact_confirmation"]["nav2_probe_contact_buffer_stop"] is False
+    assert payload["ai_first_contact_confirmation"].get("deterministic_servo_attempted") is not True
+
+
+def test_ai_push_coast_nav2_probe_timeout_far_from_ball_fails_closed(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_SHADOW
+    runner.fetch_delivery_radius_m = 0.25
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: (
+            {"compose_project": "chasecar_dashboard_contact_ready"},
+            robot_pose,
+            ball_pose,
+        ),
+    )
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+
+    def fake_dispatch(**kwargs):
+        return {
+            "dispatch_status": "goal_result_timeout",
+            "accepted": True,
+            "success": False,
+            "timed_out": True,
+            "status_text": "STATUS_ABORTED",
+            "monitor": {
+                "last_sample": {
+                    "start_displacement_m": 0.0,
+                    "delivery_distance_m": 0.55,
+                    "robot_ball_distance_m": 0.35,
+                    "lateral_error_m": 0.0,
+                }
+            },
+            "path_progress_last": {
+                "nearest_path_kind": "corridor_contact_approach_1",
+                "terminal_path_distance_m": 0.43,
+            },
+        }
+
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-contact-buffer-timeout-far",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "nav2_corridor_push_timeout"
+    assert payload["ai_first_contact_confirmation"]["nav2_probe_contact_buffer_stop"] is False
+    assert "robot_not_at_contact_buffer" in payload["ai_first_contact_confirmation"][
+        "nav2_probe_contact_buffer_stop_diagnostics"
+    ]["reason"]
+    assert payload["ai_first_contact_confirmation"].get("deterministic_servo_attempted") is not True
+
+
+def test_ai_push_coast_guarded_terminal_correction_runs_after_nav2_abort(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_GUARDED_LIVE
+    runner.fetch_delivery_radius_m = 0.3
+    runner.args.poll_s = 0.0
+    target = runner.targets_by_id["ball_1"]
+    fetch_x = float(runner.zone.world_x)
+    fetch_y = float(runner.zone.world_y)
+    ball_samples = [
+        {"x": fetch_x - 0.52, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.52, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.520765, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.45, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.24, "y": fetch_y, "z": 0.05},
+    ]
+    control_calls = {"count": 0}
+    command_log: list[dict[str, object]] = []
+    dispatch_calls: list[dict[str, object]] = []
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "general_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": fetch_x - 0.8, "y": fetch_y, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": fetch_x, "y": fetch_y, "yaw": 0.0},
+                ],
+                "trigger": {"push_through_m": gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M},
+            }
+
+    def fake_control_loop_state(session_id, target):
+        index = min(control_calls["count"], len(ball_samples) - 1)
+        control_calls["count"] += 1
+        ball_pose = ball_samples[index]
+        robot_pose = {"x": float(ball_pose["x"]) - 0.27, "y": fetch_y, "yaw": 0.0}
+        return {"compose_project": "chasecar_dashboard_terminal_correction"}, robot_pose, ball_pose
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        if kwargs.get("monitor", {}).get("success_on_motion_m") is not None:
+            return {
+                "dispatch_status": "monitor_success",
+                "accepted": True,
+                "success": True,
+                "timed_out": False,
+                "cancel_requested": True,
+                "monitor_cancel_reason": "success",
+                "monitor_sample": {
+                    "start_displacement_m": gather_runner.DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M,
+                    "delivery_distance_m": 0.52,
+                    "robot_ball_distance_m": 0.14,
+                    "lateral_error_m": 0.0,
+                },
+            }
+        return {
+            "dispatch_status": "goal_finished",
+            "accepted": True,
+            "success": False,
+            "timed_out": False,
+            "status_code": 6,
+            "status_text": "STATUS_ABORTED",
+            "error": "goal_status_6",
+            "monitor_sample": {
+                "start_displacement_m": 0.121,
+                "delivery_distance_m": 0.520765,
+                "robot_ball_distance_m": 0.12,
+                "lateral_error_m": 0.0,
+            },
+        }
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "linear_x": linear_x, "angular_z": angular_z, "mode": mode}
+        ),
+    )
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_contact_probe_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    state_history_path = tmp_path / "state_history.jsonl"
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-terminal-correction-after-nav2-abort",
+        target=target,
+        state_history_path=state_history_path,
+    )
+
+    history = [json.loads(line) for line in state_history_path.read_text(encoding="utf-8").splitlines()]
+    events = [item["event_type"] for item in history]
+    start_event = next(item for item in history if item["event_type"] == "ai_push_coast_terminal_correction_start")
+    assert passed is True
+    assert len(dispatch_calls) == 2
+    assert "ai_push_coast_terminal_correction_candidate" in events
+    assert "ai_push_coast_terminal_correction_start" in events
+    assert "ai_push_coast_terminal_correction_result" in events
+    assert any(item["enabled"] and item["mode"].startswith("object_fetch_to_pose") for item in command_log)
+    assert start_event["ai_push_coast_guard"]["accepted"] is True
+    assert start_event["ai_push_coast_shadow"]["input_digest"]["terminal_settled_after_nav2"] is True
+    assert start_event["ai_push_coast_shadow"]["input_digest"]["capture_geometry_gate_pass"] is None
+    assert payload["fetch_closest_approach_distance_m"] <= runner.fetch_delivery_radius_m
+
+
+def test_ai_push_coast_guarded_terminal_correction_rejects_failed_capture_geometry(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_GUARDED_LIVE
+    runner.fetch_delivery_radius_m = 0.3
+    runner.args.poll_s = 0.0
+    target = runner.targets_by_id["ball_1"]
+    fetch_x = float(runner.zone.world_x)
+    fetch_y = float(runner.zone.world_y)
+    ball_samples = [
+        {"x": fetch_x - 0.52, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.52, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.520765, "y": fetch_y, "z": 0.05},
+    ]
+    control_calls = {"count": 0}
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "general_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": fetch_x - 0.8, "y": fetch_y, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": fetch_x, "y": fetch_y, "yaw": 0.0},
+                ],
+                "trigger": {"push_through_m": gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M},
+            }
+
+    def fake_control_loop_state(session_id, target):
+        index = min(control_calls["count"], len(ball_samples) - 1)
+        control_calls["count"] += 1
+        ball_pose = ball_samples[index]
+        robot_pose = {"x": float(ball_pose["x"]) - 0.27, "y": fetch_y, "yaw": 0.0}
+        return {"compose_project": "chasecar_dashboard_terminal_correction_veto"}, robot_pose, ball_pose
+
+    def fake_dispatch(**kwargs):
+        if kwargs.get("monitor", {}).get("success_on_motion_m") is not None:
+            return {
+                "dispatch_status": "monitor_success",
+                "accepted": True,
+                "success": True,
+                "timed_out": False,
+                "cancel_requested": True,
+                "monitor_cancel_reason": "success",
+                "monitor_sample": {
+                    "start_displacement_m": gather_runner.DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M,
+                    "delivery_distance_m": 0.52,
+                    "robot_ball_distance_m": 0.14,
+                    "lateral_error_m": 0.0,
+                },
+            }
+        return {
+            "dispatch_status": "goal_finished",
+            "accepted": True,
+            "success": False,
+            "timed_out": False,
+            "status_code": 6,
+            "status_text": "STATUS_ABORTED",
+            "error": "goal_status_6",
+            "monitor_sample": {
+                "start_displacement_m": 0.121,
+                "delivery_distance_m": 0.520765,
+                "robot_ball_distance_m": 0.12,
+                "lateral_error_m": 0.0,
+            },
+        }
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_contact_probe_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    state_history_path = tmp_path / "state_history.jsonl"
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-terminal-correction-veto",
+        target=target,
+        state_history_path=state_history_path,
+        approach_payload={
+            "capture_geometry_gate": {
+                "pass": False,
+                "flags": ["pre_contact_lateral_error", "capture_yaw_watch", "capture_yaw_sign_crossing_watch"],
+                "capture_yaw_travel_deg": 140.0,
+                "capture_yaw_sign_crossing_count": 2,
+            }
+        },
+    )
+
+    history = [json.loads(line) for line in state_history_path.read_text(encoding="utf-8").splitlines()]
+    events = [item["event_type"] for item in history]
+    candidate = next(item for item in history if item["event_type"] == "ai_push_coast_terminal_correction_candidate")
+    assert passed is False
+    assert payload["failure_reason"] == "nav2_corridor_push_action_abort"
+    assert "ai_push_coast_terminal_correction_start" not in events
+    assert candidate["ai_push_coast_guard"]["accepted"] is False
+    assert "capture_geometry_gate_failed" in candidate["ai_push_coast_guard"]["reasons"]
+    assert "stage_setup_not_live" in candidate["ai_push_coast_guard"]["reasons"]
+
+
+def test_ai_push_coast_first_contact_servo_settle_does_not_block_corridor_push(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_GUARDED_LIVE
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.5
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_samples = [
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": 1.029, "y": 0.0, "z": 0.05},
+        {"x": 1.029, "y": 0.0, "z": 0.05},
+        {"x": 1.031, "y": 0.0, "z": 0.05},
+        {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05},
+    ]
+    dispatch_calls: list[dict[str, object]] = []
+    clock = {"now": 0.0}
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(gather_runner.time, "sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds))
+    monkeypatch.setattr(gather_runner, "DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S", 4.0)
+    monkeypatch.setattr(gather_runner, "DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S", 0.5)
+
+    def fake_control_loop_state(session_id, target):
+        ball_pose = ball_samples.pop(0) if len(ball_samples) > 1 else ball_samples[0]
+        return {"compose_project": "chasecar_dashboard_contact_ready"}, robot_pose, ball_pose
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "general_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": 0.45, "y": 0.0, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": 1.25, "y": 0.0, "yaw": 0.0},
+                ],
+                "trigger": {"push_through_m": gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M},
+            }
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        if kwargs.get("monitor", {}).get("success_on_motion_m") is not None:
+            return {
+                "dispatch_status": "goal_succeeded",
+                "accepted": True,
+                "success": True,
+                "timed_out": False,
+                "cancel_requested": False,
+                "monitor": {"last_sample": {"start_displacement_m": 0.0, "delivery_distance_m": 0.55}},
+            }
+        return {
+            "dispatch_status": "monitor_success",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "success",
+            "monitor_sample": {"start_displacement_m": 0.75, "delivery_distance_m": 0.0},
+        }
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-first-contact-servo-settled-before-nav2",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert len(dispatch_calls) == 2
+    assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_confirmed"] is True
 
 
 def test_run_target_fails_settled_placement_loss_when_ball_leaves_local_correction_range(tmp_path, monkeypatch):
@@ -5198,6 +10985,256 @@ def test_capture_target_hands_off_after_stable_soft_capture(tmp_path, monkeypatc
     assert payload["handoff_kind"] == "soft_capture"
     assert payload["capture_state"]["captured"] is True
     assert command_log[-1]["mode"] == "capture_handoff"
+
+
+def test_object_centric_capture_target_waits_for_secure_capture_instead_of_soft_handoff(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "object_centric_gather_policy_v1"
+    args.capture_timeout_s = 2.0
+    args.poll_s = 0.25
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+    runner = gather_runner.GatherMissionRunner(args)
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_states = [
+        {"x": 0.33, "y": 0.0, "z": 0.05},
+        {"x": 0.33, "y": 0.0, "z": 0.05},
+        {"x": 0.28, "y": 0.0, "z": 0.05},
+    ]
+
+    def _control_loop_state(**kwargs):
+        index = min(int(clock["now"] / runner.args.poll_s), len(ball_states) - 1)
+        return {}, robot_pose, ball_states[index]
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._capture_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert passed is True
+    assert payload["handoff_kind"] == "secure_capture"
+    assert payload.get("soft_capture_handoff", False) is False
+    assert payload["capture_state"]["ball_x_m"] <= 0.30
+    assert any(item["mode"] in {"object_capture_seat", "object_capture_finish_seat"} for item in command_log)
+    assert command_log[-1]["mode"] == "captured"
+
+
+def test_object_centric_capture_target_holds_zone_entry_after_place_loss_recapture(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "object_centric_gather_policy_v1"
+    args.capture_timeout_s = 2.0
+    args.poll_s = 0.25
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+    runner = gather_runner.GatherMissionRunner(args)
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 3.579527, "y": 0.00103, "yaw": -3.11493}
+    ball_pose = {"x": 2.388145, "y": 0.028296, "z": 0.05}
+
+    def _control_loop_state(**kwargs):
+        return {}, robot_pose, ball_pose
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._capture_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert passed is True
+    assert payload["handoff_kind"] == "zone_entry"
+    assert any(item["mode"] == "object_capture_zone_entry_hold" for item in command_log)
+    assert all(item["mode"] != "object_capture_push" for item in command_log)
+    assert command_log[-1]["mode"] == "capture_handoff"
+
+
+def test_object_centric_capture_target_blocks_secure_handoff_while_close_yaw_settles(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "object_centric_gather_policy_v1"
+    args.capture_timeout_s = 0.6
+    args.poll_s = 0.25
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+    runner = gather_runner.GatherMissionRunner(args)
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 5.731545, "y": -0.079249, "yaw": 2.811904}
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+
+    def _control_loop_state(**kwargs):
+        return {}, robot_pose, ball_pose
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._capture_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "capture_timeout"
+    assert payload["capture_state"]["captured"] is True
+    assert payload["capture_diagnostics"]["secure_capture_ready"] is False
+    assert payload["capture_diagnostics"]["selected_command_mode"] == "object_capture_close_yaw_settle"
+    assert any(item["mode"] == "object_capture_close_yaw_settle" for item in command_log)
+    assert all(item["mode"] != "captured" for item in command_log)
+
+
+def test_object_centric_capture_target_recenters_wide_place_loss_recapture(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "object_centric_gather_policy_v1"
+    args.capture_timeout_s = 0.6
+    args.poll_s = 0.25
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+    runner = gather_runner.GatherMissionRunner(args)
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 4.992832, "y": 0.150434, "yaw": -2.845231}
+    ball_pose = {"x": 4.486433, "y": 0.416483, "z": 0.05}
+
+    def _control_loop_state(**kwargs):
+        return {}, robot_pose, ball_pose
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._capture_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        prefer_zone_recovery=True,
+        attempt_kind="place_loss_recapture",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "capture_timeout"
+    assert payload["capture_state"]["within_recapture_window"] is False
+    assert payload["capture_diagnostics"]["selected_command_mode"] == "object_capture_lateral_recenter"
+    recenter_commands = [item for item in command_log if item["mode"] == "object_capture_lateral_recenter"]
+    assert recenter_commands
+    assert all(float(item["linear_x"]) == 0.0 for item in recenter_commands)
+    assert min(float(item["angular_z"]) for item in recenter_commands) < -0.45
+    assert all(item["mode"] != "object_capture_push" for item in command_log)
 
 
 def test_capture_target_uses_gentle_handoff_control_near_zone_before_zone_entry(tmp_path, monkeypatch):

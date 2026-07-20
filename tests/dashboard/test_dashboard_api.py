@@ -66,6 +66,10 @@ def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_cli
     assert "world_stream_frame_age_s" in state
     assert "world_stream_frames_stale" in state
     assert "world_stream_viewer_process_healthy" in state
+    assert "idle_shutdown_enabled" in state
+    assert "idle_shutdown_after_s" in state
+    assert "idle_shutdown_state" in state
+    assert "last_operator_activity_utc" in state
 
 
 def test_01_environment_start_is_idempotent(dashboard_client):
