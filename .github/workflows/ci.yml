@@ -46,6 +46,7 @@ jobs:
           python - <<'PY'
           import ast
           import importlib.util
+          import sys
           from pathlib import Path
 
           roots = [Path("tools/robot_factory_bridge"), Path("scripts")]
@@ -57,6 +58,7 @@ jobs:
           print("ast-parsed %d Python files" % len(paths))
 
           path = Path("tools/robot_factory_bridge/chasecar_bridge_control_server.py")
+          sys.path.insert(0, str(path.parent.resolve()))
           spec = importlib.util.spec_from_file_location("chasecar_bridge_control_server_ci", path)
           module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
