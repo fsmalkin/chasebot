@@ -1,10 +1,17 @@
 # Chasecar Agent Notes
 
+## Goal selection and execution default
+
+Choose ambitious project-advancing goals that align with the repo's documented roadmap, active workflows, and priority plans when the work stays inside already-decided architecture, product, and design direction. Write goals with outcome, success criteria, validation evidence, constraints, permission boundaries, and stopping conditions; keep the implementation path broad enough for the agent to choose the right tactics.
+
+Treat those goals as executable slices. Implement the work, run focused and full validation as risk requires, perform browser/runtime QA for user-facing changes, update owner-facing evidence when the repo has an evidence or dashboard workflow, and carry the slice through commit/push when the workflow calls for it. Stop for user input when the next step requires a major architecture or design decision, credentials or secret access, legal approval, production-risk action, or a genuine product tradeoff the existing plan does not settle.
+
+
 This file captures repo-specific execution guidance for coding agents.
 
 ## Global Agent Policy
 
-Global policy: `D:/dev/canon/docs/ops/agent-guidance/global-working-agreement.md @ 2026-05-04-act-or-wait`.
+Global policy: `D:/dev/canon/docs/ops/agent-guidance/global-working-agreement.md @ 2026-07-25-anthropic-model-routing`.
 
 Runtime mirror: `C:/Users/afutu/.codex/GLOBAL_WORKING_AGREEMENT.md`.
 
@@ -457,3 +464,4 @@ only pointer — it doesn't render on a phone. Publish, then share the full URL.
 - **Dashboards:** publish to `site\<project>\` (e.g. `plan-progress.html`) → share
   `http://100.112.221.6:8123/<project>/<file>`.
 - Lead with the Tailscale URL (`100.112.221.6` — stable); the repo path may follow in parentheses.
+
