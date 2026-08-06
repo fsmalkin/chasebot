@@ -11,7 +11,7 @@ This file captures repo-specific execution guidance for coding agents.
 
 ## Global Agent Policy
 
-Global policy: `D:/dev/canon/docs/ops/agent-guidance/global-working-agreement.md @ 2026-08-06-instrument-verification`.
+Global policy: `D:/dev/canon/docs/ops/agent-guidance/global-working-agreement.md @ 2026-08-06-escalation-and-closure-integrity`.
 
 Runtime mirror: `C:/Users/afutu/.codex/GLOBAL_WORKING_AGREEMENT.md`.
 
