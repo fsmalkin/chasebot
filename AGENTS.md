@@ -4,7 +4,7 @@ This file captures repo-specific execution guidance for coding agents.
 
 ## Global Agent Policy
 
-Global policy: `D:/dev/canon/docs/ops/agent-guidance/global-working-agreement.md @ 2026-07-25-anthropic-model-routing`.
+Global policy: `D:/dev/canon/docs/ops/agent-guidance/global-working-agreement.md @ 2026-08-06-instrument-verification`.
 
 Runtime mirror: `C:/Users/afutu/.codex/GLOBAL_WORKING_AGREEMENT.md`.
 
