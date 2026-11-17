@@ -11,8 +11,8 @@
       name="gz::sim::systems::SceneBroadcaster">
     </plugin>
 
-    <plugin filename="libignition-gazebo-sensors-system.so"
-            name="ignition::gazebo::systems::Sensors">
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
 
